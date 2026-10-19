@@ -1,0 +1,5 @@
+node_modules
+dist
+build
+crates/*/target
+src/core/Netlist/netlist.wasm
