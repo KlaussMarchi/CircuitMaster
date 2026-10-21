@@ -1,21 +1,25 @@
 import { useMemo } from 'react'
+import { VIEW_LABELS } from '../../core/Layer'
 import { useStore } from '../Store'
 
+// BARRA DE STATUS: VISTA, PEÇAS E LIGAÇÕES PENDENTES, A ÚLTIMA MENSAGEM, O AUTOROUTER EM ANDAMENTO E O ZOOM
 export const StatusBar = () => {
-    const netlist  = useStore(state => state.netlist)
-    const view     = useStore(state => state.view)
-    const message  = useStore(state => state.message)
-    const zoom     = useStore(state => state.viewports[state.view]?.zoom ?? 1)
-    const status   = useMemo(() => netlist?.getStatus(view), [netlist, view])
-    const routing  = !status                       ? '' :
-                     status.nets === 0             ? 'Sem conexões para rotear' :
-                     status.routed === status.nets ? 'Roteamento concluído' : `${status.routed} de ${status.nets} nets roteadas — ${status.left} conexões ainda por rotear`
+    const netlist = useStore(state => state.netlist)
+    const view    = useStore(state => state.view)
+    const message = useStore(state => state.message)
+    const routing = useStore(state => state.routing)
+    const parts   = useStore(state => Object.values(state.doc.instances).filter(instance => instance.moduleIdRef !== 'WireModuleID').length)
+    const zoom    = useStore(state => state.viewports[state.view]?.zoom ?? 1)
+    const status  = useMemo(() => netlist?.getStatus(view), [netlist, view])
+    const pending = !status || status.nets === 0 ? 'sem conexões' : status.left ? `${status.left} ${status.left > 1 ? 'ligações' : 'ligação'} sem fio` : 'tudo ligado'
 
     return (
-        <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-neutral-300 bg-white px-3 text-xs text-neutral-600">
-            <span>{routing}</span>
-            <span className="truncate">{message}</span>
-            <span className="ml-auto">{Math.round(zoom * 100)}%</span>
+        <footer className="status">
+            <span>{VIEW_LABELS[view]} · {parts} {parts === 1 ? 'peça' : 'peças'} · {pending}</span>
+            <span className="msg" role="status" title={message}>{message}</span>
+            <span className="grow" />
+            {routing && <span>autorouter: ciclo {routing.cycle}/{routing.cycles} · {routing.connected} de {routing.requested} <button className="link" onClick={() => useStore.getState().cancelRouting()}>Cancelar</button></span>}
+            <span className="num">{Math.round(zoom * 100)}%</span>
         </footer>
     )
 }

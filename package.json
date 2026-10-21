@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "wasm": "cargo build --release --target wasm32-unknown-unknown --manifest-path crates/netlist/Cargo.toml && cp crates/netlist/target/wasm32-unknown-unknown/release/netlist.wasm src/core/Netlist/netlist.wasm",
+    "wasm": "cargo build --release --target wasm32-unknown-unknown --manifest-path crates/netlist/Cargo.toml && cp crates/netlist/target/wasm32-unknown-unknown/release/netlist.wasm src/core/Netlist/netlist.wasm && cargo build --release --target wasm32-unknown-unknown --manifest-path crates/router/Cargo.toml && cp crates/router/target/wasm32-unknown-unknown/release/router.wasm src/core/Router/router.wasm",
     "dev": "npm run wasm && vite",
     "build": "npm run wasm && tsc --noEmit && vite build",
     "check": "tsc --noEmit",

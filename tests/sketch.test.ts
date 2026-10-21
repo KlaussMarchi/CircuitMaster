@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { strFromU8, unzipSync } from 'fflate'
-import { exportBundle, exportSketch, readBundle, readSketch, type Instance } from '../src/core/Sketch'
+import { exportBundle, exportSketch, readBundle, readSketch, type Instance, exportBin, exportBinBundle, readBin } from '../src/core/Sketch'
 import { fromSketch } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
 import { HAS_FRITZING, listSketches } from './Fixtures'
@@ -53,5 +53,19 @@ describe.skipIf(!HAS_FRITZING)('gravação .fz/.fzz (spec 01 §5, §6; spec 02 �
         expect(Object.keys(files).sort()).toEqual(['part.extra.fzp', 'teste.fz'])
         expect(strFromU8(files['part.extra.fzp'])).toContain('moduleId="x"')
         expect(Object.keys(fromSketch(back.sketch ?? { fritzingVersion: '', projectProperties: {}, settings: {}, instances: [] }).instances).sort()).toEqual(Object.keys(doc.instances).sort())
+    })
+})
+
+describe('bins .fzb/.fzbz (spec 01 §6.3)', () => {
+    it('grava e relê o bin com as peças na ordem e o pacote com os arquivos', () => {
+        const ids    = ['ResistorModuleID', 'LEDModuleID & <x>', '3mmColorLEDModuleID']
+        const files  = [{ name: 'part.custom.fzp', text: '<module moduleId="custom"/>' }]
+        const bin    = readBin(exportBin('Meus itens', ids))
+        const bundle = readBundle(exportBinBundle('Meus itens', ids, files))
+
+        expect(bin?.title).toBe('Meus itens')
+        expect(bin?.entries.map(entry => entry.moduleIdRef)).toEqual(ids)
+        expect(bundle.bin?.entries.map(entry => entry.moduleIdRef)).toEqual(ids)
+        expect(bundle.parts.map(file => file.name)).toEqual(['part.custom.fzp'])
     })
 })

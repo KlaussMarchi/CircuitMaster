@@ -1,5 +1,5 @@
 import type { Artwork, Face, Hole, Pad, Shape } from '../Cam'
-import { toPolygons } from '../Cam'
+import { solidOf, toPolygons } from '../Cam'
 import type { Clipper, Paths } from '../Clipper'
 import { Pdf } from '../Pdf'
 
@@ -43,7 +43,6 @@ const isInside = (polygon: number[], x: number, y: number) => {
 // UM CONTORNO DENTRO DO OUTRO: CAIXA CONTIDA E A MAIORIA DOS TRÊS PRIMEIROS VÉRTICES DENTRO (VÉRTICES PODEM TOCAR A BORDA)
 const encloses = (outer: number[], outerBox: number[], inner: number[], innerBox: number[]) => outerBox[0] <= innerBox[0] && outerBox[1] <= innerBox[1] && outerBox[2] >= innerBox[2] && outerBox[3] >= innerBox[3] && [0, 2, 4].filter(i => isInside(outer, inner[i], inner[i + 1])).length >= 2
 
-const solidOf = (shape: Shape): Shape => shape.kind === 'circle' || shape.kind === 'rect' ? { ...shape, fill: true } : shape
 
 // UMA CAMADA RS-274X: ABERTURAS DEDUPLICADAS PELO TEXTO (D10 EM DIANTE), FLASHES, TRAÇOS E REGIÕES EM COORDENADAS DE PLACA (SPEC 03 §3)
 export class Plotter {

@@ -3,7 +3,8 @@ import { SvgFile } from '../SvgFile'
 import { getPins, type PinGeometry } from '../Pins'
 import { VIEWS, type ViewName } from '../Layer'
 import type { Bundle, BundleFile, Instance } from '../Sketch'
-import { generateFzp, generateSvg, getNetLabel, isResizableBoard, netLabelSvg, resizeBoardSvg, sizeSvg } from '../Generator'
+import { generateFzp, generateSvg, getNetLabel, holeSvg, isResizableBoard, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg } from '../Generator'
+import { MIL_PER_INCH } from '../Units'
 import { Font, type Fonts } from '../Font'
 
 export type PartLocation = { root: string, path: string }
@@ -33,6 +34,7 @@ export class Library {
     bundleSvgs: BundleFile[] = []
     variants = new Map<string, SvgFile>()
     variantIds = new Map<string, string>()
+    locations = new Map<string, PartLocation>()
     fonts: Fonts = new Map()
     revision = 0
 
@@ -80,6 +82,10 @@ export class Library {
 
     async loadOne(moduleId: string, location: PartLocation | undefined) {
         const text      = location ? await this.source.read(location.root, location.path) : generateFzp(moduleId)
+
+        if (location)
+            this.locations.set(moduleId, location)
+
         const part      = text ? readPart(text, location?.root === 'app') : null
         const installed = part ? await this.loadSvgs(part, svg => this.readInstalled(location?.root ?? 'parts', svg)) : null
         const bundled   = this.bundled.get(moduleId)
@@ -121,6 +127,31 @@ export class Library {
         return this.findBundled(image)?.text ?? generateSvg(image)
     }
 
+    // .fzp DA PEÇA EM USO COMO TEXTO: O DO PACOTE SE A PEÇA VEIO DELE, O INSTALADO OU O GERADO (EDITOR DE PEÇAS, SPEC 01 §8A.1)
+    async getFzpText(moduleId: string) {
+        const location = this.locations.get(moduleId)
+
+        if (this.bundleParts.has(moduleId) && this.parts.get(moduleId) === this.bundled.get(moduleId))
+            return this.bundleParts.get(moduleId)?.text ?? null
+
+        return location ? this.source.read(location.root, location.path) : generateFzp(moduleId)
+    }
+
+    // SVG DE QUALQUER VISTA DA PEÇA, ÍCONE INCLUSIVE, PELA MESMA ORIGEM DO .fzp
+    async getImageText(moduleId: string, view: ViewName) {
+        const part     = this.parts.get(moduleId)
+        const image    = part?.views[view]?.image ?? ''
+        const location = this.locations.get(moduleId)
+
+        if (!part || !image)
+            return null
+
+        if (part === this.bundled.get(moduleId))
+            return this.readBundled(image)
+
+        return this.readInstalled(location?.root ?? 'parts', image)
+    }
+
     // ARQUIVOS DE PACOTE DAS PEÇAS QUE VIERAM DE .fzz/.fzpz E ESTÃO EM USO, PARA REEMPACOTAR NO .fzz (SPEC 01 §6.1)
     getBundleFiles(moduleIds: string[]) {
         const used = [...new Set(moduleIds)].filter(moduleId => this.bundleParts.has(moduleId) && this.parts.get(moduleId) === this.bundled.get(moduleId))
@@ -136,8 +167,8 @@ export class Library {
         return this.svgs.get(moduleId)?.[view]
     }
 
-    // VARIANTE GERADA PELAS PROPRIEDADES LOCAIS DA INSTÂNCIA (NET LABEL, PLACA REDIMENSIONÁVEL, PLANO DE COBRE, LOGO); VAZIO QUANDO A PEÇA USA O SVG DO ACERVO (SPEC 01 §5.7, §8.9–§8.10)
-    getVariant(instance: Instance | undefined, view: ViewName, mirrored = false) {
+    // VARIANTE GERADA PELAS PROPRIEDADES LOCAIS DA INSTÂNCIA (NET LABEL, PLACA REDIMENSIONÁVEL, PLANO DE COBRE, LOGO, FURO/VIA, hole size); VAZIO QUANDO A PEÇA USA O SVG DO ACERVO (SPEC 01 §5.7, §8.9–§8.11)
+    getVariant(instance: Instance | undefined, view: ViewName) {
         const part    = this.parts.get(instance?.moduleIdRef ?? '')
         const merged  = { ...part?.properties, ...instance?.properties }
         const options = part && instance && view === 'schematicView' ? getNetLabel(part.moduleId, part.version, merged) : null
@@ -145,19 +176,35 @@ export class Library {
         const fill    = part?.kind === 'copperFill' && view === 'pcbView' ? instance?.properties.svg ?? '' : ''
         const logo    = part?.kind === 'logo' ? instance?.properties.shape ?? '' : ''
         const base    = part ? this.getSvg(part.moduleId, view) : undefined
+        const drilled = part && view === 'pcbView' && (part.kind === 'via' || part.kind === 'hole')
+        const padded  = part && view === 'pcbView' && (part.kind === 'blocker' || /^(Copper0)?PadModuleID$/.test(part.moduleId))
+        const layer   = part?.views.pcbView?.layers.find(name => name.startsWith('copper')) ?? 'copper1'
+        const holes   = part?.kind === 'part' && view === 'pcbView' && base && instance?.properties['hole size'] && instance.properties['hole size'] !== part.properties['hole size']
 
         const key = !part                ? '' :
-                    options              ? `${part.moduleId}|${options.label}|${options.left}|${options.style}|${options.divisor}|${mirrored}` :
+                    options              ? `${part.moduleId}|${options.label}|${options.left}|${options.style}|${options.divisor}` :
                     board && base        ? `${part.moduleId}|${merged.width}|${merged.height}` :
                     fill                 ? fill :
-                    logo                 ? `${merged.width}|${merged.height}|${logo}` : ''
+                    logo                 ? `${merged.width}|${merged.height}|${logo}` :
+                    drilled              ? `${part.kind}|${merged['hole size']}|${part.views.pcbView?.layers.join(',')}` :
+                    padded               ? `${part.moduleId}|${merged.width}|${merged.height}|${merged.connect}` :
+                    holes                ? `${part.moduleId}|holes|${merged['hole size']}` : ''
 
         if (!key)
             return ''
 
         if (!this.variantIds.has(key)) {
-            const text = options ? netLabelSvg(options, mirrored) : board ? resizeBoardSvg(base?.text ?? '', Number(merged.width), Number(merged.height)) : fill || sizeSvg(logo, Number(merged.width), Number(merged.height))
-            const svg  = new SvgFile(text)
+            const pin    = part?.kind === 'via' ? 'connector0pin' : 'nonconn0'
+            const layers = part?.views.pcbView?.layers.filter(layer => layer.startsWith('copper')) ?? []
+            const scale  = base ? base.viewBox[2] / base.inches / MIL_PER_INCH : 1
+            const [w, h] = [Number(merged.width), Number(merged.height)]
+            const text   = options ? netLabelSvg(options) :
+                           board   ? resizeBoardSvg(base?.text ?? '', w, h) :
+                           fill    ? fill :
+                           logo    ? sizeSvg(logo, w, h) :
+                           drilled ? holeSvg(merged['hole size'], pin, layers) ?? '' :
+                           padded  ? padSvg(layer, part?.kind === 'blocker', w, h, merged.connect ?? 'center') : resizeHolesSvg(base?.text ?? '', merged['hole size'] ?? '', scale)
+            const svg    = new SvgFile(text)
             svg.update()
 
             const id = svg.root ? `v${this.variants.size}` : ''
@@ -170,8 +217,8 @@ export class Library {
         return this.variantIds.get(key) ?? ''
     }
 
-    getInstanceSvg(instance: Instance | undefined, view: ViewName, mirrored = false) {
-        const variant = this.getVariant(instance, view, mirrored)
+    getInstanceSvg(instance: Instance | undefined, view: ViewName) {
+        const variant = this.getVariant(instance, view)
         return variant ? this.variants.get(variant) : this.getSvg(instance?.moduleIdRef ?? '', view)
     }
 

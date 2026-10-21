@@ -1,5 +1,6 @@
 import { MIL_PER_INCH, toInches } from '../Units'
 import { childrenOf, parseXml, serializeXml, tagOf, walk, type XmlElement } from '../Xml'
+import { pickFont, type Fonts } from '../Font'
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i)
 const toMils = (spacing: string) => Math.round((toInches(spacing) ?? 0.1) * MIL_PER_INCH * 1000) / 1000
@@ -260,8 +261,8 @@ export const getNetLabel = (moduleId: string, version: number, properties: Recor
     return { label: properties.label || 'net label', left: direction === 'left', style, divisor: moduleId.includes(OLD_SCHEMATIC) ? 1 : 3 }
 }
 
-// NET LABEL GERADO: CAIXA COM SETA E TEXTO, LARGURA PELAS MÉTRICAS DA FONTE DO ESTILO; mirrored DESESPELHA O TEXTO (SPEC 01 §8.9)
-export const netLabelSvg = ({ label, left, style, divisor }: NetLabel, mirrored: boolean) => {
+// NET LABEL GERADO: CAIXA COM SETA E TEXTO, LARGURA PELAS MÉTRICAS DA FONTE DO ESTILO (SPEC 01 §8.9)
+export const netLabelSvg = ({ label, left, style, divisor }: NetLabel) => {
     const legacy  = style === 'legacy'
     const font    = 200 / divisor
     const height  = 300 / divisor
@@ -275,18 +276,110 @@ export const netLabelSvg = ({ label, left, style, divisor }: NetLabel, mirrored:
     const band    = [pad + (left ? arrow : 0), width - pad - (left ? 0 : arrow)]
     const atStart = legacy || style === 'left'
     const x       = legacy ? pad + (left ? arrow : 0) : atStart ? band[0] : band[1]
-    const center  = legacy ? x + measure / 2 : (band[0] + band[1]) / 2
-    const flip    = mirrored ? ` transform="translate(${2 * center} 0) scale(-1 1)"` : ''
     const points  = left ? [[half, height / 2], [arrow, half], [width - half, half], [width - half, height - half], [arrow, height - half]] : [[width - half, height / 2], [width - arrow, half], [half, half], [half, height - half], [width - arrow, height - half]]
     const pin     = left ? [0, 0] : [width - arrow - 0.1, 0]
     const tip     = left ? 0 : width
     const shape   = `<rect id="connector0pin" x="${pin[0]}" y="${pin[1]}" width="${arrow}" height="${height}" fill="none" stroke="none"/><rect id="connector0terminal" x="${tip}" y="${height / 2}" width="0.1" height="0.1" fill="none" stroke="none"/><polygon fill="white" stroke="#000000" stroke-width="${stroke}" points="${points.map(point => point.join(',')).join(' ')}"/>`
-    const text    = `<text id="label" x="${x}" y="${base}" fill="#000000" font-family="${legacy ? 'Droid Sans' : 'Noto Sans'}" text-anchor="${atStart ? 'start' : 'end'}" font-size="${font}"${flip}>${escapeXml(label)}</text>`
+    const text    = `<text id="label" x="${x}" y="${base}" fill="#000000" font-family="${legacy ? 'Droid Sans' : 'Noto Sans'}" text-anchor="${atStart ? 'start' : 'end'}" font-size="${font}">${escapeXml(label)}</text>`
     return svgHeader(width, height, MIL_PER_INCH, `<g id="schematic">${shape}</g><g id="schematicText">${text}</g>`)
 }
 
 // TEXTO DE TENSÃO DOS SÍMBOLOS DE REFERÊNCIA: trunc(V·1000)/1000 SEGUIDO DE V (SPEC 01 §8.9)
 export const voltageText = (voltage: string) => `${Math.trunc((Number(voltage) || 0) * 1000) / 1000}V`
+
+const HOLE_OFFSET = MIL_PER_INCH * 2 / 90    // MIL, MARGEM DE 2 PX DE CENA EM VOLTA DO FURO
+const HOLE_COLOR  = '#f9a435'
+
+export const parseHoleSize = (text: string | undefined) => {
+    const [d, a] = (text ?? '').split(',').map(value => toInches(value.trim().replace(/^\./, '0.')))
+    return d !== null && d !== undefined && a !== null && a !== undefined && d >= 0 && a >= 0 ? [d * MIL_PER_INCH, a * MIL_PER_INCH] as const : null
+}
+
+// FURO OU VIA GERADO: LADO d + 2a + 2o, ANEL DE RAIO d/2 + a/2 E TRAÇO a, FURO PRETO drill="0"; d = 0 VIRA DISCO DE RAIO a (SPEC 01 §8.11)
+export const holeSvg = (holeSize: string | undefined, id: string, layers: string[]) => {
+    const size = parseHoleSize(holeSize)
+
+    if (!size)
+        return null
+
+    const [d, a] = size
+    const c      = d / 2 + a + HOLE_OFFSET
+    const shape  = d === 0 ? `<circle cx="${c}" cy="${c}" r="${a}" fill="${HOLE_COLOR}" id="${id}"/>` : `<circle fill="${a === 0 ? 'black' : 'none'}" cx="${c}" cy="${c}" r="${d / 2 + a / 2}" stroke-width="${a}" stroke="${HOLE_COLOR}" id="${id}"/><circle drill="0" fill="black" cx="${c}" cy="${c}" r="${d / 2}" stroke-width="0"/>`
+    return svgHeader(2 * c, 2 * c, MIL_PER_INCH, layers.reduceRight((inner, layer) => `<g id="${layer}">${inner}</g>`, shape))
+}
+
+const PAD_SIZE   = [28, 32]    // PX, PAD SEM width/height
+const PAD_MARGIN = 4
+const BLOCKER_COLORS: Record<string, string> = { copper0: '#A26A00', copper1: '#aF8B33' }
+
+// PAD SMD OU BLOCKER RETANGULAR EM PX DE CENA COM MARGEM DE 4 PX; O PAD TEM TERMINAL NO CENTRO OU NA BORDA DE connect (SPEC 01 §8.11)
+export const padSvg = (layer: string, blocker: boolean, widthMm: number, heightMm: number, connect: string) => {
+    const w      = widthMm > 0 ? widthMm / 25.4 * 90 : PAD_SIZE[0]
+    const h      = heightMm > 0 ? heightMm / 25.4 * 90 : PAD_SIZE[1]
+    const [a, b] = [Math.min(1, w / 3), Math.min(1, h / 3)]
+    const color  = BLOCKER_COLORS[layer] ?? BLOCKER_COLORS.copper1
+    const edge   = connect.toLowerCase()
+    const tip    = edge === 'north' ? [2, 2, w, b] : edge === 'south' ? [2, 2 + h - b, w, b] : edge === 'east' ? [2 + w - a, 2, a, h] : edge === 'west' ? [2, 2, a, h] : [2, 2, w, h]
+    const body   = blocker ? `<rect id="zzzpad" x="2" y="2" fill="${color}" fill-opacity="0" stroke="${color}" stroke-width="${PAD_MARGIN}" width="${w}" height="${h}"/><line stroke="${color}" stroke-width="1" x1="${PAD_MARGIN}" y1="${PAD_MARGIN}" x2="${w}" y2="${h}"/><line stroke="${color}" stroke-width="1" x1="${w}" y1="${PAD_MARGIN}" x2="${PAD_MARGIN}" y2="${h}"/>` : `<rect id="connector0pad" x="2" y="2" fill="${HOLE_COLOR}" stroke="none" stroke-width="0" width="${w}" height="${h}"/><rect id="connector0terminal" x="${tip[0]}" y="${tip[1]}" fill="none" stroke="none" stroke-width="0" width="${tip[2]}" height="${tip[3]}"/>`
+    return svgHeader(w + PAD_MARGIN, h + PAD_MARGIN, 90, `<g id="${layer}">${body}</g>`)
+}
+
+// PEÇA THT COM hole size PRÓPRIO: CÍRCULOS connectorNpin COM r = (d + a)/2 E TRAÇO a, QUADRADO square COM LADO 2r NO MESMO CENTRO (SPEC 01 §8.11)
+export const resizeHolesSvg = (text: string, holeSize: string, unitsPerMil: number) => {
+    const size = parseHoleSize(holeSize)
+    const root = parseXml(text)
+
+    if (!size || !root)
+        return text
+
+    const [r, a] = [(size[0] + size[1]) / 2 * unitsPerMil, size[1] * unitsPerMil]
+
+    walk(root, element => {
+        const id = element.getAttribute('id') ?? ''
+
+        if (tagOf(element) === 'circle' && /^connector\d+pin$/.test(id)) {
+            element.setAttribute('r', String(r))
+            element.setAttribute('stroke-width', String(a))
+        }
+
+        if (tagOf(element) === 'rect' && id === 'square') {
+            const cx = Number(element.getAttribute('x') ?? 0) + Number(element.getAttribute('width') ?? 0) / 2
+            const cy = Number(element.getAttribute('y') ?? 0) + Number(element.getAttribute('height') ?? 0) / 2
+            Object.entries({ x: cx - r, y: cy - r, width: 2 * r, height: 2 * r, 'stroke-width': a }).forEach(([name, value]) => element.setAttribute(name, String(value)))
+        }
+    })
+
+    return serializeXml(root)
+}
+
+const LOGO_UNITS   = 100          // UNIDADES DO viewBox DO LOGO POR POLEGADA
+const LOGO_PADDING = 4
+const LOGO_WIDTH   = 0.77         // CORREÇÃO DA REFERÊNCIA SOBRE A LARGURA MEDIDA DO TEXTO
+const LOGO_PIXELS  = 96 / 72      // PONTOS DA FONTE MEDIDOS EM PX DE 96 DPI
+
+// LOGO DE TEXTO NOVO A PARTIR DO MODELO: TELA DO TAMANHO DO TEXTO MAIS A MARGEM, TEXTO CENTRADO NA LINHA DE BASE DO ASCENDENTE; DEVOLVE O SVG E width/height EM mm (SPEC 01 §5.7)
+export const logoTextSvg = (template: string, text: string, fonts: Fonts) => {
+    const root  = parseXml(template)
+    let label: XmlElement | undefined
+
+    walk(root, element => label = label ?? (tagOf(element) === 'text' && element.getAttribute('id') === 'label' ? element : undefined))
+
+    const font = label ? pickFont(fonts, label.getAttribute('font-family'), null) : undefined
+
+    if (!root || !label || !font)
+        return null
+
+    const size   = Number(label.getAttribute('font-size') ?? 10) * LOGO_PIXELS
+    const width  = font.getWidth(text, size) * LOGO_WIDTH + LOGO_PADDING
+    const height = (font.ascent + font.descent) * size / font.unitsPerEm + LOGO_PADDING
+    root.setAttribute('viewBox', `0 0 ${width} ${height}`)
+    root.setAttribute('width', `${width / LOGO_UNITS}in`)
+    root.setAttribute('height', `${height / LOGO_UNITS}in`)
+    label.setAttribute('x', String(width / 2))
+    label.setAttribute('y', String(font.ascent * size / font.unitsPerEm))
+    label.textContent = text
+    return { svg: serializeXml(root), width: width / LOGO_UNITS * 25.4, height: height / LOGO_UNITS * 25.4 }
+}
 
 // LOGO COM TAMANHO PRÓPRIO: AS PROPRIEDADES width/height (mm) DA INSTÂNCIA SOBREPÕEM O TAMANHO DO SVG GUARDADO EM shape
 export const sizeSvg = (text: string, width: number, height: number) => {

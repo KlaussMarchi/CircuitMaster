@@ -1,16 +1,20 @@
-import { IDENTITY, apply, cubicAt, distance, invert, lerp, multiply, nearestOnCubic, nearestOnSegment, splitCubic, translate, unionBoxes, type Box, type Matrix, type Point } from '../../core/Geometry'
+import { IDENTITY, apply, boxesTouch, cubicAt, distance, invert, lerp, multiply, nearestOnCubic, nearestOnSegment, splitCubic, translate, unionBoxes, type Box, type Matrix, type Point } from '../../core/Geometry'
 import { addEdges, addInstance, getTitle, keyOf, removeEdges, removeInstance, splitKey, updateInstance, updateView, WIRE_FLAGS, type Doc, type Edge } from '../../core/Document'
 import { VIEWS, getLayerZ, type ViewName } from '../../core/Layer'
 import type { Library } from '../../core/Library'
-import { getStrips } from '../../core/Generator'
+import { getStrips, logoTextSvg } from '../../core/Generator'
 import type { ConnectorState, Instance, InstanceView, Label } from '../../core/Sketch'
+import type { FillFragment } from '../../core/Fill'
+import type { End, Plan } from '../../core/Router'
 import { Scene, WIRE_STYLE, labelPx, owner } from '../Scene'
+import { FREE_ROUTE, getPath, isAxisAligned, simplifyPath } from '../Path'
 
 type View = typeof VIEWS[number]
 
 export type ZMode     = 'front' | 'forward' | 'backward' | 'back'
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
 export type Clipboard = { instances: Instance[], edges: Edge[] }
+export type WireEnd   = { keys: string[], wire: string | null, point: Point }
 
 const HIDDEN_WIRE_MILS = 11.1111
 const Z_STEP           = 1e-5    // ORDEM DE CRIAÇÃO DENTRO DA CAMADA
@@ -18,9 +22,11 @@ const CURVE_LIMIT      = 0.1     // PARÂMETRO MÍNIMO DO PONTO AGARRADO AO CURV
 const AUTOROUTABLE     = 32
 const STRONG           = 1000    // CAPACIDADE DO QUE É VISÍVEL NA VISTA (SPEC 02 §4.10)
 const LINK_COST        = 2       // LIGAÇÃO INVISÍVEL CUSTA MAIS QUE O FIO INVISÍVEL: CORTA-SE O FIO, NÃO A PONTA
+const ALIGNED          = 1e-3    // PX: TRECHO HORIZONTAL OU VERTICAL A MENOS DO ARREDONDAMENTO DOS SVG
 const TRACE_COLORS: Record<string, string> = { copper1trace: '#f2c600', copper0trace: '#f28a00' }
 const LABEL_STYLE: Record<View, { size: number, visible: boolean }> = { breadboardView: { size: 9, visible: false }, schematicView: { size: 5, visible: true }, pcbView: { size: 5, visible: true } }
 const LABELED_KINDS = ['part', 'jumper', 'symbol', 'breadboard', 'board', 'resizableBoard']
+const OBSTACLES     = new Set(['part', 'symbol'])
 
 const isCompatible = (a: string, b: string) => a !== 'unknown' && b !== 'unknown' && (a === 'wire' || b === 'wire' || a !== b)
 
@@ -218,16 +224,14 @@ export const getCarried = (doc: Doc, library: Library, view: ViewName, modelInde
     return [...carried]
 }
 
-// FIO NOVO DO TIPO DA VISTA: SEGUNDA PONTA NUM CONECTOR OU SOLTA NUM PONTO DA CENA (SPEC 02 §4.1)
-export const createWire = (doc: Doc, library: Library, home: View, from: string, to: string | null, end: Point | null = null) => {
+// INSTÂNCIA DE FIO DO TIPO DA VISTA home, COM AS PONTAS DADAS EM CADA VISTA (INVISÍVEL FORA DE home)
+const newWire = (doc: Doc, home: View, ends: (view: View) => [Point, Point]): Instance => {
     const modelIndex = String(doc.nextIndex)
     const views      = Object.fromEntries(VIEWS.map(view => {
-        const scene = new Scene(doc, library, view)
-        const a     = scene.getTerminal(from) ?? end ?? [0, 0]
-        const b     = (to ? scene.getTerminal(to) : view === home ? end : null) ?? a
-        const style = WIRE_STYLE[view]
-        const z     = getLayerZ(view, style.layer) + doc.nextIndex * Z_STEP
-        const mils  = view === home ? style.mils : HIDDEN_WIRE_MILS
+        const [a, b] = ends(view)
+        const style  = WIRE_STYLE[view]
+        const z      = getLayerZ(view, style.layer) + doc.nextIndex * Z_STEP
+        const mils   = view === home ? style.mils : HIDDEN_WIRE_MILS
         const state: InstanceView = {
             layer: style.layer,
             locked: false,
@@ -241,9 +245,276 @@ export const createWire = (doc: Doc, library: Library, home: View, from: string,
         return [view, state]
     }))
 
-    const wire: Instance = { moduleIdRef: 'WireModuleID', modelIndex, path: 'wire.fzp', title: `Wire${modelIndex}`, text: '', properties: {}, localConnectors: {}, views }
+    return { moduleIdRef: 'WireModuleID', modelIndex, path: 'wire.fzp', title: `Wire${modelIndex}`, text: '', properties: {}, localConnectors: {}, views }
+}
+
+// FIO NOVO DO TIPO DA VISTA: SEGUNDA PONTA NUM CONECTOR OU SOLTA NUM PONTO DA CENA (SPEC 02 §4.1)
+export const createWire = (doc: Doc, library: Library, home: View, from: string, to: string | null, end: Point | null = null) => {
+    const modelIndex = String(doc.nextIndex)
+    const wire       = newWire(doc, home, view => {
+        const scene = new Scene(doc, library, view)
+        const a     = scene.getTerminal(from) ?? end ?? [0, 0]
+        return [a, (to ? scene.getTerminal(to) : view === home ? end : null) ?? a]
+    })
+
     return addEdges(addInstance(doc, wire), [[keyOf(modelIndex, 'connector0'), from], ...(to ? [[keyOf(modelIndex, 'connector1'), to] as Edge] : [])])
 }
+
+// FIO DE VÁRIOS TRECHOS PELOS PONTOS DA VISTA home: UMA INSTÂNCIA POR TRECHO, LIGADAS NAS DOBRAS, A PRIMEIRA PONTA EM CADA from E A ÚLTIMA EM CADA to (VAZIO = SOLTA); NAS OUTRAS VISTAS O PRIMEIRO TRECHO LIGA OS CONECTORES E OS DEMAIS FICAM NO PONTO FINAL (SPEC 02 §4.1)
+export const createWires = (doc: Doc, library: Library, home: View, from: string[], to: string[], points: Point[]) => {
+    const path    = simplifyPath(points)
+    const scenes  = Object.fromEntries(VIEWS.map(view => [view, new Scene(doc, library, view)])) as Record<View, Scene>
+    const indexes = path.slice(1).map((_, i) => String(doc.nextIndex + i))
+
+    const far = (view: View): [Point, Point] => {
+        const a = (from.length ? scenes[view].getTerminal(from[0]) : null) ?? path[0]
+        return [a, (to.length ? scenes[view].getTerminal(to[0]) : null) ?? a]
+    }
+
+    const placed = path.slice(1).reduce((current, point, i) => addInstance(current, newWire(current, home, view => view === home ? [path[i], point] : i === 0 ? far(view) : [far(view)[1], far(view)[1]])), doc)
+    const joints = indexes.slice(1).map((index, i): Edge => [keyOf(indexes[i], 'connector1'), keyOf(index, 'connector0')])
+    const ends   = indexes.length ? [...from.map((key): Edge => [keyOf(indexes[0], 'connector0'), key]), ...to.map((key): Edge => [keyOf(indexes[indexes.length - 1], 'connector1'), key])] : []
+    return { doc: addEdges(placed, [...joints, ...ends]), indexes }
+}
+
+// FIO DESENHADO NA VISTA: TERMINA NOS CONECTORES DO ALVO, NUMA JUNÇÃO EM T NO MEIO DE OUTRO FIO (QUE É DIVIDIDO NO PONTO) OU SOLTO
+export const drawWires = (doc: Doc, library: Library, view: View, from: string[], end: WireEnd | null, points: Point[]) => {
+    const split = end?.wire ? splitWire(doc, view, end.wire, end.point) : null
+    const to    = split?.bend ?? end?.keys ?? []
+    return createWires(split?.bend ? split.doc : doc, library, view, from, to, points)
+}
+
+// O QUE O CAMINHO DE UM FIO NOVO EVITA NA VISTA: CORPOS, RÓTULOS E TERMINAIS DE PEÇAS E SÍMBOLOS VISÍVEIS E OS TRECHOS DE FIO
+export const getObstacles = (scene: Scene) => {
+    const shown = Object.values(scene.doc.instances).filter(instance => scene.isShown(instance))
+    const parts = shown.filter(instance => OBSTACLES.has(scene.library.getPart(instance.moduleIdRef)?.kind ?? ''))
+    return {
+        boxes: parts.flatMap(instance => [scene.getBounds(instance.modelIndex), scene.getLabelBox(instance.modelIndex)]).filter((box): box is Box => box !== null),
+        wires: shown.filter(instance => scene.isWire(instance.modelIndex)).map(instance => scene.getWireEnds(instance.modelIndex)).filter((ends): ends is [Point, Point] => ends !== null),
+        pins: parts.flatMap(instance => scene.getKeys(instance.modelIndex).map(key => scene.getTerminal(key))).filter((point): point is Point => point !== null)
+    }
+}
+
+// FIO ENTRE DOIS CONECTORES PELO CAMINHO ORTOGONAL (A 45° NA PCB), SAINDO E CHEGANDO PELA DIREÇÃO DOS PINOS; SEM ROTA, RETO
+export const connectByPath = (doc: Doc, library: Library, view: View, from: string, to: string, grid: number, routed: boolean) => {
+    const scene = new Scene(doc, library, view)
+    const a     = scene.getTerminal(from)
+    const b     = scene.getTerminal(to)
+
+    if (!a || !b)
+        return createWires(doc, library, view, [from], [to], [[0, 0], [0, 0]])
+
+    const corners = routed ? getPath(a, b, { ...getObstacles(scene), start: scene.getHeading(from), end: scene.getHeading(to), axis: null, grid, diagonal: view === 'pcbView' }) : []
+    return createWires(doc, library, view, [from], [to], [a, ...corners, b])
+}
+
+// TRECHO NOVO COM O ESTILO DO FIO DADO, DE a ATÉ b NA VISTA; NAS OUTRAS VISTAS REPETE A GEOMETRIA INVISÍVEL DO ORIGINAL
+const copyWire = (doc: Doc, view: ViewName, wireIndex: string, a: Point, b: Point): Instance | null => {
+    const instance = doc.instances[wireIndex]
+    const index    = String(doc.nextIndex)
+    const copy     = instance && mapViews(instance, (state, name) => name === view ? withEnds({ ...state, geometry: { ...state.geometry, z: state.geometry.z + Z_STEP }, connectors: [] }, a, b, null) : { ...state, connectors: [] })
+    return copy && { ...copy, modelIndex: index, title: `Wire${index}` }
+}
+
+// O FIO VIRA UMA CADEIA PELOS PONTOS DA VISTA, DE connector0 A connector1, MANTENDO AS LIGAÇÕES DAS DUAS PONTAS; A PONTA keep FICA NA INSTÂNCIA ORIGINAL
+export const reshapeWire = (doc: Doc, view: ViewName, wireIndex: string, points: Point[], keep = 0) => {
+    const path = simplifyPath(points)
+
+    if (!doc.instances[wireIndex] || path.length < 2)
+        return doc
+
+    if (path.length === 2)
+        return updateView(doc, view, wireIndex, state => withEnds(state, path[0], path[1], null))
+
+    const segments = path.slice(1).map((point, i): [Point, Point] => [path[i], point])
+    const own      = keep === 0 ? 0 : segments.length - 1
+    const moving   = keyOf(wireIndex, keep === 0 ? 'connector1' : 'connector0')
+    const carried  = doc.edges.filter(edge => edge.includes(moving)).map(([a, b]) => a === moving ? b : a)
+    const first    = updateView(removeEdges(doc, edge => edge.includes(moving)), view, wireIndex, state => withEnds(state, ...segments[own], null))
+    const indexes  = segments.map((_, i) => i === own ? wireIndex : String(first.nextIndex + (i > own ? i - 1 : i)))
+    const placed   = segments.reduce((current, segment, i) => {
+        const copy = i === own ? null : copyWire(current, view, wireIndex, ...segment)
+        return copy ? addInstance(current, copy) : current
+    }, first)
+    const chain    = indexes.slice(1).map((index, i): Edge => [keyOf(indexes[i], 'connector1'), keyOf(index, 'connector0')])
+    const outer    = keep === 0 ? keyOf(indexes[indexes.length - 1], 'connector1') : keyOf(indexes[0], 'connector0')
+    return addEdges(placed, [...chain, ...carried.map((partner): Edge => [outer, partner])])
+}
+
+// PONTO DA PEÇA QUE VAI À GRADE: O PRIMEIRO TERMINAL; SEM CONECTOR, O CANTO DA CAIXA (SPEC 02 §1.2)
+export const getAnchor = (scene: Scene, modelIndex: string) => {
+    const box = scene.getBounds(modelIndex)
+    return scene.getKeys(modelIndex).map(key => scene.getTerminal(key)).find((point): point is Point => point !== null) ?? (box ? [box[0], box[1]] as Point : null)
+}
+
+export const getGridShift = (scene: Scene, modelIndex: string, grid: number): Point => {
+    const anchor = getAnchor(scene, modelIndex)
+    return anchor && grid > 0 ? [Math.round(anchor[0] / grid) * grid - anchor[0], Math.round(anchor[1] / grid) * grid - anchor[1]] : [0, 0]
+}
+
+// CADA PEÇA COM O PRIMEIRO TERMINAL NA GRADE; FIOS LIGADOS ACOMPANHAM
+export const alignToGrid = (doc: Doc, library: Library, view: ViewName, modelIndexes: string[], grid: number) => modelIndexes.reduce((current, modelIndex) => {
+    const scene    = new Scene(current, library, view)
+    const [dx, dy] = getGridShift(scene, modelIndex, grid)
+
+    if (scene.isWire(modelIndex) || scene.getView(modelIndex)?.locked || (!dx && !dy))
+        return current
+
+    return moveInstances(current, library, view, [modelIndex], dx, dy)
+}, doc)
+
+const isHorizontal = ([a, b]: [Point, Point]) => Math.abs(a[1] - b[1]) < ALIGNED
+
+const isVertical = ([a, b]: [Point, Point]) => Math.abs(a[0] - b[0]) < ALIGNED
+
+const isPerpendicular = (segment: [Point, Point], other: [Point, Point]) => isHorizontal(segment) ? isVertical(other) : isVertical(segment) && isHorizontal(other)
+
+// O TRECHO PASSOU A APONTAR AO CONTRÁRIO: UMA PONTA ANDOU PARA ALÉM DA OUTRA
+const isReversed = (was: [Point, Point], now: [Point, Point]) => (was[1][0] - was[0][0]) * (now[1][0] - now[0][0]) + (was[1][1] - was[0][1]) * (now[1][1] - now[0][1]) < 0
+
+// TRECHO NOVO ENTRE A PONTA E O QUE ELA TOCAVA: A PONTA VAI PARA to E O TRECHO LIGA from (ONDE FICAM AS LIGAÇÕES ANTIGAS) A ELA
+const addJog = (doc: Doc, view: ViewName, key: string, from: Point, to: Point, partners: string[]) => {
+    const jog = copyWire(doc, view, owner(key), from, to)
+
+    if (!jog)
+        return doc
+
+    const cut   = removeEdges(doc, ([a, b]) => (a === key && partners.includes(b)) || (b === key && partners.includes(a)))
+    const moved = setWireEnds(cut, view, [[key, to]])
+    return addEdges(addInstance(moved, jog), [...partners.map((partner): Edge => [keyOf(jog.modelIndex, 'connector0'), partner]), [keyOf(jog.modelIndex, 'connector1'), key]])
+}
+
+// ARRASTE DE UM TRECHO RETO NA PERPENDICULAR: DOBRA DE CANTO ACOMPANHA, PONTA SOLTA ACOMPANHA, E PONTA EM PEÇA, JUNÇÃO OU VIZINHO NÃO PERPENDICULAR GANHA UM TRECHO NOVO
+export const dragSegment = (doc: Doc, library: Library, view: ViewName, wireIndex: string, delta: Point) => {
+    const scene = new Scene(doc, library, view)
+    const ends  = scene.getWireEnds(wireIndex)
+
+    if (!ends || (!delta[0] && !delta[1]))
+        return doc
+
+    return ends.reduce((current, point, i) => {
+        const key      = keyOf(wireIndex, `connector${i}`)
+        const target   = [point[0] + delta[0], point[1] + delta[1]] as Point
+        const partners = scene.getPartners(key)
+        const bend     = scene.getBendpoint(key)
+        const other    = bend?.length === 2 ? scene.getWireEnds(owner(bend[1])) : null
+
+        if (!partners.length)
+            return setWireEnds(current, view, [[key, target]])
+
+        if (bend && other && isPerpendicular(ends, other))
+            return setWireEnds(current, view, bend.map((end): [string, Point] => [end, target]))
+
+        return addJog(current, view, key, point, target, partners)
+    }, doc)
+}
+
+// A CADEIA QUE SAI DO PINO PELA PONTA start ATÉ O PRÓXIMO PINO, JUNÇÃO OU PONTA SOLTA VIRA UM FIO SÓ, REFEITO PELO CAMINHO ORTOGONAL QUE EVITA AS PEÇAS
+const rerouteChain = (doc: Doc, library: Library, view: ViewName, start: string, grid: number) => {
+    const wire  = owner(start)
+    const first = start.endsWith('connector0')
+    const far   = keyOf(wire, first ? 'connector1' : 'connector0')
+    let joined  = doc
+
+    for (let next = joinWires(doc, library, view, far); next !== joined; next = joinWires(joined, library, view, far))
+        joined = next
+
+    const scene  = new Scene(joined, library, view)
+    const ends   = scene.getWireEnds(wire)
+    const pin    = (key: string) => scene.getPartners(key).find(partner => !scene.isWire(owner(partner)))
+    const [s, f] = [pin(start), pin(far)]
+
+    if (!ends)
+        return joined
+
+    const [a, b]  = first ? ends : [ends[1], ends[0]]
+    const route   = { ...getObstacles(new Scene(removeInstance(joined, wire), library, view)), start: s ? scene.getHeading(s) : null, end: f ? scene.getHeading(f) : null, axis: null, grid, diagonal: false }
+    const corners = getPath(a, b, route)
+    return reshapeWire(joined, view, wire, first ? [a, ...corners, b] : [b, ...[...corners].reverse(), a], first ? 0 : 1)
+}
+
+// FIOS QUE ERAM HORIZONTAIS OU VERTICAIS E FICARAM INCLINADOS OU INVERTIDOS PORQUE UMA PONTA ANDOU: A DOBRA DE CANTO VIZINHA ACOMPANHA NO EIXO DO TRECHO (SE O PINO PASSOU DELA, A CADEIA É REFEITA), A PONTA SOLTA ACOMPANHA A OUTRA, E O RESTO GANHA DOBRAS PELO CAMINHO ORTOGONAL QUE EVITA AS PEÇAS
+export const squareWires = (before: Doc, after: Doc, library: Library, view: ViewName, grid: number) => {
+    const old    = new Scene(before, library, view)
+    const placed = new Scene(after, library, view)
+    const wires  = getChangedWires(before, after, view).filter(wireIndex => {
+        const was = old.getWireEnds(wireIndex)
+        const now = placed.getWireEnds(wireIndex)
+        return was && now && old.isShown(after.instances[wireIndex]) && !placed.getWireCurve(wireIndex) && isAxisAligned(...was) && (!isAxisAligned(...now) || isReversed(was, now))
+    })
+    const blocked = wires.length ? getObstacles(new Scene(wires.reduce((current, wireIndex) => removeInstance(current, wireIndex), after), library, view)) : null
+
+    return wires.reduce((current, wireIndex) => {
+        const scene  = new Scene(current, library, view)
+        const was    = old.getWireEnds(wireIndex)
+        const now    = scene.getWireEnds(wireIndex)
+        const moved  = was && now ? [0, 1].filter(i => distance(was[i], now[i]) > ALIGNED) : []
+
+        if (!was || !now || moved.length !== 1 || (isAxisAligned(...now) && !isReversed(was, now)))
+            return current
+
+        const [e, f]   = [moved[0], 1 - moved[0]]
+        const fKey     = keyOf(wireIndex, `connector${f}`)
+        const point    = now[e]
+        const fixed    = now[f]
+        const kept     = isHorizontal(was) ? [fixed[0], point[1]] as Point : [point[0], fixed[1]] as Point
+        const bend     = scene.getBendpoint(fKey)
+        const neighbor = bend?.length === 2 ? old.getWireEnds(owner(bend[1])) : null
+        const partners = scene.getPartners(fKey)
+        const pin      = (key: string) => scene.getPartners(key).find(partner => !scene.isWire(owner(partner)))
+        const fromPin  = pin(keyOf(wireIndex, `connector${e}`))
+        const toPin    = pin(fKey)
+
+        if (!partners.length)
+            return setWireEnds(current, view, [[fKey, [fixed[0] + point[0] - was[e][0], fixed[1] + point[1] - was[e][1]]]])
+
+        const heading = fromPin ? scene.getHeading(fromPin) : null
+        const slides  = bend !== null && neighbor !== null && isPerpendicular(was, neighbor)
+        const inward  = heading !== null && (kept[0] - point[0]) * heading[0] + (kept[1] - point[1]) * heading[1] < -ALIGNED
+
+        if (slides && inward)
+            return rerouteChain(current, library, view, keyOf(wireIndex, `connector${e}`), grid)
+
+        if (slides)
+            return setWireEnds(current, view, bend.map((end): [string, Point] => [end, kept]))
+
+        const route   = { ...FREE_ROUTE, ...blocked, start: heading, end: toPin ? scene.getHeading(toPin) : null, grid }
+        const corners = getPath(point, fixed, route)
+        return reshapeWire(current, view, wireIndex, e === 0 ? [point, ...corners, fixed] : [fixed, ...[...corners].reverse(), point], e)
+    }, after)
+}
+
+const sameStyle = (a: InstanceView | undefined, b: InstanceView | undefined) => a?.wire && b?.wire && a.wire.color === b.wire.color && a.wire.mils === b.wire.mils && !a.wire.bezier && !b.wire.bezier && a.layer === b.layer
+
+// DOBRAS SIMPLES ENTRE TRECHOS DO MESMO ESTILO QUE FICARAM ALINHADOS (OU COM UM TRECHO NULO) SAEM, UNINDO OS DOIS FIOS
+export const tidyWires = (doc: Doc, library: Library, view: ViewName, wireIndexes: string[]) => {
+    let current = doc
+
+    for (let pending = [...new Set(wireIndexes)]; pending.length;) {
+        const wireIndex = pending.pop() ?? ''
+        const scene     = new Scene(current, library, view)
+        const ends      = scene.getWireEnds(wireIndex)
+
+        const joint = ends && ['connector0', 'connector1'].map(id => scene.getBendpoint(keyOf(wireIndex, id))).find(bend => {
+            const other = bend?.length === 2 ? scene.getWireEnds(owner(bend[1])) : null
+            const null0 = other && (distance(...ends) < ALIGNED || distance(...other) < ALIGNED)
+            return other && owner(bend?.[1] ?? '') !== wireIndex && sameStyle(scene.getView(wireIndex), scene.getView(owner(bend?.[1] ?? ''))) && (null0 || (isHorizontal(ends) && isHorizontal(other)) || (isVertical(ends) && isVertical(other)))
+        })
+
+        const joined = joint ? joinWires(current, library, view, joint[0]) : current
+
+        if (joined === current)
+            continue
+
+        current = joined
+        pending = [...pending.filter(index => current.instances[index]), wireIndex]
+    }
+
+    return current
+}
+
+// FIOS CUJA GEOMETRIA NA VISTA MUDOU ENTRE OS DOIS DOCUMENTOS (OU QUE SÃO NOVOS)
+export const getChangedWires = (before: Doc, after: Doc, view: ViewName) => Object.values(after.instances).filter(instance => instance.moduleIdRef === 'WireModuleID' && instance.views[view] !== before.instances[instance.modelIndex]?.views[view]).map(instance => instance.modelIndex)
 
 const NOTE_LAYERS: Record<View, string> = { breadboardView: 'breadboardNote', schematicView: 'schematicNote', pcbView: 'pcbNote' }
 
@@ -256,9 +527,85 @@ export const createNote = (doc: Doc, view: View, point: Point) => {
     return addInstance(doc, { moduleIdRef: 'NoteModuleID', modelIndex: String(doc.nextIndex), path: 'note.fzp', title: getTitle(doc, 'Note'), text: '', properties: {}, localConnectors: {}, views: { [view]: state } })
 }
 
+export const setPosition = (doc: Doc, view: ViewName, modelIndex: string, point: Point) => updateView(doc, view, modelIndex, state => ({ ...state, geometry: { ...state.geometry, x: point[0], y: point[1] } }))
+
 export const setNoteSize = (doc: Doc, view: ViewName, modelIndex: string, size: Point) => updateView(doc, view, modelIndex, state => ({ ...state, geometry: { ...state.geometry, size } }))
 
 export const setNoteText = (doc: Doc, modelIndex: string, text: string) => updateInstance(doc, modelIndex, instance => ({ ...instance, text }))
+
+const addTrace = (doc: Doc, home: View, layer: string, a: Point, b: Point, mils: number) => {
+    const modelIndex = String(doc.nextIndex)
+    const views      = Object.fromEntries(VIEWS.map(view => {
+        const own   = view === home
+        const style = WIRE_STYLE[view]
+        const state: InstanceView = { layer: own ? layer : style.layer, locked: false, bottom: own && layer === 'copper0trace', geometry: { x: a[0], y: a[1], z: getLayerZ(view, own ? layer : style.layer) + doc.nextIndex * Z_STEP, transform: null, line: [0, 0, b[0] - a[0], b[1] - a[1]], wireFlags: WIRE_FLAGS[home] | AUTOROUTABLE, size: null }, wire: { mils: own ? mils : HIDDEN_WIRE_MILS, color: own ? TRACE_COLORS[layer] ?? style.color : style.color, opacity: 1, banded: false, bezier: null }, connectors: [], label: null, hidden: [] }
+        return [view, state]
+    }))
+
+    return addInstance(doc, { moduleIdRef: 'WireModuleID', modelIndex, path: 'wire.fzp', title: `Wire${modelIndex}`, text: '', properties: {}, localConnectors: {}, views })
+}
+
+// VIA NO PONTO: CENTRADA PELO TERMINAL DO SVG GERADO PARA O FURO/ANEL PEDIDO, MARCADA COMO AUTOROTEÁVEL (SPEC 01 §8.11)
+const addVia = (doc: Doc, library: Library, point: Point, holeSize: string) => {
+    const modelIndex = String(doc.nextIndex)
+    const placed     = createInstance(doc, library, 'ViaModuleID', { breadboardView: point, schematicView: point, pcbView: point })
+    const sized      = updateInstance(placed, modelIndex, instance => ({ ...instance, properties: { ...instance.properties, 'hole size': holeSize } }))
+    const terminal   = new Scene(sized, library, 'pcbView').getTerminal(keyOf(modelIndex, 'connector0')) ?? point
+    return updateView(sized, 'pcbView', modelIndex, state => ({ ...state, geometry: { ...state.geometry, x: state.geometry.x + point[0] - terminal[0], y: state.geometry.y + point[1] - terminal[1], wireFlags: AUTOROUTABLE } }))
+}
+
+// PLANO DO AUTOROUTER NO DOCUMENTO: CADA TRECHO VIRA TRILHA DA VISTA (PCBTrace OU SchematicTrace) Autoroutable, CADA TROCA DE CAMADA UMA VIA, AS PONTAS LIGADAS CONFORME O PLANO (SPEC 03 §8.2)
+export const applyPlan = (doc: Doc, library: Library, view: View, plan: Plan, mils: number, holeSize: string) => {
+    const wireBase = doc.nextIndex
+    const traced   = plan.wires.reduce((current, wire) => addTrace(current, view, wire.layer, wire.a, wire.b, mils), doc)
+    const viaBase  = traced.nextIndex
+    const placed   = plan.vias.reduce((current, point) => addVia(current, library, point, holeSize), traced)
+    const keyOfEnd = (end: End) => 'key' in end ? end.key : 'via' in end ? keyOf(String(viaBase + end.via), 'connector0') : keyOf(String(wireBase + end.wire), `connector${end.end}`)
+    return addEdges(placed, plan.links.map(([a, b]): Edge => [keyOfEnd(a), keyOfEnd(b)]))
+}
+
+// DOBRA DE TRILHAS VIRA VIA NO MESMO PONTO: AS PONTAS DEIXAM DE SE LIGAR ENTRE SI E LIGAM NA VIA (SPEC 02 §10.2)
+export const bendToVia = (doc: Doc, library: Library, key: string, holeSize: string) => {
+    const scene = new Scene(doc, library, 'pcbView')
+    const bend  = scene.getBendpoint(key)
+    const point = scene.getTerminal(key)
+
+    if (!bend || !point)
+        return doc
+
+    const via    = keyOf(String(doc.nextIndex), 'connector0')
+    const placed = addVia(removeEdges(doc, ([a, b]) => bend.includes(a) && bend.includes(b)), library, point, holeSize)
+    return addEdges(updateView(placed, 'pcbView', owner(via), state => ({ ...state, geometry: { ...state.geometry, wireFlags: 0 } })), bend.map((end): Edge => [end, via]))
+}
+
+// VIA COM DUAS OU MAIS TRILHAS DA MESMA FACE VIRA DOBRA: AS PONTAS PASSAM A SE LIGAR ENTRE SI E A VIA SAI (SPEC 02 §10.1)
+export const viaToBend = (doc: Doc, library: Library, modelIndex: string) => {
+    const scene  = new Scene(doc, library, 'pcbView')
+    const ends   = scene.getPartners(keyOf(modelIndex, 'connector0'))
+    const layers = new Set(ends.map(end => scene.getView(owner(end))?.layer))
+
+    if (ends.length < 2 || layers.size !== 1 || ends.some(end => !scene.isWire(owner(end))))
+        return doc
+
+    return addEdges(removeInstance(doc, modelIndex), ends.flatMap((end, i) => ends.slice(i + 1).map((other): Edge => [end, other])))
+}
+
+// APAGA AS TRILHAS E VIAS MARCADAS COMO AUTOROTEÁVEIS NA VISTA, OU SÓ AS QUE TOCAM A ÁREA DA PLACA ROTEADA (SPEC 03 §2.1, §8.2)
+export const deleteAutorouted = (doc: Doc, library: Library, view: ViewName, area: Box | null = null) => {
+    const scene  = new Scene(doc, library, view)
+    const within = (modelIndex: string) => {
+        const box = scene.getBounds(modelIndex)
+        return !area || (box !== null && boxesTouch(box, area))
+    }
+    return Object.values(doc.instances).filter(instance => scene.isShown(instance) && ((instance.views[view]?.geometry.wireFlags ?? 0) & AUTOROUTABLE) && (scene.isWire(instance.modelIndex) || library.getPart(instance.moduleIdRef)?.kind === 'via') && within(instance.modelIndex)).reduce((current, instance) => removeInstance(current, instance.modelIndex), doc)
+}
+
+// FRAGMENTOS DE PREENCHIMENTO COMO INSTÂNCIAS GroundPlaneModuleID NA FACE, COM AS PROPRIEDADES svg E fillType (SPEC 03 §6.2, PASSO 9)
+export const createFills = (doc: Doc, fragments: FillFragment[], frame: Matrix, fillType: string) => fragments.reduce((current, fragment) => {
+    const [x, y] = apply(invert(frame), fragment.x, fragment.y)
+    const pcb: InstanceView = { layer: fragment.layer, locked: false, bottom: fragment.face === 'bottom', geometry: { x, y, z: getLayerZ('pcbView', fragment.layer) + current.nextIndex * Z_STEP, transform: null, line: null, wireFlags: 0, size: null }, wire: null, connectors: [], label: null, hidden: [] }
+    return addInstance(current, { moduleIdRef: 'GroundPlaneModuleID', modelIndex: String(current.nextIndex), path: 'groundplane.fzp', title: getTitle(current, 'Copper Fill'), text: '', properties: { svg: fragment.svg, fillType }, localConnectors: {}, views: { pcbView: pcb } })
+}, doc)
 
 const primaryLayer = (view: ViewName, layers: string[]) => view === 'pcbView' ? ['copper0', 'copper1'].find(layer => layers.includes(layer)) ?? layers[0] : layers[0]
 
@@ -632,6 +979,17 @@ export const swapPart = (doc: Doc, library: Library, modelIndex: string, moduleI
     const prefix  = `${modelIndex}/`
     const swapped = updateInstance(doc, modelIndex, instance => ({ ...instance, moduleIdRef: moduleId, path: '' }))
     return { ...removeEdges(swapped, ([a, b]) => (a.startsWith(prefix) && !kept.has(a)) || (b.startsWith(prefix) && !kept.has(b))), revision: swapped.revision + 1 }
+}
+
+// TEXTO NOVO DO LOGO REGERA O SVG (shape) A PARTIR DO MODELO DA VISTA E O TAMANHO (width/height) (SPEC 01 §5.7)
+export const setLogoText = (doc: Doc, library: Library, view: ViewName, modelIndex: string, text: string) => {
+    const template = library.getSvg(doc.instances[modelIndex]?.moduleIdRef ?? '', view)?.text
+    const made     = template ? logoTextSvg(template, text, library.fonts) : null
+
+    if (!made)
+        return setProperty(doc, modelIndex, 'logo', text)
+
+    return updateInstance(doc, modelIndex, instance => ({ ...instance, properties: { ...instance.properties, logo: text, shape: made.svg, width: String(+made.width.toFixed(4)), height: String(+made.height.toFixed(4)) } }))
 }
 
 export const setProperty = (doc: Doc, modelIndex: string, name: string, value: string) => updateInstance(doc, modelIndex, instance => ({ ...instance, properties: { ...instance.properties, [name]: value } }))

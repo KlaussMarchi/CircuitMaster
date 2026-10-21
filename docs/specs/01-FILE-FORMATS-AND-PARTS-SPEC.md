@@ -210,6 +210,13 @@ Frequências relevantes: 47.890 conectores; `terminalId` em 40.940 `<p>` esquem�
 - `fliphorizontal`/`flipvertical="true"` habilitam espelhamento na vista. **A vista esquemática sempre aceita
   os dois espelhamentos** e sempre ganha a camada `schematicText` (textos do SVG esquemático são separados para
   não espelhar texto).
+- **Endireitamento do texto do esquemático.** Com a parte linear $(a, b, c, d)$ da matriz da instância, ela está
+  *espelhada* se $ad - bc < 0$ e *de cabeça para baixo* se $d \le -\sqrt{2}/2$ (rotação entre 135° e 225°). Cada
+  bloco de texto (o grupo `<g id="label">` que contém o `<text>`, para várias linhas, ou o próprio `<text>` com
+  seus `<tspan>`) recebe, em torno do centro da sua caixa nas coordenadas do pai do `<text>`, a escala
+  $(s_x, s_y)$: $s_x = -1$ quando exatamente uma das duas condições vale, $s_y = -1$ quando está de cabeça para
+  baixo. O texto fica legível na mesma caixa, e as linhas de um bloco mantêm a ordem; em 90°/270° continua
+  vertical. Vale para toda peça do esquemático, net labels e símbolos de tensão incluídos.
 - Uma vista existe para a peça se ao menos uma camada válida foi declarada.
 
 ### 2.5 Normalização de cobre (THT × SMD)
@@ -326,6 +333,12 @@ apenas a subárvore `<g id="<nomeXmlDaCamada>">`:
 Cor forçada por camada (apenas visual): `copper0 #f9a435`, `copper1 #fdde68`, trilha `copper0 #f28a00`,
 trilha `copper1 #f2c600`, `silkscreen1 #000000`, `silkscreen0 #444444`, placa `#ffffff`. Exceção: preto
 (`black`, `#000000`) não é recolorido.
+
+Na tela do CircuitMaster a PCB usa a paleta do Altium no lugar dessas cores (exportações e arquivo continuam com as
+do Fritzing): cobre de cima e trilha de cima `#ff3030`, cobre de baixo e trilha de baixo `#3d5cff`, pad de peça com
+cobre nas duas faces (passante) `#c8c8c8`, serigrafia de cima e rótulos `#ffff00`, de baixo `#9a9a00`, plano de
+terra de cima `#a81c1c`, de baixo `#25349e`, placa `#000000` sobre a área de trabalho `#262626` com grade
+`#4a4a4a`, nos dois temas. Na PCB e no esquemático o verde de conector ligado não é pintado (doc 02 §4.2).
 
 ### 3.4 Localização do elemento do pino
 
@@ -678,6 +691,10 @@ seguir (a instância é descartada com aviso).
 - Logo de texto: propriedades locais `logo` (texto), `shape` (SVG gerado, grupo da camada), `width`/`height` (mm);
   logo de imagem: `shape` com a imagem embutida (SVG ou raster convertido). O desenho usa `shape` com o tamanho de
   `width`/`height`.
+- Novo texto de logo (versão 5): parte do SVG do modelo da peça (`<text id="label">`, padrão OCR-Fritzing-mono,
+  `font-size` 10); com a fonte em $10\cdot96/72$ px, largura $W = 0{,}77\cdot w_{texto} + 4$ e altura
+  $H = (ascendente + descendente) + 4$, em unidades de 1/100 in: `viewBox="0 0 W H"`, tela $W/100 \times H/100$ in,
+  texto em $x = W/2$, $y$ = ascendente, e `width`/`height` locais = tela em mm.
 
 ---
 
@@ -790,6 +807,9 @@ Tabela própria do CircuitMaster (equivalente funcional), por propriedade:
 
 - valor inicial = propriedade local, senão propriedade da peça, senão `defaultValue` formatado;
 - numéricos são exibidos com prefixo SI e símbolo; edição validada contra $[min, max]$.
+- o Inspector só mostra o editor de uma definição para uma propriedade que a peça declara no `.fzp` (ou que a
+  instância tem como propriedade local): as capacitâncias por passo, por exemplo, aparecem nos capacitores de
+  filme que as declaram e não no eletrolítico, embora o sufixo `CapacitorModuleID` case com os dois.
 
 Propriedades cobertas no app de referência (61 definições): capacitâncias por passo (5/7,5/10/15/22,5/27,5/
 37,5 mm), `capacitance`, `inductance`, `resistance`, `maximum resistance`, `power`, `voltage`, `current`,
@@ -977,8 +997,8 @@ Peças estáticas de `fritzing-parts` (ex.: `Breadboard-RSR03MB102-ModuleID`, 83
     `connector0pin` $(W - A - 0{,}1, 0, A, H)$ e terminal `connector0terminal` $0{,}1 \times 0{,}1$ em $(W, H/2)$;
     à esquerda o espelho: $(s/2, H/2), (A, s/2), (W - s/2, s/2), (W - s/2, H - s/2), (A, H - s/2)$, pino
     $(0, 0, A, H)$, terminal em $(0, H/2)$;
-  - com a instância espelhada (determinante negativo da transformação), o texto recebe o espelhamento inverso em
-    torno do seu centro e continua legível.
+  - o SVG gerado não depende da orientação; com a instância espelhada ou de cabeça para baixo, o texto segue o
+    endireitamento do esquemático (§2.4).
 - Símbolo de alimentação e *power label* (`type = voltage reference`): o texto do elemento `label` do SVG é
   trocado por "$v$`V`", com $v = \mathrm{trunc}(V \cdot 1000)/1000$ (voltagem local ou da peça).
 
@@ -1007,9 +1027,15 @@ Peças estáticas de `fritzing-parts` (ex.: `Breadboard-RSR03MB102-ModuleID`, 83
 - Tabela padrão (equivalente funcional): via padrão 0,4 mm / anel 0,3 mm; via caseira 0,9 / 0,508; furos de
   parafuso M2 2,2, M3 3,2 (padrão de furo), M4 4,2 (anel 0); furos de pin header/screw terminal/mystery
   0,7 / 1,0 (padrão) / 1,1 / 1,5 mm com anel 0,508 mm; limites: anel 0,002–10 in, furo 0,002–20 in.
-- **Pad** (`PadModuleID`, `Copper0PadModuleID`): retângulo de cobre SMD com `width`/`height` locais e opção de
-  conexão (centro/bordas).
-- **Blocker** (`…BlockerModuleID`): área de exclusão de cobre (keepout) usada pelo plano de terra e autorouter.
+- **Pad** (`PadModuleID`, `Copper0PadModuleID`): retângulo de cobre SMD com `width`/`height` locais (mm; padrão
+  28 × 32 px) e opção `connect` (`center`, `north`, `south`, `east`, `west`). SVG gerado em px de cena com margem de
+  4 px: tela $(w + 4) \times (h + 4)$, grupo da camada (`copper0` no `Copper0PadModuleID`, senão `copper1`),
+  `<rect id="connector0pad" x="2" y="2">` preenchido na cor da camada e `connector0terminal` no centro ou na faixa
+  de 1 px (ou um terço do lado) da borda escolhida.
+- **Blocker** (`Copper0BlockerModuleID`, `Copper1BlockerModuleID`): área de exclusão de cobre (keepout) com o mesmo
+  SVG do pad, mas `rect id="zzzpad"` vazado (`fill-opacity` 0, traço de 4 px em `#A26A00` embaixo ou `#aF8B33` em
+  cima) e um X de duas linhas de 1 px. Só existe na PCB; não vai para Gerber, DRC nem autorouter, apenas bloqueia o
+  preenchimento de cobre (documento 03, 6.3).
 
 ### 8.12 Outras
 
@@ -1020,6 +1046,88 @@ Peças estáticas de `fritzing-parts` (ex.: `Breadboard-RSR03MB102-ModuleID`, 83
 - Régua: centímetros/polegadas.
 
 ---
+
+## 8A. EDITOR DE PEÇAS E BINS DO USUÁRIO
+
+### 8A.1 Quando abre
+
+"Editar (editor de peças)" (menu da peça e menu Peça) abre o editor sobre a peça selecionada quando ela é do tipo
+peça comum: não abre para fios, placas, breadboards/perfboards/stripboards, logos, planos de cobre, furos, vias,
+pads (`…PadModuleID`) nem moldura de esquemático. O editor trabalha numa **cópia**: o documento `.fzp` da peça e o
+SVG de cada vista (protoboard, esquemático, PCB e ícone). Peças geradas (CIs, headers, *mystery parts*) entram com o
+`.fzp` gerado. Nada muda na peça original.
+
+### 8A.2 Metadados
+
+Título, autor, descrição, rótulo (prefixo do título das instâncias, ex.: `R`), URL, versão, data, tags (lista
+separada por vírgulas) e a tabela de propriedades (`<property name>`), com `family` e `variant`; linhas podem ser
+acrescentadas e apagadas. Cada campo escreve o elemento correspondente do `.fzp` (§2).
+
+### 8A.3 Conectores
+
+Lista com id (`connectorN`), nome, descrição e tipo (`male`, `female`, `pad`). Aumentar a contagem acrescenta
+conectores com o próximo número livre $N$ (maior número achado nos ids e nos nomes, +1): nome e descrição
+`pin N`, mesmo tipo e mesmas vistas/camadas do primeiro conector, `svgId = connectorNpin` em cada `<p>`, sem
+`terminalId` nem `legId`. Diminuir apaga os de maior número (e os ids que eles tinham nos SVGs).
+
+### 8A.4 Vistas: elemento e terminal de cada conector
+
+Cada aba de vista mostra o SVG ampliado e a lista de conectores. Com um conector escolhido, um clique num
+elemento do desenho o **atribui**: o elemento passa a ter o id `svgId` do `<p>` do conector naquela vista (o
+elemento que tinha esse id perde o atributo); sem `<p>` na vista, ele é criado com `svgId = connectorNpin` na
+camada da vista (na PCB, `copper0` e, se a peça tem `copper1`, também `copper1`; o elemento gêmeo da outra
+camada de cobre — mesmo centro a menos de 0,5 unidade — recebe o mesmo id). Clicar num elemento já atribuído
+escolhe o conector dele. Elementos atribuídos aparecem realçados; conectores sem elemento na vista ficam marcados
+na lista.
+
+**Ponto terminal**: centro (padrão), o meio de uma borda (N, S, L, O) da caixa do elemento ou qualquer ponto dela,
+arrastando a marca do terminal no desenho (a marca não sai da caixa do elemento; com Shift o arraste segue só o
+eixo em que o movimento começou). No centro, o `<p>` fica sem `terminalId`. Fora do centro, o id é o `svgId` sem
+o sufixo `pin`/`pad`, mais `terminal`; um retângulo invisível (`fill` e `stroke` `none`, lado de 1/500 da caixa)
+com esse id é posto no ponto, logo depois do elemento do conector, e o `<p>` ganha `terminalId`.
+
+"Carregar SVG…" troca o SVG da vista por um arquivo escolhido; atribuições cujos ids não existem no novo
+desenho aparecem como pendentes. O SVG mostrado é saneado (sem `script`, `foreignObject`, atributos `on*` e
+links `javascript:`), como todo SVG vindo de arquivo.
+
+### 8A.5 Gravar
+
+Gravar cria sempre uma **peça nova**: `moduleId = <prefixo>_<guid de 32 hex>_1`, com o prefixo vindo do título
+(letras, números e `_`); se a família já tem a mesma `variant`, ela vira `variant N` com o menor $N$ livre na
+família. Cada vista grava o SVG em `<vista>/<moduleId>_<vista>.svg` (o `image` das `<layers>`), e o pacote é o
+`.fzpz` da §6.2: `part.<moduleId>.fzp` e `svg.<vista>.<moduleId>_<vista>.svg`. A peça entra no acervo da sessão
+como as de pacote, vai para **Meus itens**, pode substituir a instância editada (troca de peça, doc 02 §5) e o
+`.fzpz` pode ser baixado.
+
+### 8A.6 Bins do usuário
+
+Além do **Meus itens**, o usuário cria bins com nome; "Adicionar ao bin" lista todos (e "Novo bin…"). Cada bin
+pode ser renomeado, apagado e exportado como `.fzbz` (§6.3). Abrir um `.fzbz`/`.fzb` cria um bin com o título do
+arquivo (sem título: o nome do arquivo); abrir um `.fzpz` põe a peça em Meus itens. Os bins e os arquivos das
+peças que vieram de pacotes ou do editor ficam guardados no navegador e voltam na próxima sessão.
+
+### 8A.7 Histórico de revisões e registro ao gravar
+
+O `.fzp` pode levar, como filhos da raiz, elementos `<history date="AAAA-MM-DD" author="…" mode="…">texto</history>`,
+um por revisão da peça (versões do Fritzing que não os conhecem simplesmente os ignoram). `mode` é a insistência
+com que a revisão é oferecida a quem ainda usa a peça antiga: `required` (aplicada sem perguntar), `recommended`
+(perguntada a cada carga) ou `optional` (o padrão, perguntada quando faz diferença); `silent`, `forced` e `ask`
+são grafias antigas dos mesmos três e são aceitas na leitura.
+
+- **Leitura**: as entradas em ordem de data, da mais antiga para a mais nova (data vazia ou inválida primeiro;
+  empate mantém a ordem do arquivo). Peça sem `<history>` mas com `<date>` ou `<author>` ganha uma entrada
+  sintética com esses dois valores, modo `optional` e texto vazio.
+- **Escrita**: as entradas existentes saem e as novas entram ordenadas logo depois de `<date>` (na falta dele,
+  depois de `<author>`, `<title>` ou `<version>`; sem nenhum, no começo); entrada sem texto não tem conteúdo; a
+  mais nova é copiada em `<author>` e `<date>`.
+- **Registro ao gravar**: gravar ou baixar o `.fzpz` de uma peça com alterações ainda não gravadas abre antes o
+  pedido de registro da revisão, com data (hoje; se já existe entrada com a data de hoje, é ela que se edita, sem
+  duplicar), autor (o `<author>` da peça, ou o da entrada de hoje), modo (`optional`) e o texto do que mudou, e uma
+  caixa **desmarcada** "subir a versão para X". Botões: "Registrar e gravar" (só com texto), "Gravar sem registro"
+  e "Cancelar" (nada é gravado). A caixa de versão vale nos dois jeitos de gravar e troca o texto de `<version>`
+  (criando o elemento se faltar). Peça sem alterações grava sem perguntar. A aba Metadados mostra o histórico.
+- **Próxima versão**: vazia → `1`; termina em número → esse número + 1 (`4` → `5`, `1.1` → `1.2`, `1.9` →
+  `1.10`, `v2` → `v3`); sem número no fim, fica como está.
 
 ## 9. CONSTANTES
 

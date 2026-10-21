@@ -6,17 +6,17 @@ import type { VIEWS } from '../../core/Layer'
 import type { Box } from '../../core/Geometry'
 import { PX_PER_INCH } from '../../core/Units'
 import { Clipper } from '../../core/Clipper'
-import { getArtwork, type Artwork } from '../../core/Cam'
+import { getArtwork, pickBoard, type Artwork } from '../../core/Cam'
 import { exportEtchable, exportEtchablePdf, exportFabrication } from '../../core/Gerber'
 import { exportBomCsv, exportBomHtml, exportBomPdf, exportPickAndPlace } from '../../core/Bom'
 import { exportIpc } from '../../core/Ipc'
-import { buildCircuit } from '../../core/Spice'
+import { exportSpice } from '../../core/Spice'
 import { Pdf } from '../../core/Pdf'
 import { Scene } from '../../engine/Scene'
 import createClipper from '../../core/Clipper/clipper2.js'
 
 export type ExportKind = 'png' | 'jpg' | 'svg' | 'pdf' | 'etchablePdf' | 'etchableSvg' | 'gerber' | 'pnp' | 'bomHtml' | 'bomCsv' | 'bomPdf' | 'ipc' | 'xml' | 'spice'
-export type Context    = { doc: Doc, library: Library, netlist: Netlist | null, view: typeof VIEWS[number], name: string, transient: boolean, svg: SVGSVGElement | null, bounds: Box | null }
+export type Context    = { doc: Doc, library: Library, netlist: Netlist | null, view: typeof VIEWS[number], name: string, svg: SVGSVGElement | null, bounds: Box | null, selection: string[] }
 
 type Output = [string, string | Uint8Array, string]
 
@@ -57,7 +57,7 @@ const SKETCH: Partial<Record<ExportKind, (context: Context, base: string) => Out
     bomCsv: (context, base) => [`${base}_bom.csv`, exportBomCsv(context.doc, context.library), 'text/csv'],
     bomPdf: (context, base) => [`${base}_bom.pdf`, exportBomPdf(context.doc, context.library, base), PDF],
     xml: (context, base) => context.netlist && [`${base}_netlist.xml`, context.netlist.export(context.view, instance => new Scene(context.doc, context.library, context.view).isShown(instance), context.name), 'application/xml'],
-    spice: (context, base) => context.netlist && [`${base}.cir`, buildCircuit(context.doc, context.library, context.netlist, context.transient).deck, TEXT]
+    spice: (context, base) => context.netlist && [`${base}.cir`, exportSpice(context.doc, context.library, context.netlist, base), TEXT]
 }
 
 // SVG AUTÔNOMO DA VISTA: SEM GRADE, SELEÇÃO NEM RATSNEST, IMAGENS DAS PEÇAS EMBUTIDAS, CAIXA DO DESENHO EM POLEGADAS
@@ -80,8 +80,9 @@ const getSvgText = async (svg: SVGSVGElement, bounds: Box, flat: boolean) => {
     clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`)
     clone.setAttribute('width', `${(w / PX_PER_INCH).toFixed(4)}in`)
     clone.setAttribute('height', `${(h / PX_PER_INCH).toFixed(4)}in`)
-    clone.setAttribute('style', `background:${svg.style.background}`)
-    return { text: new XMLSerializer().serializeToString(clone), size: [w, h] as const, background: svg.style.background }
+    clone.setAttribute('style', `background:${svg.dataset.background}`)
+    clone.removeAttribute('data-background')
+    return { text: new XMLSerializer().serializeToString(clone), size: [w, h] as const, background: svg.dataset.background ?? '#ffffff' }
 }
 
 const rasterize = async (svg: SVGSVGElement, bounds: Box, type: string) => {
@@ -129,6 +130,13 @@ const IMAGES: Partial<Record<ExportKind, (svg: SVGSVGElement, bounds: Box, base:
 
 export const BOARD_EXPORTS = Object.keys(BOARD) as ExportKind[]
 
+// MOTIVO DE NÃO HAVER PLACA PARA UMA OPERAÇÃO DE PCB, OU NULO (SPEC 03 §2.1)
+export const boardProblem = (doc: Doc, library: Library, selection: string[]) => {
+    const { host, boards } = pickBoard(doc, library, new Scene(doc, library, 'pcbView'), selection)
+    return host          ? null :
+           boards.length ? 'há mais de uma placa: selecione a placa desejada (as operações de PCB trabalham com uma placa por vez)' : 'é preciso uma placa na vista PCB'
+}
+
 // GERA E BAIXA O ARQUIVO PEDIDO NO MENU EXPORTAR; DEVOLVE A MENSAGEM DA BARRA DE STATUS (SPEC 02 §10.4)
 export const exportAs = async (kind: ExportKind, context: Context) => {
     const base  = context.name.replace(/\.(fzz|fz)$/i, '') || 'sem-titulo'
@@ -145,9 +153,14 @@ export const exportAs = async (kind: ExportKind, context: Context) => {
         return `${name} exportado`
     }
 
+    const problem = board ? boardProblem(context.doc, context.library, context.selection) : null
+
+    if (problem)
+        return problem
+
     if (board) {
         const tools   = await getClipper()
-        const artwork = getArtwork(context.doc, context.library, tools, new Scene(context.doc, context.library, 'pcbView'))
+        const artwork = getArtwork(context.doc, context.library, tools, new Scene(context.doc, context.library, 'pcbView'), context.selection)
 
         if (!artwork)
             return 'a exportação para produção precisa de uma placa na vista PCB'

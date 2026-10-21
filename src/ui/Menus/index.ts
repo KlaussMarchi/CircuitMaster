@@ -2,9 +2,10 @@ import type { Point } from '../../core/Geometry'
 import { WIRE_FLAGS } from '../../core/Document'
 import { Scene } from '../../engine/Scene'
 import { WIRE_COLORS } from '../../engine/Drawing'
-import { clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires, setAutoroutable, setGroundFillSeed, setLabelVisible, setLayerHidden, setLocked, setSticky, setTraceSide, setWireColor, splitWire, straightenWire, type ZMode } from '../../engine/Edit'
+import { bendToVia, clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires, setAutoroutable, setGroundFillSeed, setLabelVisible, setLayerHidden, setLocked, setSticky, setTraceSide, setWireColor, splitWire, straightenWire, viaToBend, type ZMode } from '../../engine/Edit'
+import { getConfig } from '../Pcb'
 import type { MenuEntry } from '../ContextMenu'
-import { useStore } from '../Store'
+import { isEditable, useStore } from '../Store'
 
 export type Target = { kind: 'part' | 'wire' | 'ratsnest', modelIndex: string, key: string | null, point: Point, rat: [string, string] | null }
 
@@ -16,11 +17,19 @@ const Z_ITEMS: [string, string, ZMode][] = [['Trazer para frente', 'Ctrl+Shift+]
 
 const ROTATIONS: [string, string, number, boolean][] = [['Girar 45° no sentido horário', '', 45, true], ['Girar 90° no sentido horário', ']', 90, false], ['Girar 180°', '', 180, false], ['Girar 90° no sentido anti-horário', '[', -90, false], ['Girar 45° no sentido anti-horário', '', -45, true]]
 
+// BIN NOVO COM O NOME PEDIDO; CANCELAR NÃO CRIA
+export const promptBin = (moduleIds: string[]) => {
+    const title = window.prompt('Nome do novo bin', `Bin ${useStore.getState().userBins.length + 1}`)
+
+    if (title !== null)
+        useStore.getState().createBin(title, moduleIds)
+}
+
 const zMenu = (disabled: boolean): MenuEntry => ({ label: 'Elevar e rebaixar', disabled, items: Z_ITEMS.map(([label, shortcut, mode]) => ({ label, shortcut, apply: () => useStore.getState().zOrder(mode) })) })
 
 // MENU DE PEÇA DA VISTA CORRENTE (SPEC 02 §10.1)
 const partMenu = (target: Target): MenuEntry[] => {
-    const { doc, library, view, selection, edit, rotate, flip, copy, duplicate, remove, addToMine } = useStore.getState()
+    const { doc, library, view, selection, edit, rotate, flip, copy, duplicate, remove, addToMine, userBins, addToBin, editPart } = useStore.getState()
     const scene     = new Scene(doc, library, view)
     const chosen    = selection.filter(modelIndex => !scene.isWire(modelIndex))
     const partOf    = (modelIndex: string) => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')
@@ -38,6 +47,7 @@ const partMenu = (target: Target): MenuEntry[] => {
     const turn45    = free.some(modelIndex => partOf(modelIndex)?.kind !== 'breadboard')
     const canFlip   = (horizontal: boolean) => view === 'schematicView' && free.some(modelIndex => horizontal ? partOf(modelIndex)?.views[view]?.flipHorizontal : partOf(modelIndex)?.views[view]?.flipVertical)
     const locked    = chosen.some(isLocked)
+    const modules   = [...new Set(chosen.map(modelIndex => doc.instances[modelIndex]?.moduleIdRef ?? ''))]
 
     return [
         { label: 'Girar', disabled: !free.length, items: ROTATIONS.map(([label, shortcut, degrees, fine]) => ({ label, shortcut, disabled: fine && !turn45, apply: () => rotate(degrees) })) },
@@ -51,12 +61,18 @@ const partMenu = (target: Target): MenuEntry[] => {
         { label: 'Apagar', shortcut: 'Delete', disabled: !free.length, apply: () => remove(false) },
         { label: 'Apagar sem fios', shortcut: 'Alt+Backspace', disabled: !free.length, apply: () => remove(true) },
         null,
-        { label: 'Editar (novo editor de peças)', disabled: true },
-        { label: 'Adicionar ao bin', items: [{ label: 'Meus itens', apply: () => addToMine(chosen.map(modelIndex => doc.instances[modelIndex]?.moduleIdRef ?? '')) }] },
+        { label: 'Editar (editor de peças)', disabled: !isEditable(part), apply: () => editPart(target.modelIndex) },
+        { label: 'Adicionar ao bin', items: [
+            { label: 'Meus itens', apply: () => addToMine(modules) },
+            ...userBins.map((bin, i): MenuEntry => ({ label: bin.title, apply: () => addToBin(i, modules) })),
+            null,
+            { label: 'Novo bin…', apply: () => promptBin(modules) }
+        ] },
         null,
         { label: visible.length === labelled.length && labelled.length ? 'Ocultar rótulo da peça' : 'Mostrar rótulo da peça', disabled: !labelled.length, apply: () => edit(current => setLabelVisible(current, library, view, labelled, visible.length !== labelled.length)) },
         ...view === 'pcbView' ? [
             { label: silkOff ? 'Mostrar serigrafia da peça' : 'Ocultar serigrafia da peça', disabled: !silk.length, apply: () => edit(current => setLayerHidden(current, view, silk, SILKSCREEN, !silkOff)) },
+            ...part?.kind === 'via' ? [{ label: 'Converter via em dobra', disabled: viaToBend(doc, library, target.modelIndex) === doc, apply: () => edit(current => viaToBend(current, library, target.modelIndex)) }] : [],
             null,
             { label: 'Definir semente de preenchimento de terra', checked: seed, disabled: !target.key, apply: () => edit(current => setGroundFillSeed(current, target.key ?? '', !seed)) },
             { label: 'Limpar sementes de preenchimento de terra', apply: () => edit(clearGroundFillSeeds) }
@@ -94,7 +110,7 @@ const wireMenu = (target: Target): MenuEntry[] => {
         { label: 'Apagar fio até as dobras', disabled: isRat, apply: () => removeWire(true) },
         null,
         { label: bend ? 'Remover dobra' : 'Adicionar dobra', disabled: isRat || (bend !== null && bend.length !== 2), apply: () => edit(current => bend ? joinWires(current, library, view, bend[0]) : splitWire(current, view, wire, target.point).doc) },
-        ...view === 'pcbView' ? [{ label: 'Converter dobra em via', disabled: true }] : [],
+        ...view === 'pcbView' ? [{ label: 'Converter dobra em via', disabled: isRat || !bend, apply: () => edit(current => bendToVia(current, library, bend?.[0] ?? '', getConfig(current.settings.pcbView).holeSize)) }] : [],
         { label: 'Endireitar curva', disabled: isRat || !state?.wire?.bezier, apply: () => edit(current => straightenWire(current, view, wire)) }
     ]
 }

@@ -41,8 +41,13 @@ const fritzingParts = (): Plugin => {
 }
 
 
+// BIBLIOTECAS EM CHUNKS PRÓPRIOS: O CÓDIGO DO APP MUDA MAIS QUE ELAS E O CACHE DO NAVEGADOR AS REAPROVEITA
+const CHUNKS = [{ name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }, { name: 'vendor', test: /node_modules[\\/]/ }]
+
+
 export default defineConfig({
     plugins: [react(), tailwindcss(), fritzingParts()],
     worker: { format: 'es' },
+    build: { rolldownOptions: { output: { codeSplitting: { groups: CHUNKS } } } },
     test: { environment: 'node', include: ['tests/**/*.test.ts'], testTimeout: 600000 }
 })

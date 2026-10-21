@@ -309,7 +309,116 @@ vista, barramentos):
 - o grupo toca **duas ou mais peças** que não são fios ⇒ verde `#00ff00`, opacidade 0,2;
 - senão ⇒ vermelho `#ff0000`, opacidade 0,3 (ex.: fio que só chega numa fileira vazia da breadboard).
 
-Conectores fêmea sem conexão própria não são pintados.
+Conectores fêmea sem conexão própria não são pintados. Ponta de fio ligada **só a outros fios** (dobra) não recebe
+verde nem vermelho: é pintada na cor de sombra do próprio fio com opacidade 1 (a junta); no esquemático, ponta em
+conector de peça que recebe mais de uma trilha ganha o ponto grande de junção.
+
+### 4.3 Desenho de fios por cliques e fios ortogonais (extensão do CircuitMaster)
+
+O CircuitMaster troca o "arrastar a partir do conector" (item 4.1) por um desenho por cliques, no estilo dos editores
+de esquemático, e mantém os fios em 90° nas vistas em que a opção **Fios ortogonais** está ligada (padrão na
+protoboard e no esquemático; atributo `orthogonalWires="0"` no `<view>` do `.fz` desliga; a PCB usa a postura a 45°).
+O arquivo continua igual ao do Fritzing: cada trecho é um fio e cada dobra é uma aresta C entre pontas.
+
+1. **Começar**: clicar num conector de peça inicia o fio no ponto terminal. Na perna elástica, clicar (sem
+   arrastar) na ponta da perna inicia o fio ali, saindo na direção do último trecho da perna; arrastar a ponta
+   continua esticando a perna (item 11). Clicar (sem arrastar) numa ponta de fio começa um fio novo **a partir do
+   pino em que ela está**, da dobra inteira (todas as pontas da dobra), ou continuando a ponta solta. Arrastar uma
+   ponta de fio continua movendo a ponta (item 3). Um clique só vira arraste depois de 3 px de tela de movimento.
+2. **Perna até o cursor**: do último ponto fixado até o cursor (ou até o alvo sob o cursor) o fio é desenhado pelo
+   caminho ortogonal da regra 7. Sem alvo, o cursor vai para a grade (se ativa) e, a menos de 6 px de tela da
+   linha horizontal ou vertical do último ponto, encaixa nela. **Shift**: um trecho só, a 0°/45°/90° do último ponto;
+   **Alt**: um trecho só, sem grade.
+3. **Clique no vazio** (ou sobre o corpo de uma peça) fixa a perna: os cantos e o ponto clicado viram dobras. A
+   perna seguinte prefere sair **perpendicular** ao último trecho.
+4. **Terminar**: clicar num pino de peça termina nele; numa ponta de fio, termina no pino em que ela está, na dobra
+   inteira ou na ponta solta; no **meio de um fio** reto, o fio é dividido no ponto (projeção do cursor, na grade
+   ao longo do fio) e o novo termina na dobra criada (junção em T). Arrastar a partir do pino e soltar sobre um alvo
+   também termina (o gesto antigo); soltar no vazio fixa uma dobra e o desenho continua.
+5. **Botão direito** termina deixando a ponta **solta** no cursor; **Esc** cancela o fio inteiro; **Backspace** ou
+   **Delete** desfazem a última dobra. Durante o desenho, arrastar com o botão esquerdo move a vista (não fixa dobra).
+6. **Criação**: os pontos (início, dobras, fim) passam por limpeza — pontos repetidos, dobras colineares e idas e
+   voltas do fio sobre si mesmo saem (uma dobra cujo trecho seguinte volta pela mesma reta some, e a limpeza se
+   repete enquanto houver o que tirar) — e
+   cada trecho vira um fio do tipo da vista, encadeados por arestas C; a primeira ponta liga em cada conector de
+   origem e a última em cada conector de destino. Nas outras vistas o primeiro trecho liga os dois conectores e os
+   demais ficam com comprimento zero no ponto final (são invisíveis, como qualquer fio de outra vista).
+7. **Caminho ortogonal** de $a$ até $b$: direção de saída $s$ (para fora do pino de origem: do centro do retângulo
+   do pino ao terminal; no esquemático, com pino quadrado, do centro da peça ao terminal; numa ponta de fio, o
+   prolongamento do fio; na perna elástica, o último trecho dela) e direção do pino de destino $e$ (idem; chegando
+   numa ponta solta ou numa dobra de fios, nenhuma — o que impede o fio de correr por cima do outro é a penalidade
+   de sobreposição). Candidatos: reto (se alinhados), L horizontal-vertical, L vertical-horizontal, Z
+   horizontal-vertical-horizontal e Z vertical-horizontal-vertical; o trecho do meio do Z fica no meio de $a$ e $b$
+   (na grade, deslocado até 3 passos para os dois lados) ou, quando a saída ou a chegada pedem, a 2 passos de grade
+   além da ponta (formando um U). Cada candidato soma: saída contra $s$ 0 (a favor), 3 (de lado) ou 8 (para dentro
+   da peça); chegada contra $-e$ idem; 1 por dobra; 6 por trecho que atravessa o interior da caixa de uma peça,
+   símbolo ou rótulo visível; 12 por trecho que corre sobre outro fio (ou sobre outro trecho do próprio caminho) e
+   por terminal de peça tocado no caminho (pareceria uma ligação que não existe); 2 por cruzamento com outro fio;
+   0,5 se, depois de uma dobra, o primeiro trecho não vira; 0,1 se o primeiro trecho segue o eixo de menor
+   deslocamento. Vence o menor total. Na PCB os candidatos são reto (0°, 45° ou 90°), reto-depois-diagonal e
+   diagonal-depois-reto. Diferenças menores que $10^{-3}$ px contam como alinhadas.
+8. **Ratsnest para fio**: criar fio a partir de uma linha de ratsnest usa o mesmo caminho entre os dois terminais.
+9. **Grade pelo terminal**: com a grade ativa, a peça arrastada se alinha pelo **primeiro terminal** (o primeiro
+   conector do `.fzp` com geometria; sem conector, o canto da caixa), e não pelo canto: o deslocamento é
+   $\mathrm{grade}(p_0 + \Delta) - p_0$. A peça nova (soltar ou duplo clique na biblioteca) é alinhada assim em cada
+   vista com a grade ativa; depois de girar ou espelhar no esquemático e na PCB o primeiro terminal volta à grade;
+   a colagem desloca o grupo inteiro pelo alinhamento da primeira peça colada.
+10. **Fios continuam retos** (vistas ortogonais): depois de mover peças, girar, espelhar, alinhar, empurrar com as
+    setas ou arrastar uma ponta/dobra, todo fio que era horizontal ou vertical e ficou inclinado — ou passou a
+    apontar ao contrário — porque **uma** ponta andou é corrigido: se a outra ponta é uma dobra de canto (duas
+    pontas) com vizinho perpendicular, a dobra acompanha no eixo do trecho, a não ser que assim o fio saísse do
+    pino para dentro da peça (o pino passou da dobra): então a cadeia inteira daquele pino até o próximo pino,
+    junção ou ponta solta vira um fio só, refeito pelo caminho da regra 7; se a outra ponta está solta, ela
+    acompanha o mesmo deslocamento; senão o fio vira uma cadeia pelo caminho ortogonal da regra 7, desviando dos
+    corpos das peças (a ponta que andou continua na instância original).
+11. **Arrastar um trecho reto** (sem Ctrl/Alt) o desloca na perpendicular, alinhado à grade: dobra de canto com
+    vizinho perpendicular acompanha; ponta solta acompanha; ponta em pino, junção ou vizinho não perpendicular ganha
+    um trecho novo (com o estilo do fio) entre o ponto antigo e o novo. Trechos inclinados e Ctrl/Alt mantêm o
+    comportamento do item 4.
+12. **Limpeza ao soltar**: nos fios que mudaram, dobras simples (duas pontas) entre trechos do mesmo estilo, sem
+    curva, alinhados no mesmo eixo ou com um trecho nulo saem (os dois fios viram um, item 6).
+
+### 4.4 Navegação e seleção (extensão do CircuitMaster)
+
+Duas ferramentas de seleção: **Editar** (mão, `H`, padrão) e **Seletor** (seta, `V`). Em Editar, arrastar o fundo
+com o botão esquerdo move a vista (como o botão do meio ou Espaço+arrastar); no Seletor, arrastar o fundo desenha o
+retângulo de seleção. Nas duas, um clique no fundo sem arrastar limpa a seleção, e **Shift** (soma à seleção) ou
+**Ctrl** + arrastar no fundo também desenha o retângulo. O retângulo arrastado **da esquerda para a direita** pega só
+o que fica inteiro dentro dele (borda contínua); **da direita para a esquerda**, tudo que ele tocar (borda
+tracejada); a contagem aparece junto do cursor e a seleção é atualizada enquanto arrasta. Com dois ou mais itens
+selecionados, uma barra no canto do quadro oferece girar, duplicar, apagar e desmarcar. A roda do mouse (e a pinça do
+touchpad) dá zoom em torno do cursor, à razão de $1{,}0015^{-\Delta y}$ por px de rolagem (33 px por linha);
+**Shift**+roda move a vista.
+
+**Realce sob o cursor**: o fio apontado ganha um halo na cor de destaque (e o fio inteiro de terminal a terminal,
+pelas dobras, um halo mais fraco); a ponta de fio apontada ganha um anel; a peça apontada, um contorno tracejado. Fio
+selecionado: halo mais forte e as pontas marcadas; peça selecionada: contorno contínuo com fundo leve. O cursor
+indica a ação: mão no fundo (Editar), cruz em terminal ou ponta de fio, setas de deslocamento num trecho reto de fio
+ortogonal, mover numa peça. A dica no rodapé do quadro descreve a ação do que está sob o cursor.
+
+**Encaixe magnético**: um clique a até 7 px de tela de um terminal de peça (fora da protoboard, cujos furos exigem
+o clique no furo) começa um fio dele; durante o fio, o alvo é o terminal mais próximo a até 16 px de tela (distância
+até a caixa do conector, empate pelo de cima), marcado por um anel com o nome `peça.pino`. Arrastar de um terminal e
+soltar perto de outro liga os dois.
+
+**Editor rápido de valor**: com uma peça selecionada que tem valor principal (resistência, capacitância, indutância,
+tensão da fonte; na fonte senoidal, amplitude e frequência; na pulsada, tensão e período), um cartão abaixo dela
+mostra o número, o prefixo da unidade (Ω/kΩ/MΩ, pF/nF/µF/mF, µH/mH/H…) e ‹ › que andam na série E12 (tensões numa
+série de valores comuns, tempos e frequências em 1-2-5); a roda e as setas ↑ ↓ sobre o número fazem o mesmo; duplo
+clique na peça foca o número. Peças principais recém-colocadas sem valor no acervo recebem um valor inicial (indutor:
+10 mH).
+
+**Símbolos de livro no esquemático**: as peças básicas (resistor, capacitores, indutor, potenciômetro, fontes DC,
+senoidal e pulsada, bateria, terra, diodo, LED, transistores NPN e PNP, MOSFET N, chave de 3 pinos e botões) são
+desenhadas com o símbolo didático no lugar da arte do Fritzing, na tinta e espessura dos fios do esquemático, com
+os traços terminando exatamente nos terminais da peça (a área de clique continua a da arte); a chave e o botão
+aparecem abertos ou fechados conforme a posição. Rótulos: nome em negrito e valores na fonte da interface com
+espaço antes da unidade (`4.7 kΩ`). No esquemático só o terminal solto fica marcado (vermelho); o verde de
+conectado sai, como num livro.
+
+**Chaves**: chave e botão ganham um selo clicável acima deles (Aberto/Fechado ou Posição 1/2) que troca a posição
+(variantes Released/Pressed, §5); com comutação programada (doc 04 §8.10) o selo mostra um relógio e, no
+transitório, a posição do instante mostrado.
 
 ## 5. TROCA DE PEÇA (*SWAP*) E MUDANÇA DE BARRAMENTO
 
@@ -491,8 +600,8 @@ se ainda não fazia parte dela. Itens indisponíveis aparecem desabilitados (nã
 | Travar peça (marcável) | — | todas | travada não move, não gira, não espelha, não é apagada |
 | Sticky (marcável) | — | todas | visível só para peça com camada sticky; ligado ⇒ itens apoiados se movem junto |
 | Copiar · Duplicar · Apagar · Apagar sem fios | `Ctrl+C`, `Ctrl+D`, `Delete`/`Backspace`, `Alt+Backspace` | todas | 4.9 |
-| Editar (novo editor de peças) | — | todas | habilitado se a peça é editável |
-| Adicionar ao bin ▸ (bins abertos graváveis) | — | todas | — |
+| Editar (editor de peças) | — | todas | habilitado para peça comum (doc 01 §8A.1) |
+| Adicionar ao bin ▸ Meus itens · bins do usuário · Novo bin… | — | todas | doc 01 §8A.6 |
 | Mostrar/Ocultar rótulo da peça | — | todas | texto conforme o estado; só para peças com rótulo |
 | Ocultar/Mostrar serigrafia da peça | — | PCB | só se a peça tem camada de serigrafia |
 | Converter via em dobra | — | PCB | visível só para via; habilitado com duas ou mais trilhas ligadas |
@@ -542,12 +651,31 @@ Mesma organização da referência, com os rótulos do CircuitMaster em portugu�
 | Exportar ▸ | Como imagem ▸ PNG · JPG · SVG · PDF; Para produção ▸ Gravável PDF · Gravável SVG · Gerber estendido (RS-274X) · Pick-and-place; Lista de materiais (HTML) · Lista de materiais (CSV) · Lista de materiais (PDF); Netlist IPC-D-356A; Netlist XML; Netlist SPICE |
 | Editar | Desfazer · Refazer · Recortar · Copiar · Colar · Colar no lugar · Duplicar · Apagar · Apagar sem fios · Selecionar tudo · Desmarcar · Adicionar nota |
 | Peça | Editar (editor de peças) · Girar ▸ · Espelhar · Elevar e rebaixar ▸ · Alinhar ▸ (esquerda, centro horizontal, direita, topo, centro vertical, base) · Travar peça · Sticky · Mostrar rótulo |
-| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real (`Shift+Ctrl+0`) · Alinhar à grade · Mostrar grade · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) |
-| Roteamento (PCB) | Autorotear (`Shift+Ctrl+A`) · DRC (`Shift+Ctrl+D`) · Configurações do autorouter/DRC · Preenchimento ▸ Preencher com cobre · Preencher com terra · Remover preenchimento · Definir sementes · Limpar sementes · Folga do preenchimento; Mover trilha para a outra face · Não rotear automaticamente; Selecionar todas as trilhas · vias · preenchimentos; Apagar trilhas autoroteadas |
+| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real (`Shift+Ctrl+0`) · Alinhar à grade · Mostrar grade · Fios ortogonais (90°) · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) · Tema claro/escuro |
+| Roteamento (PCB) | Autorotear (`Shift+Ctrl+A`) · DRC (`Shift+Ctrl+D`) · Regras do autorouter e DRC (aba Roteamento do inspetor) · Preenchimento ▸ Preencher com cobre · Preencher com terra · Remover preenchimento · Definir sementes · Limpar sementes · Folga do preenchimento; Mover trilha para a outra face · Não rotear automaticamente; Selecionar todas as trilhas · vias · preenchimentos; Apagar trilhas autoroteadas |
 | Roteamento (esquemático) | Autorotear · Não rotear automaticamente · Selecionar todos os fios |
 | Roteamento (breadboard) | Selecionar todos os fios |
+| Simulação (extensão) | Simular/Parar · Ponto de operação (DC) · Transitório · Ponta de tensão · Ponta de corrente · Ponta de tensão e corrente · Remover todas as pontas de prova · Tempo, amostragem e testes… · Resposta · Circuitos de teste ▸ (doc 04 §5.5, §8.7–§8.9, §9) |
 
 Exportações sem placa na PCB (Gerber, gravável, pick-and-place, IPC) ficam desabilitadas e explicam o motivo.
+
+Janela (guia `circuit-master-ui/DESIGN.md`): barra superior com marca, menus, abas de vista, DC/Transitório e
+Simular; abaixo, trilho de 52 px (Peças, Projeto, Problemas, tema, atalhos), painel esquerdo de 256 px (biblioteca
+de peças, lista de peças e nós, ou problemas), centro com o quadro e a doca de simulação (Medidas, Resposta,
+Ajustes e o gráfico, recolhível e com altura ajustável) e o inspetor de 296 px (Propriedades, Roteamento,
+Documento); barra de status embaixo. Vão de 8 px entre os cartões; até 1280 px os painéis estreitam (232 e 272 px)
+e os menus do 6º em diante saem (as ações seguem na barra e no trilho); até 860 px o trilho vai para baixo e os
+painéis viram folhas sobre o quadro. Tema escuro ou claro pelo atributo `data-theme` da raiz, gravado em
+`localStorage` na chave `cm-theme` e lido antes do primeiro desenho. Selecionar uma peça leva o inspetor para
+Propriedades; escolher uma ponta de prova mostra a leitura dela e a remoção.
+
+Busca de peças: as peças principais (resistor, capacitor, eletrolítico, indutor, potenciômetro, fonte DC, bateria,
+gerador, pulso, terra, diodo, LED, transistores, MOSFET, amp-op, LM358, 555, Arduino, chave, botão, multímetro,
+osciloscópio) têm palavras-chave em português e inglês e vêm na frente quando a busca casa com elas; no resto do
+acervo todo termo (ou um sinônimo em inglês do termo em português: fonte → source, supply, power) tem de aparecer, e
+a ordem é pela nota do casamento (palavra igual > começo de palavra > trecho; título > família > descrição, tags e
+propriedades), com as peças dos bins Core e Simulador antes das demais; sem acentos e sem diferenciar maiúsculas
+(doc 01 §7).
 
 ### 10.5 Notas
 

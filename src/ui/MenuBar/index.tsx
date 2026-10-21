@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { WIRE_FLAGS } from '../../core/Document'
 import { VIEWS, VIEW_LABELS } from '../../core/Layer'
 import { Scene } from '../../engine/Scene'
+import { clearGroundFillSeeds, setAutoroutable, setTraceSide } from '../../engine/Edit'
 import { MenuList, type MenuEntry } from '../ContextMenu'
 import { getMenu } from '../Menus'
 import { BOARD_EXPORTS, type ExportKind } from '../Export'
 import { useStore } from '../Store'
+import { BENCHES } from '../../engine/Bench'
+import type { ProbeKind } from '../../core/Document'
 
 type State = ReturnType<typeof useStore.getState>
 
@@ -80,22 +83,66 @@ const viewMenu = (state: State): MenuEntry[] => {
         null,
         { label: 'Alinhar à grade', checked: settings.alignToGrid !== '0', apply: () => state.setViewSetting('alignToGrid', settings.alignToGrid === '0' ? '1' : '0') },
         { label: 'Mostrar grade', checked: settings.showGrid !== '0', apply: () => state.setViewSetting('showGrid', settings.showGrid === '0' ? '1' : '0') },
+        { label: 'Fios ortogonais (90°)', checked: state.isOrthogonal(state.view), disabled: state.view === 'pcbView', apply: () => state.setViewSetting('orthogonalWires', settings.orthogonalWires === '0' ? '1' : '0') },
         null,
-        ...VIEWS.map((view, i): MenuEntry => ({ label: VIEW_LABELS[view], shortcut: `Ctrl+${i + 1}`, checked: view === state.view, apply: () => state.setView(view) }))
+        ...VIEWS.map((view, i): MenuEntry => ({ label: VIEW_LABELS[view], shortcut: `Ctrl+${i + 1}`, checked: view === state.view, apply: () => state.setView(view) })),
+        null,
+        { label: state.theme === 'dark' ? 'Tema claro' : 'Tema escuro', apply: state.toggleTheme }
     ]
 }
 
 const routingMenu = (state: State): MenuEntry[] => {
-    const wires = { label: state.view === 'breadboardView' ? 'Selecionar todos os fios' : 'Selecionar todas as trilhas', apply: () => state.selectWhere(instance => instance.moduleIdRef === 'WireModuleID' && (state.view === 'breadboardView' || isTrace(state, instance.modelIndex) !== 0)) }
+    const wires  = { label: state.view === 'breadboardView' ? 'Selecionar todos os fios' : 'Selecionar todas as trilhas', apply: () => state.selectWhere(instance => instance.moduleIdRef === 'WireModuleID' && (state.view === 'breadboardView' || isTrace(state, instance.modelIndex) !== 0)) }
+    const traces = state.selection.filter(modelIndex => state.doc.instances[modelIndex]?.moduleIdRef === 'WireModuleID' && isTrace(state, modelIndex))
+    const fixed  = traces.length > 0 && traces.every(modelIndex => ((state.doc.instances[modelIndex]?.views[state.view]?.geometry.wireFlags ?? 0) & AUTOROUTED) === 0)
+    const busy   = state.routing !== null
+
+    if (state.view === 'schematicView')
+        return [{ label: 'Autorotear', shortcut: 'Ctrl+Shift+A', disabled: busy, apply: () => void state.autoroute() }, { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, modelIndex, fixed), doc)) }, null, wires, { label: 'Apagar fios autoroteados', disabled: busy, apply: state.clearAutorouted }]
 
     if (state.view !== 'pcbView')
         return [wires]
 
     return [
+        { label: 'Autorotear', shortcut: 'Ctrl+Shift+A', disabled: busy, apply: () => void state.autoroute() },
+        { label: 'Verificar regras (DRC)', shortcut: 'Ctrl+Shift+D', disabled: busy, apply: () => void state.checkRules() },
+        { label: 'Regras do autorouter e DRC…', apply: () => state.setPanel('routing') },
+        { label: 'Preenchimento de cobre', disabled: busy, items: [
+            { label: 'Preencher com terra', apply: () => void state.fillCopper('ground') },
+            { label: 'Preencher com cobre', apply: () => void state.fillCopper('plain') },
+            { label: 'Remover preenchimento', apply: state.removeFills },
+            null,
+            { label: 'Limpar sementes de terra', apply: () => state.edit(clearGroundFillSeeds) }
+        ] },
+        null,
+        { label: 'Mover trilha para a outra face', disabled: !traces.length, apply: () => state.edit(doc => traces.reduce(setTraceSide, doc)) },
+        { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, modelIndex, fixed), doc)) },
+        null,
         wires,
         { label: 'Selecionar trilhas autoroteáveis', apply: () => state.selectWhere(instance => instance.moduleIdRef === 'WireModuleID' && ((instance.views.pcbView?.geometry.wireFlags ?? 0) & AUTOROUTED) !== 0) },
         { label: 'Selecionar todas as vias', apply: () => state.selectWhere((_, part) => part?.kind === 'via') },
-        { label: 'Selecionar todos os preenchimentos', apply: () => state.selectWhere((_, part) => part?.kind === 'copperFill') }
+        { label: 'Selecionar todos os preenchimentos', apply: () => state.selectWhere((_, part) => part?.kind === 'copperFill') },
+        null,
+        { label: 'Apagar trilhas autoroteadas', disabled: busy, apply: state.clearAutorouted }
+    ]
+}
+
+const PROBE_ITEMS: [string, ProbeKind][] = [['Ponta de tensão', 'voltage'], ['Ponta de corrente', 'current'], ['Ponta de tensão e corrente', 'both']]
+
+const simulationMenu = (state: State): MenuEntry[] => {
+    const { enabled, transient } = state.simulation
+    return [
+        { label: enabled ? 'Parar a simulação' : 'Simular', apply: () => state.setSimulation({ enabled: !enabled, result: null, error: null, playing: false, step: 0 }) },
+        null,
+        { label: 'Ponto de operação (DC)', checked: !transient, apply: () => state.setSimulation({ transient: false }) },
+        { label: 'Transitório', checked: transient, apply: () => state.setSimulation({ transient: true }) },
+        null,
+        ...PROBE_ITEMS.map(([label, kind]): MenuEntry => ({ label, checked: state.tool === kind, disabled: state.view === 'pcbView', apply: () => state.setTool(kind) })),
+        { label: 'Remover todas as pontas de prova', disabled: !state.doc.probes.length, apply: () => state.removeProbes(state.doc.probes.map(probe => probe.id)) },
+        null,
+        { label: 'Tempo, amostragem e testes…', apply: () => state.setReadout('settings') },
+        { label: 'Resposta (subida, sobressinal, ganho)', apply: () => state.setReadout('response') },
+        { label: 'Circuitos de teste', items: BENCHES.map(bench => ({ label: bench.title, apply: () => void state.openBench(bench.id) })) }
     ]
 }
 
@@ -104,11 +151,11 @@ const helpMenu = (): MenuEntry[] => [
     { label: 'Sobre o CircuitMaster', apply: () => useStore.setState({ dialog: 'about' }) }
 ]
 
-const MENUS: [string, (state: State) => MenuEntry[]][] = [['Arquivo', fileMenu], ['Editar', editMenu], ['Peça', partMenu], ['Exibir', viewMenu], ['Roteamento', routingMenu], ['Ajuda', helpMenu]]
+const MENUS: [string, (state: State) => MenuEntry[]][] = [['Arquivo', fileMenu], ['Editar', editMenu], ['Peça', partMenu], ['Exibir', viewMenu], ['Roteamento', routingMenu], ['Simulação', simulationMenu], ['Ajuda', helpMenu]]
 
 // BARRA DE MENUS DA JANELA: CLIQUE ABRE, PASSAR POR OUTRO TÍTULO TROCA, CLIQUE FORA OU ESC FECHA (SPEC 02 §10.4)
 export const MenuBar = () => {
-    const ref             = useRef<HTMLDivElement>(null)
+    const ref             = useRef<HTMLElement>(null)
     const [open, setOpen] = useState<number | null>(null)
     const ready           = useStore(state => state.ready)
 
@@ -132,13 +179,13 @@ export const MenuBar = () => {
     }, [])
 
     return (
-        <div ref={ref} className="relative flex h-7 shrink-0 items-center border-b border-neutral-200 bg-neutral-50 px-1 text-[13px]">
+        <nav ref={ref} className="menubar" aria-label="Menu principal">
             {MENUS.map(([title, build], i) => (
-                <div key={title} className="relative">
-                    <button className={`rounded px-2 py-0.5 ${open === i ? 'bg-blue-600 text-white' : 'hover:bg-neutral-200'} disabled:opacity-40`} disabled={!ready} onClick={() => setOpen(open === i ? null : i)} onMouseEnter={() => open !== null && setOpen(i)}>{title}</button>
-                    {open === i && <div className="absolute left-0 top-full z-50 mt-0.5"><MenuList items={build(useStore.getState())} close={() => setOpen(null)} left={false} /></div>}
+                <div key={title} className={`menu ${open === i ? 'open' : ''}`}>
+                    <button aria-haspopup="true" aria-expanded={open === i} disabled={!ready} onClick={() => setOpen(open === i ? null : i)} onMouseEnter={() => open !== null && setOpen(i)}>{title}</button>
+                    {open === i && <div className="absolute left-0 top-8 z-[60]"><MenuList items={build(useStore.getState())} close={() => setOpen(null)} left={false} /></div>}
                 </div>
             ))}
-        </div>
+        </nav>
     )
 }

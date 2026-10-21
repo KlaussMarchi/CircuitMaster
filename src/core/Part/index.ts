@@ -4,7 +4,7 @@ import { KNOWN_LAYERS, PCB_NON_COPPER, VIEW_LAYERS, type ViewName } from '../Lay
 export type Pin       = { layer: string, svgId: string, terminalId: string, legId: string, hybrid: boolean }
 export type Connector = { id: string, name: string, type: string, description: string, views: Partial<Record<ViewName, Pin[]>>, ignore: string, erc: string }
 export type PartView  = { image: string, layers: string[], sticky: string[], flipHorizontal: boolean, flipVertical: boolean }
-export type Kind      = 'wire' | 'jumper' | 'logo' | 'copperFill' | 'note' | 'symbol' | 'ruler' | 'via' | 'hole' | 'breadboard' | 'board' | 'resizableBoard' | 'part'
+export type Kind      = 'wire' | 'jumper' | 'logo' | 'copperFill' | 'blocker' | 'note' | 'symbol' | 'ruler' | 'via' | 'hole' | 'breadboard' | 'board' | 'resizableBoard' | 'part'
 
 export type Part = {
     moduleId: string
@@ -35,6 +35,7 @@ const KINDS: [(moduleId: string, properties: string, title: string) => boolean, 
     [id => id === 'JumperModuleID', 'jumper'],
     [id => id.endsWith('LogoImageModuleID') || id.endsWith('LogoTextModuleID'), 'logo'],
     [id => id === 'GroundPlaneModuleID', 'copperFill'],
+    [id => id.endsWith('BlockerModuleID'), 'blocker'],
     [id => id === 'NoteModuleID', 'note'],
     [id => id.endsWith('2PowerModuleID'), 'part'],
     [id => id.endsWith('PowerModuleID') || id === 'GroundModuleID' || id.endsWith('NetLabelModuleID') || id === 'PowerLabelModuleID', 'symbol'],
@@ -156,8 +157,8 @@ export const getPinsIn = (part: Part, connector: Connector, view: ViewName) => {
 }
 
 const HIDDEN: Partial<Record<ViewName, Kind[]>> = {
-    breadboardView: ['symbol', 'jumper', 'copperFill', 'logo', 'hole', 'via'],
-    schematicView: ['logo', 'breadboard', 'jumper', 'copperFill', 'via', 'hole'],
+    breadboardView: ['symbol', 'jumper', 'copperFill', 'blocker', 'logo', 'hole', 'via'],
+    schematicView: ['logo', 'breadboard', 'jumper', 'copperFill', 'blocker', 'via', 'hole'],
     pcbView: ['breadboard', 'symbol']
 }
 

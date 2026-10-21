@@ -1,7 +1,7 @@
 import { apply, multiply, type Matrix } from '../Geometry'
 import { flattenPath, SvgFile } from '../SvgFile'
-import { childrenOf, tagOf, type XmlElement } from '../Xml'
-import { WIRE_FLAGS, type Doc } from '../Document'
+import { childrenOf, tagOf, walk, type XmlElement } from '../Xml'
+import { keyOf, WIRE_FLAGS, type Doc } from '../Document'
 import type { Library } from '../Library'
 import type { Part } from '../Part'
 import type { Instance } from '../Sketch'
@@ -19,10 +19,11 @@ export type Placement = { getMatrix: (modelIndex: string) => Matrix | null, isSh
 
 export type Face    = 'top' | 'bottom'
 export type Pad     = { shape: Shape, face: Face, smd: boolean }
-export type Hole    = { x: number, y: number, diameter: number, plated: boolean }
+export type Hole    = { x: number, y: number, diameter: number, plated: boolean, connector: boolean }
 export type Placed  = { instance: Instance, x: number, y: number, rotation: number, face: Face }
 export type Board   = { instance: Instance, width: number, height: number, outline: Paths, layers: number, frame: Matrix }
-export type Artwork = { board: Board, copper: Record<Face, Shape[]>, pads: Pad[], silk: Record<Face, Shape[]>, holes: Hole[], placed: Placed[], skipped: number }
+export type Conductor = { face: Face, shape: Shape, owner: string, key: string | null, kind: 'pad' | 'copper' | 'trace' | 'fill' | 'blocker' }
+export type Artwork   = { board: Board, copper: Record<Face, Shape[]>, pads: Pad[], silk: Record<Face, Shape[]>, holes: Hole[], placed: Placed[], conductors: Conductor[], skipped: number }
 
 const SCALE           = MIL_PER_INCH / PX_PER_INCH
 const POINTS_PER_INCH = 72
@@ -36,6 +37,9 @@ const LABEL_FONT  = 'ocrfritzingmono'
 const FACES: [string, Face, 'copper' | 'silk'][] = [['groundplane1', 'top', 'copper'], ['groundplane', 'bottom', 'copper'], ['copper1', 'top', 'copper'], ['copper0', 'bottom', 'copper'], ['silkscreen', 'top', 'silk'], ['silkscreen0', 'bottom', 'silk']]
 
 const other = (face: Face): Face => face === 'top' ? 'bottom' : 'top'
+
+// FURO DESENHADO SÓ PARA A TELA (VIA E FURO GERADOS): CÍRCULO PRETO COM drill="0" NÃO É COBRE NEM FURO (SPEC 01 §8.11)
+const isHoleMark = (element: XmlElement) => tagOf(element) === 'circle' && NO_DRILL.has(element.getAttribute('drill') ?? '') && ['black', '#000000'].includes(element.getAttribute('fill') ?? '')
 
 const sampleEllipse = (cx: number, cy: number, rx: number, ry: number) => Array.from({ length: ARC_STEPS }, (_, i) => [cx + rx * Math.cos(2 * Math.PI * i / ARC_STEPS), cy + ry * Math.sin(2 * Math.PI * i / ARC_STEPS)]).flat()
 
@@ -159,6 +163,56 @@ const getOutline = (clipper: Clipper, svg: SvgFile, m: Matrix, library: Library)
 // GRUPO DA CAMADA NO SVG; THT SEM GRUPO copper1 USA O copper0 TAMBÉM EM CIMA (SPEC 01 §2.5)
 const getGroup = (svg: SvgFile, part: Part, id: string) => svg.findFirst(id) ?? (id === 'copper1' && part.views.pcbView?.layers.includes('copper1') ? svg.findFirst('copper0') : undefined)
 
+export const shapeBox = (shape: Shape) => {
+    if (shape.kind === 'circle')
+        return [shape.x - shape.r - shape.w / 2, shape.y - shape.r - shape.w / 2, shape.x + shape.r + shape.w / 2, shape.y + shape.r + shape.w / 2]
+
+    if (shape.kind === 'rect')
+        return [shape.x - shape.w / 2, shape.y - shape.w / 2, shape.x + shape.width + shape.w / 2, shape.y + shape.height + shape.w / 2]
+
+    const pad = shape.kind === 'region' ? 0 : shape.w / 2
+    return (shape.kind === 'region' ? shape.paths.flat() : shape.points).reduce((box, value, i) => i % 2 ? [box[0], Math.min(box[1], value - pad), box[2], Math.max(box[3], value + pad)] : [Math.min(box[0], value - pad), box[1], Math.max(box[2], value + pad), box[3]], [Infinity, Infinity, -Infinity, -Infinity])
+}
+
+export const solidOf = (shape: Shape): Shape => shape.kind === 'circle' || shape.kind === 'rect' ? { ...shape, fill: true } : shape
+
+const boxArea = (box: number[]) => Math.max(0, box[2] - box[0]) * Math.max(0, box[3] - box[1])
+
+// COBRE SEM CONECTOR QUE COBRE QUASE TODO UM PINO (OU METADE DELE, SENDO NO MÁXIMO O DOBRO) É PARTE DO PINO; O RESTO É SÓ OBSTÁCULO
+const absorb = (conductors: Conductor[]) => {
+    const pins = new Map<string, number[]>()
+
+    conductors.filter(conductor => conductor.kind === 'pad' && conductor.key).forEach(conductor => {
+        const box  = shapeBox(conductor.shape)
+        const seen = pins.get(`${conductor.face}|${conductor.key}`) ?? box
+        pins.set(`${conductor.face}|${conductor.key}`, [Math.min(seen[0], box[0]), Math.min(seen[1], box[1]), Math.max(seen[2], box[2]), Math.max(seen[3], box[3])])
+    })
+
+    return conductors.map(conductor => {
+        const box   = shapeBox(conductor.shape)
+        const found = conductor.kind !== 'copper' ? undefined : [...pins].find(([name, pin]) => {
+            const shared = boxArea([Math.max(box[0], pin[0]), Math.max(box[1], pin[1]), Math.min(box[2], pin[2]), Math.min(box[3], pin[3])])
+            return name.startsWith(`${conductor.face}|`) && (shared > 0.9 * boxArea(pin) || (shared > 0.5 * boxArea(pin) && 2 * boxArea(pin) > boxArea(box)))
+        })
+        return found ? { ...conductor, kind: 'pad' as const, key: found[0].slice(found[0].indexOf('|') + 1) } : conductor
+    })
+}
+
+// ELEMENTOS DO SVG QUE PERTENCEM A CADA CONECTOR NA CAMADA: O ELEMENTO DO PINO E TODA A SUA SUBÁRVORE
+const getOwners = (svg: SvgFile, part: Part, layer: string, modelIndex: string) => {
+    const scope  = (part.views.pcbView?.layers.length ?? 0) > 1 ? layer : null
+    const owners = new Map<XmlElement, string>()
+
+    part.connectors.forEach(connector => (connector.views.pcbView ?? []).filter(pin => pin.layer === layer).forEach(pin => {
+        const element = svg.find(pin.svgId, scope)
+
+        if (element)
+            walk(element, node => void owners.set(node, keyOf(modelIndex, connector.id)))
+    }))
+
+    return owners
+}
+
 // RÓTULO DA PEÇA NA SERIGRAFIA: LINHAS EM OCR-Fritzing-mono NO TAMANHO DO RÓTULO, NA FACE DA PEÇA (SPEC 03 §2.1)
 const getLabelShape = (library: Library, placement: Placement, instance: Instance, frame: Matrix): Shape | null => {
     const label = instance.views.pcbView?.label
@@ -172,10 +226,17 @@ const getLabelShape = (library: Library, placement: Placement, instance: Instanc
     return paths.length ? { kind: 'region', paths, evenOdd: false } : null
 }
 
+// PLACA DAS OPERAÇÕES DE PCB: A ÚNICA DA VISTA OU, HAVENDO VÁRIAS, A ÚNICA SELECIONADA (SPEC 03 §2.1)
+export const pickBoard = (doc: Doc, library: Library, placement: Placement, selection: string[]) => {
+    const boards = Object.values(doc.instances).filter(instance => placement.isShown(instance) && BOARD_KINDS.includes(library.getPart(instance.moduleIdRef)?.kind ?? ''))
+    const chosen = boards.length === 1 ? boards : boards.filter(instance => selection.includes(instance.modelIndex))
+    return { host: chosen.length === 1 ? chosen[0] : null, boards }
+}
+
 // ARTE DA PCB NO REFERENCIAL DA PLACA (mil, ORIGEM NO CANTO SUPERIOR ESQUERDO): COBRE, PLANOS, PADS, SERIGRAFIA COM RÓTULOS, FUROS E POSIÇÕES (SPEC 03 §1–§2)
-export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placement: Placement): Artwork | null => {
+export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placement: Placement, selection: string[] = []): Artwork | null => {
     const shown  = Object.values(doc.instances).filter(instance => placement.isShown(instance))
-    const host   = shown.find(instance => BOARD_KINDS.includes(library.getPart(instance.moduleIdRef)?.kind ?? ''))
+    const host   = pickBoard(doc, library, placement, selection).host
     const hostM  = host ? placement.getMatrix(host.modelIndex) : null
     const hostS  = host ? library.getInstanceSvg(host, 'pcbView') : undefined
 
@@ -187,7 +248,7 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
     const frame: Matrix        = [SCALE, 0, 0, SCALE, -bx0 * SCALE, -by0 * SCALE]
     const outline              = scenePolygons.map(polygon => transform(frame, polygon))
     const board: Board         = { instance: host, width: (bx1 - bx0) * SCALE, height: (by1 - by0) * SCALE, outline, layers: Number(library.getPart(host.moduleIdRef)?.properties.layers ?? host.properties.layers ?? 2) || 2, frame }
-    const artwork: Artwork     = { board, copper: { top: [], bottom: [] }, pads: [], silk: { top: [], bottom: [] }, holes: [], placed: [], skipped: 0 }
+    const artwork: Artwork     = { board, copper: { top: [], bottom: [] }, pads: [], silk: { top: [], bottom: [] }, holes: [], placed: [], conductors: [], skipped: 0 }
     const inside               = (points: number[]) => {
         const [x0, y0, x1, y1] = boxOf(points)
         return x1 >= 0 && y1 >= 0 && x0 <= board.width && y0 <= board.height
@@ -209,9 +270,13 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
         if (!inside(bounds))
             continue
 
+        const first = artwork.conductors.length
+
         for (const [id, face, role] of FACES) {
-            const side  = flip ? other(face) : face
-            const drill = id.startsWith('copper')
+            const side    = flip ? other(face) : face
+            const drill   = id.startsWith('copper')
+            const owners  = role === 'copper' ? getOwners(svg, part, id, instance.modelIndex) : new Map<XmlElement, string>()
+            const blocked = part.kind === 'blocker'
 
             for (const leaf of leaves(getGroup(svg, part, id), svg)) {
                 if (SKIPPED.has(tagOf(leaf))) {
@@ -219,27 +284,33 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
                     continue
                 }
 
-                if ((leaf.getAttribute('id') ?? '').endsWith('terminal'))
+                if ((leaf.getAttribute('id') ?? '').endsWith('terminal') || isHoleMark(leaf))
                     continue
 
                 for (const shape of toShapes(svg, leaf, full, library)) {
                     const hole = shape.kind === 'circle' && shape.w === 0 && !shape.fill
+                    const key  = owners.get(leaf) ?? (part.kind === 'copperFill' ? keyOf(instance.modelIndex, 'connector0') : null)
+                    const kind = blocked ? 'blocker' : part.kind === 'copperFill' ? 'fill' : owners.has(leaf) ? 'pad' : 'copper'
 
-                    if (role === 'silk')
+                    if (role === 'silk' && !blocked)
                         artwork.silk[side].push(shape)
 
-                    if (role === 'copper' && !hole)
+                    if (role === 'copper' && !hole && !blocked)
                         artwork.copper[side].push(shape)
 
-                    if (role === 'copper' && !hole && !['copperFill', 'logo'].includes(part.kind))
+                    if (role === 'copper' && !hole)
+                        artwork.conductors.push({ face: side, shape, owner: instance.modelIndex, key, kind })
+
+                    if (role === 'copper' && !hole && !blocked && !['copperFill', 'logo'].includes(part.kind))
                         artwork.pads.push({ shape, face: side, smd: part.flippedSMD })
 
-                    if (drill && shape.kind === 'circle' && shape.drill && 2 * shape.r - shape.w > 0)
-                        artwork.holes.push({ x: shape.x, y: shape.y, diameter: 2 * shape.r - shape.w, plated: shape.w > 0 })
+                    if (drill && !blocked && shape.kind === 'circle' && shape.drill && 2 * shape.r - shape.w > 0)
+                        artwork.holes.push({ x: shape.x, y: shape.y, diameter: 2 * shape.r - shape.w, plated: shape.w > 0, connector: owners.has(leaf) })
                 }
             }
         }
 
+        artwork.conductors.splice(first, Infinity, ...absorb(artwork.conductors.slice(first)))
         const label = getLabelShape(library, placement, instance, frame)
 
         if (label)
@@ -261,7 +332,13 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
         const bezier         = state.wire?.bezier
         const points         = bezier ? flattenPath(`M${x + line[0]} ${y + line[1]}C${x + bezier[0]} ${y + bezier[1]} ${x + bezier[2]} ${y + bezier[3]} ${x + line[2]} ${y + line[3]}`)[0]?.points.flat() ?? [] : [x + line[0], y + line[1], x + line[2], y + line[3]]
         const shape: Shape   = { kind: 'path', points: transform(frame, points), closed: false, w: state.wire?.mils ?? TRACE_MILS, fill: false, cap: 'round' }
-        artwork.copper[state.layer === 'copper0trace' ? 'bottom' : 'top'].push(shape)
+        const face: Face     = state.layer === 'copper0trace' ? 'bottom' : 'top'
+
+        if (!inside(shape.points))
+            continue
+
+        artwork.copper[face].push(shape)
+        artwork.conductors.push({ face, shape, owner: wire.modelIndex, key: keyOf(wire.modelIndex, 'connector0'), kind: 'trace' })
     }
 
     const unique = new Map(artwork.holes.map(hole => [`${hole.x.toFixed(2)}|${hole.y.toFixed(2)}|${hole.diameter.toFixed(2)}`, hole]))

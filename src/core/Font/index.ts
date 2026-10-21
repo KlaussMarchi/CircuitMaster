@@ -32,6 +32,8 @@ export class Font {
     view: DataView
     tables = new Map<string, number>()
     unitsPerEm = 1000
+    ascent = 800
+    descent = 200
     longLoca = false
     metrics = 0
     cmap = new Map<number, number>()
@@ -59,6 +61,8 @@ export class Font {
         this.unitsPerEm = this.u16(head + 18)
         this.longLoca   = this.i16(head + 50) === 1
         this.metrics    = this.u16((this.tables.get('hhea') ?? 0) + 34)
+        this.ascent     = this.i16((this.tables.get('hhea') ?? 0) + 4)
+        this.descent    = -this.i16((this.tables.get('hhea') ?? 0) + 6)
         this.readCmap()
     }
 

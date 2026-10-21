@@ -28,17 +28,17 @@ export const PROPERTY_DEFS: PropertyDef[] = [
     def('voltageHigh', 'V', 5, 500, '35', ['CapacitorModuleID'], ['63', '100', '250', '400', '630', '800']),
     def('voltage', 'V', 0, 1000, '5', ['DC2PowerModuleID', 'AC2PowerModuleID', 'DCPowerSupplyModuleID', ...POWER_SUPPLIES], ['3.3', '5', '12']),
     def('amplitude', 'V', 0, 1000, '5', POWER_SUPPLIES, ['3.3', '5', '12']),
-    def('initial voltage', 'V', 0, 1000, '0', ['PulsePowerSupplyModuleID']),
-    def('pulsed voltage', 'V', 0, 1000, '5', ['PulsePowerSupplyModuleID']),
-    def('period', 's', 0, 1e6, '0.1', ['PulsePowerSupplyModuleID', 'TriangularPowerSupplyModuleID', 'SawtoothPowerSupplyModuleID']),
-    def('pulse width', 's', 0, 1e6, '0.05', ['PulsePowerSupplyModuleID']),
+    def('initial voltage', 'V', 0, 1000, '0', ['PulsePowerSupplyModuleID', 'DCPulseSourceModuleID']),
+    def('pulsed voltage', 'V', 0, 1000, '5', ['PulsePowerSupplyModuleID', 'DCPulseSourceModuleID']),
+    def('period', 's', 0, 1e6, '0.1', ['PulsePowerSupplyModuleID', 'TriangularPowerSupplyModuleID', 'SawtoothPowerSupplyModuleID', 'DCPulseSourceModuleID']),
+    def('pulse width', 's', 0, 1e6, '0.05', ['PulsePowerSupplyModuleID', 'DCPulseSourceModuleID']),
     def('duty cycle', '%', 0, 100, '25', ['PWMPulsePowerSupplyModuleID']),
-    def('rise time', 's', 0, 1, '0.001', ['GenericPulsePowerSupplyModuleID']),
-    def('fall time', 's', 0, 1, '0.001', ['GenericPulsePowerSupplyModuleID']),
+    def('rise time', 's', 0, 1, '0.001', ['GenericPulsePowerSupplyModuleID', 'DCPulseSourceModuleID']),
+    def('fall time', 's', 0, 1, '0.001', ['GenericPulsePowerSupplyModuleID', 'DCPulseSourceModuleID']),
     def('number of pulses', '', 0, 1e12, '0', ['PulsePowerSupplyModuleID', 'TriangularPowerSupplyModuleID', 'SawtoothPowerSupplyModuleID']),
     def('frequency', 'Hz', 0, 1e6, '60', ['AC2PowerModuleID', 'SinePowerSupplyModuleID'], ['10', '20', '50', '60', '100']),
     def('offset voltage', 'V', 0, 1000, '0', POWER_SUPPLIES),
-    def('delay time', 's', 0, 100, '0', ['SinePowerSupplyModuleID', 'PulsePowerSupplyModuleID', 'TriangularPowerSupplyModuleID', 'SawtoothPowerSupplyModuleID']),
+    def('delay time', 's', 0, 100, '0', ['SinePowerSupplyModuleID', 'PulsePowerSupplyModuleID', 'TriangularPowerSupplyModuleID', 'SawtoothPowerSupplyModuleID', 'DCPulseSourceModuleID']),
     def('damping factor', 's-1', 0, 10, '0', ['SinePowerSupplyModuleID']),
     def('phase', 'degrees', 0, 360, '0', ['SinePowerSupplyModuleID']),
     def('internal resistance', 'Ω', 0, 1e6, '0.1', ['PowerSupplyModuleID', '77c36646df552e9fe72f360837f556ccleg', '1000AFDF10011leg', 'c7c8e292b3beec531de0c51f2576d329']),
@@ -84,4 +84,13 @@ export const parseSi = (text: string, symbol = '') => {
 export const formatSi = (value: number, symbol = '', decimals = 3) => {
     const [prefix, scale] = value === 0 ? ['', 1] : SHOWN.find(([, factor]) => Math.abs(value) < 1000 * factor) ?? SHOWN[SHOWN.length - 1]
     return `${+(value / scale).toFixed(decimals)}${prefix}${symbol}`
+}
+
+const TINY_READING = 1e-12    // ABAIXO DISSO A LEITURA É ZERO
+
+// LEITURA DE INSTRUMENTO: 4 ALGARISMOS SIGNIFICATIVOS, PREFIXO SI E ESPAÇO ANTES DA UNIDADE
+export const formatReading = (value: number, symbol: string) => {
+    const x               = Math.abs(value) < TINY_READING ? 0 : value
+    const [prefix, scale] = x === 0 ? ['', 1] : SHOWN.find(([, factor]) => Math.abs(x) < 999.95 * factor) ?? SHOWN[SHOWN.length - 1]
+    return `${(x / scale).toPrecision(4)} ${prefix}${symbol}`
 }

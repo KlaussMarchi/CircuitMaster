@@ -1,7 +1,26 @@
 @import "tailwindcss";
+@import "./ui/Theme/style.css";
 
-html, body, #root {
-    height: 100%;
+@theme inline {
+    --color-ground: var(--ground);
+    --color-surface: var(--surface);
+    --color-raised: var(--raised);
+    --color-well: var(--well);
+    --color-border: var(--border);
+    --color-rule: var(--rule);
+    --color-control: var(--control);
+    --color-text: var(--text);
+    --color-soft: var(--soft);
+    --color-muted: var(--muted);
+    --color-accent: var(--accent);
+    --color-amber: var(--amber);
+    --color-negative: var(--negative);
+    --color-warning: var(--warning);
+    --color-positive: var(--positive);
+    --color-primary: var(--primary);
+    --color-primary-ink: var(--primary-ink);
+    --font-sans: var(--font);
+    --font-mono: var(--mono);
 }
 
 @font-face { font-family: "Droid Sans"; src: url("/fritzing/fonts/DroidSans/DroidSans.ttf"); }

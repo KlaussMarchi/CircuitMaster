@@ -1,7 +1,7 @@
-import { unionBoxes, type Box, type Matrix, type Point } from '../../core/Geometry'
+import { boxOf, mapBox, parseTransform, unionBoxes, type Box, type Matrix, type Point } from '../../core/Geometry'
 import { milsToPx } from '../../core/Units'
 import { childrenOf, parseXml, serializeXml, tagOf, walk, type XmlElement } from '../../core/Xml'
-import { getTextRuns, type Fonts } from '../../core/Font'
+import { getTextRuns, type Fonts, type TextRun } from '../../core/Font'
 import { keyOf, WIRE_FLAGS } from '../../core/Document'
 import { getLayerZ, type VIEWS, type ViewName } from '../../core/Layer'
 import type { Part } from '../../core/Part'
@@ -18,7 +18,7 @@ import { parseSi } from '../../core/Properties'
 type View = typeof VIEWS[number]
 
 export type LegItem   = { key: string, points: Point[], width: number, color: string }
-export type PartItem  = { type: 'part', modelIndex: string, z: number, moduleId: string, svg: SvgFile, variant: string, matrix: Matrix, width: number, height: number, legs: LegItem[], hidden: string[], paint: [string, string][], texts: [string, string][], layer: string, recolor: [string, string][] }
+export type PartItem  = { type: 'part', modelIndex: string, z: number, moduleId: string, svg: SvgFile, variant: string, matrix: Matrix, width: number, height: number, legs: LegItem[], hidden: string[], paint: [string, string][], texts: [string, string][], upright: Point, layer: string, recolor: [string, string][] }
 export type WireItem  = { type: 'wire', modelIndex: string, z: number, d: string, width: number, color: string, opacity: number, shadow: string | null, ends: [Point, Point] }
 export type NoteItem  = { type: 'note', modelIndex: string, z: number, x: number, y: number, width: number, height: number, html: string }
 export type RatItem   = { from: string, to: string, a: Point, b: Point, color: string }
@@ -51,6 +51,7 @@ export const WIRE_COLORS: Record<'breadboardView' | 'schematicView', [string, st
 const CONNECTED   = { color: '#00ff00', opacity: 0.2 }
 const UNCONNECTED = { color: '#ff0000', opacity: 0.3 }
 const SHADE       = 0.7      // ESCURECIMENTO DA SOMBRA DE COR DESCONHECIDA
+const TURNED      = 0.001 - Math.SQRT1_2    // m22 = cos θ: ROTAÇÃO ENTRE 135° E 225°, COM FOLGA DE ARREDONDAMENTO
 const SILK_BOTTOM = '#444444'    // RÓTULO NA FACE DE BAIXO; textColor DO ARQUIVO É IGNORADO
 const LABEL_FONTS: Record<View, string> = { breadboardView: 'Droid Sans, sans-serif', schematicView: 'Droid Sans, sans-serif', pcbView: 'OCR-Fritzing-mono, OCR A Std, monospace' }
 
@@ -110,6 +111,13 @@ const getPcbLayers = (part: Part, svg: SvgFile, hidden: string[]) => {
     })
 }
 
+// ESCALA QUE CADA BLOCO DE TEXTO DO ESQUEMÁTICO RECEBE EM TORNO DO SEU CENTRO PARA DESFAZER O ESPELHO E O GIRO DE 180° DA INSTÂNCIA (SPEC 01 §2.4)
+export const getUpright = (m: Matrix): Point => {
+    const mirrored = m[0] * m[3] - m[1] * m[2] < 0
+    const turned   = m[3] <= TURNED
+    return [mirrored !== turned ? -1 : 1, turned ? -1 : 1]
+}
+
 const getItem = (scene: Scene, modelIndex: string): (PartItem | WireItem | NoteItem)[] => {
     const state    = scene.getView(modelIndex)
     const moduleId = scene.doc.instances[modelIndex]?.moduleIdRef ?? ''
@@ -131,16 +139,15 @@ const getItem = (scene: Scene, modelIndex: string): (PartItem | WireItem | NoteI
     }
 
     const m        = scene.getMatrix(modelIndex)
-    const mirrored = m ? m[0] * m[3] - m[1] * m[2] < 0 : false
     const instance = scene.doc.instances[modelIndex]
-    const variant  = scene.library.getVariant(instance, scene.view, mirrored)
-    const svg      = scene.library.getInstanceSvg(instance, scene.view, mirrored)
+    const variant  = scene.library.getVariant(instance, scene.view)
+    const svg      = scene.library.getInstanceSvg(instance, scene.view)
     const part     = scene.library.getPart(moduleId)
 
     if (!svg || !m || !part)
         return []
 
-    const item: PartItem = { type: 'part', modelIndex, z: state.geometry.z, moduleId, svg, variant, matrix: m, width: svg.width, height: svg.height, legs: getLegs(scene, modelIndex), hidden: state.hidden, paint: getPaint(scene, modelIndex), texts: getTexts(scene, modelIndex), layer: '', recolor: [] }
+    const item: PartItem = { type: 'part', modelIndex, z: state.geometry.z, moduleId, svg, variant, matrix: m, width: svg.width, height: svg.height, legs: getLegs(scene, modelIndex), hidden: state.hidden, paint: getPaint(scene, modelIndex), texts: getTexts(scene, modelIndex), upright: scene.view === 'schematicView' ? getUpright(m) : [1, 1], layer: '', recolor: [] }
     const offset         = Math.min(0.999, Math.max(0, state.geometry.z - getLayerZ('pcbView', state.layer)))
     return scene.view === 'pcbView' ? getPcbLayers(part, svg, state.hidden).map(({ layer, source, recolor }) => ({ ...item, z: (layer ? getLayerZ('pcbView', layer) : state.geometry.z) + (layer ? offset : 0), layer: source, recolor })) : [item]
 }
@@ -177,9 +184,10 @@ const getMarks = (scene: Scene, netlist: Netlist, items: (PartItem | WireItem | 
 
     const state = (key: string) => (owners.get(routed[netlist.index.get(key) ?? 0])?.size ?? 0) >= 2 ? CONNECTED : UNCONNECTED
 
-    const wireMarks = items.flatMap(item => item.type === 'wire' ? item.ends.map((point, i) => {
+    const bend      = (key: string) => scene.getBendpoint(key) !== null
+    const wireMarks = items.flatMap(item => item.type === 'wire' ? item.ends.flatMap((point, i) => {
         const key = keyOf(item.modelIndex, `connector${i}`)
-        return { key, box: null, point, radius: item.width * 0.75, ...netlist.index.has(key) ? state(key) : UNCONNECTED }
+        return bend(key) ? [] : [{ key, box: null, point, radius: item.width * 0.75, ...netlist.index.has(key) ? state(key) : UNCONNECTED }]
     }) : [])
 
     const parts     = new Set(items.flatMap(item => item.type === 'part' ? [item.modelIndex] : []))
@@ -205,12 +213,13 @@ const getLabels = (scene: Scene, shown: string[]): LabelItem[] => shown.flatMap(
     return [{ modelIndex, x: label.x, y: label.y, size: labelPx(label.size), color: scene.view === 'pcbView' && scene.getView(modelIndex)?.bottom ? SILK_BOTTOM : '#000000', font: LABEL_FONTS[scene.view as View], lines: scene.getLabelLines(modelIndex), box: scene.getLabelBox(modelIndex) }]
 })
 
-// LISTA DE DESENHO DE UMA VISTA: PEÇAS E FIOS EM ORDEM DE z, RATSNEST, ESTADO DOS CONECTORES, JUNÇÕES E RÓTULOS
+// LISTA DE DESENHO DE UMA VISTA: PEÇAS E FIOS EM ORDEM DE z, RATSNEST, ESTADO DOS CONECTORES, JUNÇÕES E RÓTULOS; A CAIXA TOTAL INCLUI OS RÓTULOS
 export const getDrawing = (scene: Scene, netlist: Netlist | null): Drawing => {
-    const shown = Object.values(scene.doc.instances).filter(instance => scene.isShown(instance)).map(instance => instance.modelIndex)
-    const items = shown.flatMap(modelIndex => getItem(scene, modelIndex)).sort((a, b) => a.z - b.z)
-    const marks = netlist ? getMarks(scene, netlist, items) : []
-    return { items, ratsnest: netlist ? getRatsnest(scene, netlist) : [], marks, junctions: getJunctions(scene, items), labels: getLabels(scene, shown), bounds: unionBoxes(shown.map(modelIndex => scene.getBounds(modelIndex))) }
+    const shown  = Object.values(scene.doc.instances).filter(instance => scene.isShown(instance)).map(instance => instance.modelIndex)
+    const items  = shown.flatMap(modelIndex => getItem(scene, modelIndex)).sort((a, b) => a.z - b.z)
+    const marks  = netlist ? getMarks(scene, netlist, items) : []
+    const labels = getLabels(scene, shown)
+    return { items, ratsnest: netlist ? getRatsnest(scene, netlist) : [], marks, junctions: getJunctions(scene, items), labels, bounds: unionBoxes([...shown.map(modelIndex => scene.getBounds(modelIndex)), ...labels.map(label => label.box)]) }
 }
 
 const findById = (root: XmlElement, id: string) => {
@@ -253,9 +262,33 @@ const recolor = (element: XmlElement, color: string) => {
     childrenOf(element).forEach(child => recolor(child, color))
 }
 
-// TEXTO EM CONTORNO COM AS FONTES DO FRITZING: O GRUPO HERDA PINTURA E TRANSFORMAÇÃO DO <text>, CADA <tspan> A SUA; COMO NO QtSvg, TEXTO SÓ TEM PREENCHIMENTO
-const outlineText = (svg: SvgFile, text: XmlElement, fonts: Fonts) => {
-    const runs = getTextRuns(svg, text, fonts)
+const runBox = ({ d }: TextRun) => {
+    const numbers = d.match(/-?[\d.]+/g)?.map(Number) ?? []    // getPath SÓ EMITE PARES x y ABSOLUTOS
+    return boxOf(Array.from({ length: numbers.length / 2 }, (_, k): Point => [numbers[2 * k], numbers[2 * k + 1]]))
+}
+
+const ancestors = (element: XmlElement): XmlElement[] => element.parentNode?.nodeType === 1 ? [element.parentNode as XmlElement, ...ancestors(element.parentNode as XmlElement)] : []
+
+// BLOCO QUE SE ENDIREITA JUNTO: O GRUPO label DE VÁRIAS LINHAS QUE CONTÉM O <text>, OU O PRÓPRIO <text>
+const blockOf = (text: XmlElement) => ancestors(text).find(node => tagOf(node) === 'g' && node.getAttribute('id') === 'label') ?? text
+
+// TRANSFORMAÇÃO DE CADA <text>: A ESCALA upright EM TORNO DO CENTRO DA CAIXA DO SEU BLOCO, NAS COORDENADAS DO PAI DO <text>
+const getTurns = (runs: Map<XmlElement, TextRun[]>, [sx, sy]: Point) => {
+    const boxes = new Map<XmlElement, Box | null>()
+
+    runs.forEach((list, word) => {
+        const box = unionBoxes(list.map(runBox))
+        boxes.set(blockOf(word), unionBoxes([boxes.get(blockOf(word)) ?? null, box && mapBox(parseTransform(word.getAttribute('transform')), box)]))
+    })
+
+    return (word: XmlElement) => {
+        const box = boxes.get(blockOf(word))
+        return box ? `matrix(${sx} 0 0 ${sy} ${(1 - sx) * (box[0] + box[2]) / 2} ${(1 - sy) * (box[1] + box[3]) / 2})` : ''
+    }
+}
+
+// TEXTO EM CONTORNO COM AS FONTES DO FRITZING: O GRUPO HERDA PINTURA E TRANSFORMAÇÃO DO <text>, PRECEDIDA DO ENDIREITAMENTO, CADA <tspan> A SUA; COMO NO QtSvg, TEXTO SÓ TEM PREENCHIMENTO
+const outlineText = (text: XmlElement, runs: TextRun[], turn: string) => {
     const doc  = text.ownerDocument
     const copy = (from: XmlElement, to: XmlElement) => Array.from({ length: from.attributes.length }, (_, i) => from.attributes[i]).filter(attribute => !TEXT_ONLY.has(attribute.name)).forEach(attribute => to.setAttribute(attribute.name, attribute.value))
 
@@ -265,6 +298,10 @@ const outlineText = (svg: SvgFile, text: XmlElement, fonts: Fonts) => {
     const group = doc.createElementNS(SVG_NS, 'g')
     copy(text, group)
     group.setAttribute('stroke', 'none')
+
+    if (turn)
+        group.setAttribute('transform', `${turn} ${text.getAttribute('transform') ?? ''}`.trim())
+
     runs.forEach(run => {
         const path = doc.createElementNS(SVG_NS, 'path')
 
@@ -298,10 +335,10 @@ const keepLayer = (root: XmlElement, group: XmlElement) => {
     prune(root)
 }
 
-export type ImageOptions = { hidden?: string[], paint?: [string, string][], texts?: [string, string][], fonts?: Fonts, layer?: string, recolor?: [string, string][] }
+export type ImageOptions = { hidden?: string[], paint?: [string, string][], texts?: [string, string][], fonts?: Fonts, upright?: Point, layer?: string, recolor?: [string, string][] }
 
-// SVG DA PEÇA COMO IMAGEM: VIEWBOX RESOLVIDO, SEM PERNAS ELÁSTICAS NEM CAMADAS OCULTAS, COM CORES PARAMÉTRICAS, SÓ A CAMADA PEDIDA, COR DA CAMADA E TEXTO EM CONTORNO (SPEC 01 §3.3, §3.8)
-export const getImageText = (part: Part, svg: SvgFile, view: ViewName, { hidden = [], paint = [], texts = [], fonts = new Map(), layer = '', recolor: colors = [] }: ImageOptions = {}) => {
+// SVG DA PEÇA COMO IMAGEM: VIEWBOX RESOLVIDO, SEM PERNAS ELÁSTICAS NEM CAMADAS OCULTAS, COM CORES PARAMÉTRICAS, SÓ A CAMADA PEDIDA, COR DA CAMADA E TEXTO EM CONTORNO, ENDIREITADO NO ESQUEMÁTICO (SPEC 01 §2.4, §3.3, §3.8)
+export const getImageText = (part: Part, svg: SvgFile, view: ViewName, { hidden = [], paint = [], texts = [], fonts = new Map(), upright = [1, 1], layer = '', recolor: colors = [] }: ImageOptions = {}) => {
     const root    = parseXml(svg.text)
     const legs    = view === 'breadboardView' ? part.connectors.flatMap(connector => (connector.views.breadboardView ?? []).map(pin => pin.legId)).filter(Boolean) : []
     const removed = new Set([...legs, ...hidden])
@@ -338,7 +375,9 @@ export const getImageText = (part: Part, svg: SvgFile, view: ViewName, { hidden 
         if (group)
             recolor(group, color)
     })
-    words.forEach(word => outlineText(svg, word, fonts))
+    const runs   = new Map(words.map(word => [word, getTextRuns(svg, word, fonts)]))
+    const turnOf = upright[0] === 1 && upright[1] === 1 ? () => '' : getTurns(runs, upright)
+    words.forEach(word => outlineText(word, runs.get(word) ?? [], turnOf(word)))
     root.setAttribute('xmlns', SVG_NS)
     root.setAttribute('width', String(svg.width))
     root.setAttribute('height', String(svg.height))

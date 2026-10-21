@@ -2,27 +2,43 @@ import { create } from 'zustand'
 import { strFromU8 } from 'fflate'
 import { Library } from '../../core/Library'
 import { Netlist, loadNetlistWasm, type NetlistWasm } from '../../core/Netlist'
-import { emptyDoc, fromSketch, type Doc } from '../../core/Document'
-import { exportBundle, readBundle, readSketch, type Bundle } from '../../core/Sketch'
+import { emptyDoc, fromSketch, keyOf, removeInstance, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
+import { exportBinBundle, exportBundle, readBin, readBundle, readSketch, type Bundle, type BundleFile, type Instance } from '../../core/Sketch'
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
-import type { Point } from '../../core/Geometry'
-import { buildCircuit } from '../../core/Spice'
+import { apply, boxesTouch, unionBoxes, type Matrix, type Point } from '../../core/Geometry'
+import { SWITCH_KEY, buildCircuit, getSwitching, resumeCircuit, type Event } from '../../core/Spice'
 import { FONT_FILES } from '../../core/Font'
-import { alignInstances, copyItems, createInstance, createNote, createWire, deleteItems, flipInstances, getCarried, moveInstances, pasteItems, rotateInstances, setZOrder, snapConnections, swapPart, type AlignMode, type Clipboard, type ZMode } from '../../engine/Edit'
-import { Scene } from '../../engine/Scene'
+import { getArtwork, pickBoard } from '../../core/Cam'
+import { getGroupOf, type Violation } from '../../core/Drc'
+import { contains, type FillFragment, type FillMode } from '../../core/Fill'
+import { buildSheetGrid, type Plan } from '../../core/Router'
+import { alignInstances, alignToGrid, applyPlan, connectByPath, copyItems, createFills, createInstance, createNote, deleteAutorouted, deleteItems, drawWires, flipInstances, getCarried, getChangedWires, getGridShift, moveInstances, pasteItems, rotateInstances, setZOrder, snapConnections, squareWires, swapPart, tidyWires, type AlignMode, type Clipboard, type WireEnd, type ZMode, setProperty, setPosition, setTraceSide } from '../../engine/Edit'
+import { Scene, WIRE_STYLE } from '../../engine/Scene'
 import { getDrawing } from '../../engine/Drawing'
-import type { Instance } from '../../core/Sketch'
-import { download, exportAs, type ExportKind } from '../Export'
-import { Simulation } from '../../engine/Simulation'
+import { Simulation, fromRest, getInitial, joinRuns } from '../../engine/Simulation'
+import { BENCHES, BENCH_PARTS, buildBench } from '../../engine/Bench'
+import { FEATURED } from '../../core/Featured'
 import type { BinTab, Found } from '../../workers/Indexer'
 import { Catalog, fetchText, pickSwap, type IndexerStatus } from '../Catalog'
 import { Simulator } from '../Simulator'
+import { PcbTools, getConfig, type Progress } from '../Pcb'
+import { boardProblem, download, exportAs, getClipper, type ExportKind } from '../Export'
 import wasmUrl from '../../core/Netlist/netlist.wasm?url'
 
 export type View       = typeof VIEWS[number]
 export type Viewport   = { x: number, y: number, zoom: number }
+export type Tool       = 'select' | 'area' | ProbeKind
+export type Panel      = 'properties' | 'routing' | 'document'
+export type Left       = 'parts' | 'project' | 'problems'
+export type Theme      = 'dark' | 'light'
+export type Side       = 'both' | 'top' | 'bottom'
+export type Readout    = 'measures' | 'response' | 'settings'
+export type UserBin    = { title: string, moduleIds: string[] }
+export type Dialog     = 'shortcuts' | 'about' | null
+export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
+export type Show       = { values: boolean, chart: boolean }
 export type Simulating = { enabled: boolean, transient: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[] }
 
 type State = {
@@ -34,13 +50,25 @@ type State = {
     bins: BinTab[]
     samples: string[]
     mine: string[]
+    userBins: UserBin[]
     imported: Found[]
+    editing: string | null
     message: string
     name: string
     doc: Doc
     netlist: Netlist | null
     view: View
     selection: string[]
+    probe: string | null
+    tool: Tool
+    panel: Panel
+    left: Left
+    theme: Theme
+    side: Side
+    placing: string | null
+    saved: Doc
+    stored: boolean
+    readout: Readout
     hover: string | null
     past: Doc[]
     future: Doc[]
@@ -50,10 +78,16 @@ type State = {
     pasted: number
     simulator: Simulator
     simulation: Simulating
+    show: Show
+    dialog: Dialog
+    pcb: PcbTools
+    drc: Checked | null
+    routing: Progress | null
     setup: () => Promise<void>
     open: (name: string, bytes: Uint8Array) => Promise<void>
     save: () => void
     openSample: (file: string) => Promise<void>
+    openBench: (id: string) => Promise<void>
     preview: (doc: Doc) => void
     commit: (doc: Doc, origin?: Doc) => void
     edit: (change: (doc: Doc) => Doc) => void
@@ -65,8 +99,26 @@ type State = {
     setViewport: (view: View, viewport: Viewport | undefined) => void
     setSize: (size: Point) => void
     getGrid: () => number
+    gridOf: (view: View) => number
+    isAligned: (view: View) => boolean
+    isOrthogonal: (view: View) => boolean
+    tidy: (origin: Doc, doc: Doc) => Doc
     addPart: (moduleId: string, point: Point) => Promise<void>
-    connect: (from: string, to: string | null, end?: Point) => Promise<void>
+    connect: (from: string, to: string) => Promise<void>
+    drawWire: (from: string[], end: WireEnd | null, points: Point[]) => Promise<void>
+    setTool: (tool: Tool) => void
+    setPanel: (panel: Panel) => void
+    setLeft: (left: Left) => void
+    toggleTheme: () => void
+    setSide: (side: Side) => void
+    makeBoard: () => Promise<void>
+    setPlacing: (moduleId: string | null) => void
+    setReadout: (readout: Readout) => void
+    selectProbe: (id: string | null) => void
+    addProbe: (probe: Omit<Probe, 'id'>) => void
+    updateProbe: (id: string, patch: Partial<Probe>) => void
+    removeProbes: (ids: string[]) => void
+    setProjectProperties: (values: Record<string, string>) => void
     remove: (minus: boolean) => void
     rotate: (degrees: number) => void
     flip: (horizontal: boolean) => void
@@ -78,36 +130,68 @@ type State = {
     duplicate: () => Promise<void>
     selectAll: () => void
     addToMine: (moduleIds: string[]) => void
+    exportMine: () => void
+    createBin: (title: string, moduleIds: string[]) => void
+    renameBin: (index: number, title: string) => void
+    deleteBin: (index: number) => void
+    addToBin: (index: number, moduleIds: string[]) => void
+    exportBin: (index: number) => void
+    keepParts: (files: BundleFile[]) => void
+    editPart: (modelIndex: string | null) => void
+    installPart: (files: BundleFile[], replace: string | null) => Promise<void>
     swap: (modelIndex: string, moduleId: string) => Promise<void>
     toggleSwitch: (modelIndex: string) => Promise<boolean>
+    setSwitching: (modelIndex: string, events: Event[]) => Promise<void>
     newSketch: () => void
     addNote: () => Promise<void>
     zoom: (factor: number) => void
     setZoom: (zoom: number) => void
     setViewSetting: (key: string, value: string) => void
+    setPcbSettings: (values: Record<string, string>) => void
     align: (mode: AlignMode) => void
     selectWhere: (test: (instance: Instance, part: Part | undefined) => boolean) => void
     exportFile: (kind: ExportKind) => Promise<void>
+    checkRules: () => Promise<void>
+    fillCopper: (mode: FillMode) => Promise<void>
+    fillUnit: (point: Point) => Promise<void>
+    removeFills: () => void
+    autoroute: () => Promise<void>
+    autorouteSheet: () => Promise<void>
+    cancelRouting: () => void
+    clearAutorouted: () => void
     setSimulation: (patch: Partial<Simulating>) => void
+    setShow: (patch: Partial<Show>) => void
     simulate: () => Promise<void>
     play: () => void
     pause: () => void
     seek: (step: number) => void
 }
 
-const HISTORY  = 200
-const NOTE     = 'NoteModuleID'
-const WIRE     = 'WireModuleID'
-const MINE_KEY = 'circuitmaster.mine'
-const PASTE    = 20     // PX POR COLAGEM SEGUIDA (SPEC 02 §10.3)
+const HISTORY   = 200
+const TOOL_NAMES: Record<ProbeKind, string> = { voltage: 'Ponta de tensão', current: 'Ponta de corrente', both: 'Ponta de tensão e corrente' }
+const NOTE      = 'NoteModuleID'
+const FILL      = 'GroundPlaneModuleID'
+const VIA       = 'ViaModuleID'
+const WIRE      = 'WireModuleID'
+const BOARD     = 'TwoLayerRectanglePCBModuleID'
+const BOARD_MARGIN = 13.5    // PX: 0,15 in DE FOLGA ENTRE AS PEÇAS E A BORDA DA PLACA CRIADA
+const INSTRUMENTS  = ['voltage source', 'multimeter', 'oscilloscope']    // FAMÍLIAS DE BANCADA, FORA DA PLACA
+const MINE_KEY  = 'circuitmaster.mine'
+const BINS_KEY  = 'circuitmaster.bins'
+const SHOW_KEY  = 'circuitmaster.show'     // VALORES NAS PONTAS E PAINEL DE TABELA E GRÁFICO DA SIMULAÇÃO
+const THEME_KEY = 'cm-theme'               // MESMA CHAVE QUE O <head> LÊ ANTES DE DESENHAR (DESIGN.md §7)
+const PARTS_KEY = 'circuitmaster.parts'    // ARQUIVOS DAS PEÇAS QUE VIERAM DE .fzpz/.fzbz OU DO EDITOR (SPEC 01 §8A.6)
+const PASTE     = 20     // PX POR COLAGEM SEGUIDA (SPEC 02 §10.3)
 const GRID: Record<View, string> = { breadboardView: '0.1in', schematicView: '0.1in', pcbView: '0.05in' }
-const DEBOUNCE = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SPEC 04 §5.4)
+const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SPEC 04 §5.4)
 
 const IDLE: Simulating = { enabled: false, transient: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [] }
 
 const readFile = (name: string, bytes: Uint8Array): Bundle | null => {
+    const lower = name.toLowerCase()
+
     try {
-        return name.toLowerCase().endsWith('.fz') ? { sketch: readSketch(strFromU8(bytes)), parts: [], svgs: [], others: [] } : readBundle(bytes)
+        return lower.endsWith('.fz') ? { sketch: readSketch(strFromU8(bytes)), parts: [], svgs: [], others: [], bin: null } : lower.endsWith('.fzb') ? { sketch: null, parts: [], svgs: [], others: [], bin: readBin(strFromU8(bytes)) } : readBundle(bytes)
     } catch (error) {
         if (error instanceof Error)
             return null
@@ -125,16 +209,34 @@ const loadFont = async (library: Library, key: string, file: string) => {
         library.addFont(key, new Uint8Array(await response.arrayBuffer()))
 }
 
-const readMine = () => {
+const readStored = <T,>(key: string, fallback: T): T => {
     try {
-        return JSON.parse(localStorage.getItem(MINE_KEY) ?? '[]') as string[]
+        return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback
     } catch (error) {
         if (error instanceof Error)    // ARMAZENAMENTO BLOQUEADO OU CONTEÚDO CORROMPIDO
-            return []
+            return fallback
 
         throw error
     }
 }
+
+// GRAVA NO ARMAZENAMENTO DO NAVEGADOR (TEXTO COMO ESTÁ, O RESTO EM JSON); DEVOLVE O MOTIVO SE NÃO COUBE OU ESTÁ BLOQUEADO
+const writeStored = (key: string, value: unknown) => {
+    try {
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value))
+        return null
+    } catch (error) {
+        if (error instanceof Error)
+            return error.message
+
+        throw error
+    }
+}
+
+const PADS = /(Copper0)?PadModuleID$|SchematicFrameModuleID$/
+
+// PEÇA QUE O EDITOR ABRE: TIPO PEÇA COMUM, MENOS PADS E MOLDURA (SPEC 01 §8A.1)
+export const isEditable = (part: Part | undefined) => part?.kind === 'part' && !PADS.test(part.moduleId)
 
 // DOCUMENTO ABERTO, HISTÓRICO, VISTA CORRENTE E DERIVADOS; O NETLIST SÓ É REFEITO QUANDO A TOPOLOGIA MUDA (SPEC 02 §6.5)
 export const useStore = create<State>((set, get) => {
@@ -165,6 +267,7 @@ export const useStore = create<State>((set, get) => {
     }
 
     const catalog = new Catalog(listen)
+    const blank   = emptyDoc()
 
     return {
         catalog,
@@ -174,14 +277,26 @@ export const useStore = create<State>((set, get) => {
         indexed: { done: 0, total: 0, ready: false },
         bins: [],
         samples: [],
-        mine: readMine(),
+        mine: readStored<string[]>(MINE_KEY, []),
+        userBins: readStored<UserBin[]>(BINS_KEY, []),
         imported: [],
+        editing: null,
         message: '',
         name: 'sem título',
-        doc: emptyDoc(),
+        doc: blank,
         netlist: null,
         view: 'breadboardView',
         selection: [],
+        probe: null,
+        tool: 'select',
+        panel: 'properties',
+        left: 'parts',
+        theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
+        side: 'both',
+        placing: null,
+        saved: blank,
+        stored: false,
+        readout: 'measures',
         hover: null,
         past: [],
         future: [],
@@ -191,6 +306,11 @@ export const useStore = create<State>((set, get) => {
         pasted: 0,
         simulator: new Simulator(),
         simulation: IDLE,
+        show: readStored<Show>(SHOW_KEY, { values: true, chart: true }),
+        dialog: null,
+        pcb: new PcbTools(),
+        drc: null,
+        routing: null,
 
         setup: async () => {
             if (get().catalog.worker)
@@ -200,8 +320,10 @@ export const useStore = create<State>((set, get) => {
             const fonts   = Promise.all(Object.entries(FONT_FILES).map(([key, file]) => loadFont(get().library, key, file)))
             const wasm    = await loadNetlistWasm(await (await fetch(wasmUrl)).arrayBuffer())
             const samples = JSON.parse(await fetchText('/fritzing/sketches.json') ?? '[]')
+            const kept    = readStored<BundleFile[]>(PARTS_KEY, [])
+            const added   = get().library.addBundle({ sketch: null, parts: kept.filter(file => file.name.startsWith('part.')), svgs: kept.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
             await Promise.all([started, fonts])
-            set({ wasm, samples, ready: true })
+            set({ wasm, samples, ready: true, imported: added.flatMap(moduleId => get().library.bundled.get(moduleId) ?? []).map(entryOf) })
             set(withNetlist(get().doc))
         },
 
@@ -209,11 +331,19 @@ export const useStore = create<State>((set, get) => {
             const { library } = get()
             const bundle      = readFile(name, bytes)
 
-            if (bundle && !bundle.sketch && bundle.parts.length) {
-                const added = library.addBundle(bundle)
-                const parts = added.flatMap(moduleId => library.bundled.get(moduleId) ?? [])
+            if (bundle && !bundle.sketch && (bundle.parts.length || bundle.bin)) {
+                const added  = library.addBundle(bundle)
+                const parts  = added.flatMap(moduleId => library.bundled.get(moduleId) ?? [])
+                const listed = bundle.bin?.entries.map(entry => entry.moduleIdRef).filter(moduleId => moduleId !== '__spacer__') ?? []
+                const title  = bundle.bin?.title.trim() || name.replace(/\.fzbz?$/i, '')
+                get().keepParts([...bundle.parts, ...bundle.svgs])
+                set({ imported: [...get().imported.filter(entry => !added.includes(entry.moduleId)), ...parts.map(entryOf)] })
+
+                if (bundle.bin)
+                    return get().createBin(title, [...new Set([...listed, ...added])])
+
                 get().addToMine(added)
-                return set({ imported: [...get().imported.filter(entry => !added.includes(entry.moduleId)), ...parts.map(entryOf)], message: `${parts.length} peças importadas de ${name} para Meus itens` })
+                return set({ message: `${added.length} peças de ${name} em Meus itens` })
             }
 
             if (!bundle?.sketch)
@@ -225,7 +355,7 @@ export const useStore = create<State>((set, get) => {
             await library.load([WIRE, ...Object.values(doc.instances).map(instance => instance.moduleIdRef)])
 
             const missing = Object.values(doc.instances).filter(instance => !library.getPart(instance.moduleIdRef)).length
-            set({ ...withNetlist(doc, null), name, past: [], future: [], selection: [], hover: null, viewports: {}, pasted: 0, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
+            set({ ...withNetlist(doc, null), name, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
         },
 
         save: () => {
@@ -233,7 +363,7 @@ export const useStore = create<State>((set, get) => {
             const base                   = name.replace(/\.(fzz|fz)$/i, '') || 'sem-titulo'
             const files                  = library.getBundleFiles(Object.values(doc.instances).map(instance => instance.moduleIdRef))
             download(`${base}.fzz`, exportBundle(doc, base, files), 'application/zip')
-            set({ message: `${base}.fzz salvo (${Object.keys(doc.instances).length} itens${files.length ? `, ${files.length} arquivos de peça embutidos` : ''})` })
+            set({ saved: doc, stored: true, message: `${base}.fzz salvo (${Object.keys(doc.instances).length} itens${files.length ? `, ${files.length} arquivos de peça embutidos` : ''})` })
         },
 
         openSample: async file => {
@@ -245,6 +375,19 @@ export const useStore = create<State>((set, get) => {
             await get().open(file.split('/').pop() ?? file, new Uint8Array(await response.arrayBuffer()))
         },
 
+        // CIRCUITO DE TESTE: SKETCH NOVO NO ESQUEMÁTICO COM O SIMULADOR LIGADO NO TRANSITÓRIO DO MODELO DELE (SPEC 04 §8.9)
+        openBench: async id => {
+            const bench = BENCHES.find(item => item.id === id)
+
+            if (!bench || (get().past.length && !window.confirm('Descartar as alterações do sketch aberto?')))
+                return
+
+            await get().library.load([...BENCH_PARTS, WIRE])
+            const doc = buildBench(get().library, bench)
+            set({ ...withNetlist(doc, null), name: bench.title, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, view: 'schematicView', message: bench.summary, simulation: { ...IDLE, enabled: true, transient: true } })
+            get().setReadout('response')
+        },
+
         preview: doc => set(withNetlist(doc)),
 
         commit: (doc, origin = get().doc) => {
@@ -252,7 +395,8 @@ export const useStore = create<State>((set, get) => {
                 return set(withNetlist(doc))
 
             const selection = get().selection.filter(modelIndex => doc.instances[modelIndex])
-            set({ ...withNetlist(doc), past: [...get().past, origin].slice(-HISTORY), future: [], selection })
+            const probe     = doc.probes.some(item => item.id === get().probe) ? get().probe : null
+            set({ ...withNetlist(doc), past: [...get().past, origin].slice(-HISTORY), future: [], selection, probe, drc: null })
         },
 
         edit: change => get().commit(change(get().doc)),
@@ -275,9 +419,9 @@ export const useStore = create<State>((set, get) => {
             set({ ...withNetlist(future[0]), past: [...past, doc], future: future.slice(1), hover: null })
         },
 
-        setView: view => set({ view, hover: null }),
+        setView: view => set({ view, hover: null, tool: view === 'pcbView' && get().tool !== 'area' ? 'select' : get().tool }),
 
-        select: selection => set({ selection }),
+        select: selection => set({ selection, probe: selection.length ? null : get().probe }),
 
         setHover: hover => {
             if (get().hover !== hover)
@@ -288,14 +432,31 @@ export const useStore = create<State>((set, get) => {
 
         setSize: size => set({ size }),
 
-        getGrid: () => {
-            const { doc, view } = get()
-            return (toInches(doc.settings[view]?.gridSize ?? GRID[view]) ?? 0.1) * PX_PER_INCH
+        getGrid: () => get().gridOf(get().view),
+
+        gridOf: view => (toInches(get().doc.settings[view]?.gridSize ?? GRID[view]) ?? 0.1) * PX_PER_INCH,
+
+        isAligned: view => get().doc.settings[view]?.alignToGrid !== '0',
+
+        isOrthogonal: view => view !== 'pcbView' && get().doc.settings[view]?.orthogonalWires !== '0',
+
+        // FIOS QUE A EDIÇÃO ENTORTOU VOLTAM A 90° E DOBRAS QUE FICARAM RETAS SAEM, NAS VISTAS DE FIOS ORTOGONAIS
+        tidy: (origin, doc) => {
+            const { library, view, isOrthogonal, gridOf } = get()
+
+            if (!isOrthogonal(view))
+                return doc
+
+            const squared = squareWires(origin, doc, library, view, gridOf(view))
+            return tidyWires(squared, library, view, getChangedWires(origin, squared, view))
         },
 
         addPart: async (moduleId, point) => {
-            const { library, view, viewports } = get()
+            const { library, view, viewports, isAligned, gridOf } = get()
             await library.load([moduleId])
+
+            if (library.getPart(moduleId)?.kind === 'copperFill' && view === 'pcbView')
+                return get().fillUnit(point)
 
             const home   = viewports[view]
             const places = Object.fromEntries(VIEWS.map(other => {
@@ -304,37 +465,133 @@ export const useStore = create<State>((set, get) => {
             })) as Record<View, Point>
 
             const { doc } = get()
-            const next    = createInstance(doc, library, moduleId, places)
+            const made    = createInstance(doc, library, moduleId, places)
+            const index   = String(doc.nextIndex)
+            const values  = Object.entries(FEATURED.find(item => item.moduleId === moduleId)?.values ?? {}).filter(([name]) => !library.getPart(moduleId)?.properties[name]?.trim())
+            const next    = values.reduce((current, [name, value]) => setProperty(current, index, name, value), made)
 
-            if (next === doc)
+            if (made === doc)
                 return set({ message: `${moduleId}: peça não encontrada` })
 
-            get().commit(next)
-            set({ selection: [String(doc.nextIndex)] })
+            get().commit(VIEWS.filter(isAligned).reduce((current, other) => alignToGrid(current, library, other, [index], gridOf(other)), next))
+            set({ selection: [index] })
         },
 
-        connect: async (from, to, end) => {
+        connect: async (from, to) => {
+            await get().library.load([WIRE])
+            const { doc, library, view, gridOf, isOrthogonal } = get()
+            const made = connectByPath(doc, library, view, from, to, gridOf(view), isOrthogonal(view) || view === 'pcbView')
+            get().commit(made.doc)
+            set({ selection: made.indexes })
+        },
+
+        drawWire: async (from, end, points) => {
             await get().library.load([WIRE])
             const { doc, library, view } = get()
-            get().commit(createWire(doc, library, view, from, to, end ?? null))
-            set({ selection: [String(doc.nextIndex)] })
+            const made = drawWires(doc, library, view, from, end, points)
+
+            if (!made.indexes.length)
+                return
+
+            get().commit(view === 'pcbView' && get().side === 'bottom' ? made.indexes.reduce(setTraceSide, made.doc) : made.doc)
+            set({ selection: made.indexes, message: `fio com ${made.indexes.length} ${made.indexes.length > 1 ? 'trechos' : 'trecho'}${end ? '' : ', ponta solta'}` })
+        },
+
+        setTool: tool => set({ tool, message: tool === 'select' ? '' : tool === 'area' ? 'Seletor: arraste no quadro para selecionar várias peças (Esc volta)' : `${TOOL_NAMES[tool]}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)` }),
+
+        setPanel: panel => set({ panel }),
+
+        setLeft: left => set({ left }),
+
+        setSide: side => set({ side, message: side === 'both' ? '' : `trilhas novas na face ${side === 'top' ? 'de cima (vermelha)' : 'de baixo (azul)'}; a outra face fica esmaecida` }),
+
+        // PLACA RETANGULAR DE DUAS FACES EM VOLTA DAS PEÇAS COM COBRE; INSTRUMENTOS DE BANCADA (FONTES, MULTÍMETRO, OSCILOSCÓPIO) VÃO PARA UMA COLUNA À ESQUERDA DELA; DEPOIS O AUTOROUTER (SPEC 03 §8.3.1)
+        makeBoard: async () => {
+            const { doc, library } = get()
+            await library.load([BOARD])
+            const scene   = new Scene(doc, library, 'pcbView')
+            const shown   = Object.values(doc.instances).filter(instance => scene.isShown(instance) && library.getPart(instance.moduleIdRef)?.views.pcbView?.layers.some(layer => layer.startsWith('copper')))
+            const bench   = (instance: Instance) => INSTRUMENTS.some(name => (library.getPart(instance.moduleIdRef)?.properties.family ?? '').toLowerCase().includes(name))
+            const bounds  = unionBoxes(shown.filter(instance => !bench(instance)).map(instance => scene.getBounds(instance.modelIndex)))
+
+            if (!bounds)
+                return set({ message: 'coloque peças antes de criar a placa' })
+
+            const index   = String(doc.nextIndex)
+            const size    = [bounds[2] - bounds[0] + 2 * BOARD_MARGIN, bounds[3] - bounds[1] + 2 * BOARD_MARGIN].map(px => (px / PX_PER_INCH * 25.4).toFixed(2))
+            const center  = [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2] as Point
+            const made    = createInstance(doc, library, BOARD, Object.fromEntries(VIEWS.map(view => [view, center])) as Record<View, Point>)
+            const sized   = setProperty(setProperty(made, index, 'width', size[0]), index, 'height', size[1])
+            const placed  = setPosition(sized, 'pcbView', index, [bounds[0] - BOARD_MARGIN, bounds[1] - BOARD_MARGIN])
+            const aside   = shown.filter(bench).reduce((current, instance) => {
+                const box = scene.getBounds(instance.modelIndex)
+                const top = current.y
+                return box ? { doc: moveInstances(current.doc, library, 'pcbView', [instance.modelIndex], bounds[0] - 2 * BOARD_MARGIN - (box[2] - box[0]) - box[0], top - box[1], false), y: top + box[3] - box[1] + BOARD_MARGIN } : current
+            }, { doc: placed, y: bounds[1] }).doc
+            get().commit(aside)
+            set({ selection: [], view: 'pcbView', viewports: { ...get().viewports, pcbView: undefined }, message: 'placa criada em volta das peças; roteando…' })
+            await get().autoroute()
+        },
+
+        toggleTheme: () => {
+            const theme = get().theme === 'dark' ? 'light' : 'dark'
+            document.documentElement.dataset.theme = theme
+            writeStored(THEME_KEY, theme)
+            set({ theme })
+        },
+
+        setPlacing: placing => set({ placing, tool: 'select', message: placing ? 'clique no quadro para posicionar a peça (Shift mantém, Esc cancela)' : '' }),
+
+        setReadout: readout => {
+            get().setShow({ chart: true })
+            set({ readout })
+        },
+
+        selectProbe: id => set({ probe: id, selection: id ? [] : get().selection }),
+
+        addProbe: probe => {
+            const { doc } = get()
+            const used    = new Set(doc.probes.map(item => item.id))
+            const id      = `P${Array.from({ length: doc.probes.length + 1 }, (_, i) => i + 1).find(n => !used.has(`P${n}`))}`
+            get().commit({ ...doc, probes: [...doc.probes, { ...probe, id }] })
+            set({ probe: id, selection: [] })
+        },
+
+        updateProbe: (id, patch) => {
+            const { doc } = get()
+            get().commit({ ...doc, probes: doc.probes.map(probe => probe.id === id ? { ...probe, ...patch } : probe) })
+        },
+
+        removeProbes: ids => {
+            const { doc } = get()
+            get().commit({ ...doc, probes: doc.probes.filter(probe => !ids.includes(probe.id)) })
+            set({ probe: null })
+        },
+
+        setProjectProperties: values => {
+            const { doc } = get()
+            get().commit({ ...doc, projectProperties: { ...doc.projectProperties, ...values } })
         },
 
         remove: minus => {
-            const { doc, library, view, selection } = get()
+            const { doc, library, view, selection, probe } = get()
+
+            if (probe && !selection.length)
+                return get().removeProbes([probe])
+
             get().commit(deleteItems(doc, library, view, selection, minus))
             set({ hover: null })
         },
 
         rotate: degrees => {
             const { doc, library, view, selection } = get()
-            const rotated = rotateInstances(doc, library, view, selection, degrees)
-            get().commit(view === 'breadboardView' ? snapConnections(rotated, library, selection) : rotated)
+            const rotated = settle(rotateInstances(doc, library, view, selection, degrees), selection)
+            get().commit(view === 'breadboardView' ? snapConnections(rotated, library, selection) : get().tidy(doc, rotated))
         },
 
         flip: horizontal => {
             const { doc, library, view, selection } = get()
-            get().commit(flipInstances(doc, library, view, selection, horizontal))
+            get().commit(get().tidy(doc, settle(flipInstances(doc, library, view, selection, horizontal), selection)))
         },
 
         zOrder: mode => {
@@ -345,7 +602,7 @@ export const useStore = create<State>((set, get) => {
         nudge: (dx, dy) => {
             const { doc, library, view, selection } = get()
             const moved = carriedOf(selection)
-            const next  = moveInstances(doc, library, view, moved, dx, dy)
+            const next  = get().tidy(doc, moveInstances(doc, library, view, moved, dx, dy))
             get().commit(view === 'breadboardView' ? snapConnections(next, library, moved) : next)
         },
 
@@ -366,9 +623,13 @@ export const useStore = create<State>((set, get) => {
                 return
 
             await library.load(clipboard.instances.map(instance => instance.moduleIdRef))
+            const { view, isAligned, gridOf } = get()
             const offset: Point = inPlace ? [0, 0] : [PASTE + PASTE * pasted, -PASTE + PASTE * pasted]
             const result        = pasteItems(get().doc, library, clipboard, offset)
-            get().commit(result.doc)
+            const scene         = new Scene(result.doc, library, view)
+            const anchor        = result.indexes.find(index => !scene.isWire(index) && scene.isShown(result.doc.instances[index]))
+            const [dx, dy]      = anchor && isAligned(view) && !inPlace ? getGridShift(scene, anchor, gridOf(view)) : [0, 0]
+            get().commit(dx || dy ? moveInstances(result.doc, library, view, result.indexes, dx, dy) : result.doc)
             set({ selection: result.indexes, pasted: inPlace ? pasted : pasted + 1 })
         },
 
@@ -405,11 +666,36 @@ export const useStore = create<State>((set, get) => {
             return target !== undefined
         },
 
+        // COMUTAÇÃO PROGRAMADA DE UMA CHAVE: AS VARIANTES ACIONADA E SOLTA VÊM DA FAMÍLIA E FICAM CARREGADAS PARA O SIMULADOR; SEM EVENTOS, A PROGRAMAÇÃO SAI (SPEC 04 §8.10)
+        setSwitching: async (modelIndex, events) => {
+            const { doc, library, catalog } = get()
+            const instance = doc.instances[modelIndex]
+            const part     = library.getPart(instance?.moduleIdRef ?? '')
+            const status   = part?.properties['switch status']
+
+            if (!instance || !part || !status)
+                return
+
+            const family = await catalog.family(part.properties.family ?? '')
+            const other  = pickSwap(family, part.properties, 'switch status', status === 'Pressed' ? 'Released' : 'Pressed')
+
+            if (!other)
+                return set({ message: `${instance.title}: o acervo não tem a outra posição desta chave` })
+
+            await library.load([other.moduleId])
+            const plans = getSwitching(get().doc)
+            const pair  = status === 'Pressed' ? { pressed: part.moduleId, released: other.moduleId } : { pressed: other.moduleId, released: part.moduleId }
+            const kept  = Object.fromEntries(Object.entries(plans).filter(([index]) => index !== modelIndex && get().doc.instances[index]))
+            const next  = events.length ? { ...kept, [modelIndex]: { ...pair, events: [...events].sort((a, b) => a[0] - b[0]) } } : kept
+            get().setProjectProperties({ [SWITCH_KEY]: Object.keys(next).length ? JSON.stringify(next) : '' })
+        },
+
         newSketch: () => {
             if (get().past.length && !window.confirm('Descartar as alterações do sketch aberto?'))
                 return
 
-            set({ ...withNetlist(emptyDoc(), null), name: 'sem título', past: [], future: [], selection: [], hover: null, viewports: {}, pasted: 0, message: 'sketch novo' })
+            const doc = emptyDoc()
+            set({ ...withNetlist(doc, null), name: 'sem título', saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, message: 'sketch novo' })
         },
 
         addNote: async () => {
@@ -443,6 +729,11 @@ export const useStore = create<State>((set, get) => {
             set({ doc: { ...doc, settings: { ...doc.settings, [view]: { ...doc.settings[view], [key]: value } } } })
         },
 
+        setPcbSettings: values => {
+            const { doc } = get()
+            set({ doc: { ...doc, settings: { ...doc.settings, pcbView: { ...doc.settings.pcbView, ...values } } }, message: 'ajustes de roteamento gravados no sketch' })
+        },
+
         align: mode => {
             const { doc, library, view, selection } = get()
             get().commit(alignInstances(doc, library, view, selection, mode))
@@ -455,12 +746,12 @@ export const useStore = create<State>((set, get) => {
         },
 
         exportFile: async kind => {
-            const { doc, library, netlist, view, name, simulation } = get()
+            const { doc, library, netlist, view, name, selection } = get()
             const svg = document.getElementById('canvas') as SVGSVGElement | null
             set({ message: 'exportando…' })
 
             try {
-                set({ message: await exportAs(kind, { doc, library, netlist, view, name, transient: simulation.transient, svg, bounds: getDrawing(new Scene(doc, library, view), null).bounds }) })
+                set({ message: await exportAs(kind, { doc, library, netlist, view, name, svg, bounds: getDrawing(new Scene(doc, library, view), null).bounds, selection }) })
             } catch (error) {
                 if (!(error instanceof Error))
                     throw error
@@ -469,22 +760,198 @@ export const useStore = create<State>((set, get) => {
             }
         },
 
+        checkRules: async () => {
+            const board = await pcbBoard(get())
+
+            if (typeof board === 'string')
+                return set({ message: board })
+
+            const { artwork, config } = board
+            const groups              = artwork.conductors.map(getGroupOf(get().doc, board.netlist))
+            set({ message: 'verificando regras de projeto…' })
+
+            const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, keepout: config.keepout })
+
+            if (violations)
+                set({ drc: { violations, frame: artwork.board.frame, keepout: config.keepout }, message: violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil` })
+        },
+
+        fillCopper: async mode => {
+            const cleared = removeFills(get().doc, get().library, get().selection)
+            const board   = await pcbBoard({ ...get(), doc: cleared })
+
+            if (typeof board === 'string')
+                return set({ message: board })
+
+            const { artwork, config, netlist } = board
+            const ground                       = mode === 'ground' ? getGroundNets(cleared, get().library, netlist) : new Set<number>()
+
+            if (typeof ground === 'string')
+                return set({ message: ground })
+
+            const grounded  = artwork.conductors.map(conductor => conductor.key !== null && netlist.index.has(conductor.key) && ground.has(netlist.nets.pcbView?.[netlist.index.get(conductor.key) ?? 0] ?? -1))
+            const faces     = artwork.board.layers > 1 ? ['bottom', 'top'] as const : ['bottom'] as const
+            set({ message: mode === 'ground' ? 'preenchendo com terra…' : 'preenchendo com cobre…' })
+
+            const fragments = await get().pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded, faces: [...faces], mode, keepout: config.fillKeepout })
+
+            if (!fragments)
+                return
+
+            await get().library.load([FILL])
+            get().commit(createFills(cleared, fragments, artwork.board.frame, mode))
+            set({ message: `${fragments.length} áreas de cobre criadas` })
+        },
+
+        // PEÇA "COPPER FILL" SOLTA NA PLACA: SÓ O FRAGMENTO DO PREENCHIMENTO DA FACE DE CIMA (DE BAIXO EM PLACA DE UMA FACE) QUE CONTÉM O PONTO, fillType individual (SPEC 03 §6.1)
+        fillUnit: async point => {
+            const board = await pcbBoard(get())
+
+            if (typeof board === 'string')
+                return set({ message: board })
+
+            const { artwork, config } = board
+            const face      = artwork.board.layers > 1 ? 'top' : 'bottom'
+            const [x, y]    = apply(artwork.board.frame, point[0], point[1])
+            const fragments = await get().pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded: artwork.conductors.map(() => false), faces: [face], mode: 'plain', keepout: config.fillKeepout })
+            const hit       = fragments?.find(fragment => contains(fragment.polygons, x, y))
+
+            if (!hit)
+                return set({ message: 'solte o preenchimento numa área livre da placa' })
+
+            const { doc } = get()
+            get().commit(createFills(doc, [hit], artwork.board.frame, 'individual'))
+            set({ selection: [String(doc.nextIndex)], message: 'preenchimento criado na área do ponto' })
+        },
+
+        removeFills: () => {
+            const { doc, library, selection } = get()
+            const problem                     = boardProblem(doc, library, selection)
+
+            if (problem)
+                return set({ message: problem })
+
+            get().commit(removeFills(doc, library, selection))
+            set({ message: 'preenchimentos removidos' })
+        },
+
+        autoroute: async () => {
+            const { doc, library, view } = get()
+
+            if (view === 'breadboardView')
+                return set({ message: 'o autorouter roteia o esquemático e a PCB' })
+
+            if (view === 'schematicView')
+                return get().autorouteSheet()
+
+            await library.load([VIA, WIRE])
+            const cleared = deleteAutorouted(doc, library, 'pcbView', boardArea(doc, library, get().selection))
+            const board   = await pcbBoard({ ...get(), doc: cleared })
+
+            if (typeof board === 'string')
+                return set({ message: board })
+
+            const { artwork, config, netlist } = board
+            const scene     = new Scene(cleared, library, 'pcbView')
+            const label     = (labels: Uint32Array | undefined, key: string) => labels?.[netlist.index.get(key) ?? 0] ?? -1
+            const keys      = Object.fromEntries(artwork.conductors.flatMap(conductor => conductor.key && netlist.index.has(conductor.key) ? [[conductor.key, [label(netlist.nets.pcbView, conductor.key), label(netlist.routed.pcbView, conductor.key)] as [number, number]]] : []))
+            const terminals = Object.fromEntries(Object.keys(keys).flatMap(key => {
+                const point = scene.getTerminal(key)
+                return point ? [[key, point]] : []
+            }))
+            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: 'autoroteando…' })
+
+            const routed = await get().pcb.request<{ plan: Plan, connected: number, requested: number, vias: number }>({ type: 'route', artwork, keys, terminals, config }, progress => set({ routing: progress }))
+            set({ routing: null })
+
+            if (!routed)
+                return set({ message: 'autorouter cancelado' })
+
+            get().commit(applyPlan(cleared, library, 'pcbView', routed.plan, config.traceWidth, config.holeSize), doc)
+            set({ message: `autorouter: ${routed.connected} de ${routed.requested} ligações, ${routed.vias} vias` })
+        },
+
+        autorouteSheet: async () => {
+            const { doc, library, wasm } = get()
+            await library.load([WIRE])
+
+            const cleared = deleteAutorouted(doc, library, 'schematicView')
+            const sheet   = new Scene(cleared, library, 'schematicView').getSheet()
+            const netlist = wasm ? new Netlist(cleared, library, wasm) : null
+
+            if (!netlist || !sheet.pins.length)
+                return set({ message: 'nada para rotear no esquemático' })
+
+            netlist.update()
+            const label  = (labels: Uint32Array | undefined, key: string) => netlist.index.has(key) ? labels?.[netlist.index.get(key) ?? 0] ?? null : null
+            const config = getConfig(doc.settings.pcbView)
+            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: 'autoroteando o esquemático…' })
+
+            const attempt = (step: number) => {
+                const { grid, frame } = buildSheetGrid(sheet, key => label(netlist.nets.schematicView, key), key => label(netlist.routed.schematicView, key), step)
+                return get().pcb.request<{ plan: Plan, connected: number, requested: number }>({ type: 'sheet', grid, frame, terminals: Object.fromEntries(sheet.pins), cycles: config.cycles }, progress => set({ routing: progress }))
+            }
+
+            const whole  = await attempt(get().getGrid())
+            const half   = whole && whole.connected < whole.requested ? await attempt(get().getGrid() / 2) : null
+            const routed = half && whole && half.connected > whole.connected ? half : whole
+            set({ routing: null })
+
+            if (!routed)
+                return set({ message: 'autorouter cancelado' })
+
+            get().commit(applyPlan(cleared, library, 'schematicView', routed.plan, WIRE_STYLE.schematicView.mils, config.holeSize), doc)
+            set({ message: `autorouter do esquemático: ${routed.connected} de ${routed.requested} ligações` })
+        },
+
+        cancelRouting: () => {
+            get().pcb.stop()
+            set({ routing: null })
+        },
+
+        clearAutorouted: () => {
+            const { doc, library, view } = get()
+            get().commit(deleteAutorouted(doc, library, view))
+        },
+
         setSimulation: patch => set({ simulation: { ...get().simulation, ...patch } }),
+
+        setShow: patch => {
+            const show = { ...get().show, ...patch }
+            writeStored(SHOW_KEY, show)
+            set({ show })
+        },
 
         simulate: async () => {
             const { doc, library, netlist, simulation, simulator } = get()
 
+            const missing = Object.values(getSwitching(doc)).flatMap(plan => [plan.pressed, plan.released]).filter(moduleId => !library.getPart(moduleId))
+
             if (!netlist || !simulation.enabled)
                 return
 
-            const circuit = buildCircuit(doc, library, netlist, simulation.transient)
+            if (missing.length)
+                await library.load(missing)
+
+            const circuit  = buildCircuit(doc, library, netlist, simulation.transient)
+            const previous = simulation.result
+            const before   = previous?.circuit.analysis
+            const after    = circuit.analysis
+            const same     = before?.type === 'tran' && after.type === 'tran' && before.t0 === after.t0 && before.t1 === after.t1 && before.step === after.step && before.initial === after.initial && !simulation.error
+            const keep     = same && previous && simulation.step > 0 && simulation.step < previous.steps - 1 ? simulation.step : 0
 
             if (!circuit.simulated.length)
                 return get().setSimulation({ result: new Simulation(doc, library, circuit, {}), error: 'nenhuma peça simulável ligada ao circuito', busy: false, playing: false })
 
             get().setSimulation({ busy: true })
-            const run    = await simulator.run(circuit.deck)
-            const result = new Simulation(doc, library, circuit, run.vectors)
+            const deck    = keep && previous ? resumeCircuit(circuit, getInitial(previous, circuit, keep), keep).deck : circuit.deck
+            const run     = await simulator.run(deck)
+            const fresh   = after.type === 'tran' && after.initial === 'zero' ? fromRest(run.vectors) : run.vectors
+            const vectors = keep && previous && !run.error ? joinRuns(previous, keep, circuit, run.vectors) : fresh
+            const result  = new Simulation(doc, library, circuit, vectors)
+
+            if (get().simulation.enabled && keep && !run.error)
+                return get().setSimulation({ busy: false, result, error: null })
 
             if (get().simulation.enabled)
                 get().setSimulation({ busy: false, result, error: run.error, step: 0, playing: simulation.transient && !run.error, started: performance.now() })
@@ -501,20 +968,151 @@ export const useStore = create<State>((set, get) => {
 
         seek: step => get().setSimulation({ step, playing: false }),
 
-        addToMine: moduleIds => {
-            const mine = [...new Set([...get().mine, ...moduleIds])]
-            set({ mine })
+        exportMine: () => {
+            const { mine, library } = get()
+            const title             = 'Meus itens'
+            download(`${title}.fzbz`, exportBinBundle(title, mine, library.getBundleFiles(mine)), 'application/zip')
+            set({ message: `${title}.fzbz exportado com ${mine.length} peças` })
+        },
 
-            try {
-                localStorage.setItem(MINE_KEY, JSON.stringify(mine))
-            } catch (error) {
-                set({ message: `bin não gravado: ${error instanceof Error ? error.message : error}` })
-            }
+        addToMine: moduleIds => {
+            const mine   = [...new Set([...get().mine, ...moduleIds])]
+            const failed = writeStored(MINE_KEY, mine)
+            set({ mine, ...failed ? { message: `bin não gravado: ${failed}` } : {} })
+        },
+
+        createBin: (title, moduleIds) => {
+            const userBins = [...get().userBins, { title: title.trim() || `Bin ${get().userBins.length + 1}`, moduleIds: [...new Set(moduleIds)] }]
+            const failed   = writeStored(BINS_KEY, userBins)
+            set({ userBins, message: failed ? `bin não gravado: ${failed}` : `bin ${userBins[userBins.length - 1].title} com ${moduleIds.length} peças` })
+        },
+
+        renameBin: (index, title) => {
+            const userBins = get().userBins.map((bin, i) => i === index && title.trim() ? { ...bin, title: title.trim() } : bin)
+            writeStored(BINS_KEY, userBins)
+            set({ userBins })
+        },
+
+        deleteBin: index => {
+            const userBins = get().userBins.filter((_, i) => i !== index)
+            writeStored(BINS_KEY, userBins)
+            set({ userBins })
+        },
+
+        addToBin: (index, moduleIds) => {
+            const userBins = get().userBins.map((bin, i) => i === index ? { ...bin, moduleIds: [...new Set([...bin.moduleIds, ...moduleIds])] } : bin)
+            const failed   = writeStored(BINS_KEY, userBins)
+            set({ userBins, message: failed ? `bin não gravado: ${failed}` : `${moduleIds.length} peça(s) em ${userBins[index]?.title}` })
+        },
+
+        exportBin: index => {
+            const { userBins, library } = get()
+            const bin                   = userBins[index]
+
+            if (!bin)
+                return
+
+            download(`${bin.title}.fzbz`, exportBinBundle(bin.title, bin.moduleIds, library.getBundleFiles(bin.moduleIds)), 'application/zip')
+            set({ message: `${bin.title}.fzbz exportado com ${bin.moduleIds.length} peças` })
+        },
+
+        // GUARDA NO NAVEGADOR OS ARQUIVOS DE PEÇAS DE PACOTE, PARA MEUS ITENS E OS BINS VOLTAREM NA PRÓXIMA SESSÃO (SPEC 01 §8A.6)
+        keepParts: files => {
+            const kept   = new Map(readStored<BundleFile[]>(PARTS_KEY, []).map(file => [file.name, file]))
+            files.forEach(file => kept.set(file.name, file))
+            const failed = writeStored(PARTS_KEY, [...kept.values()])
+
+            if (failed)
+                set({ message: `peças não guardadas no navegador (${failed}); continuam nesta sessão` })
+        },
+
+        editPart: modelIndex => {
+            const { doc, library } = get()
+            const part             = library.getPart(doc.instances[modelIndex ?? '']?.moduleIdRef ?? '')
+
+            if (modelIndex && !isEditable(part))
+                return set({ message: 'esta peça não abre no editor de peças' })
+
+            set({ editing: modelIndex })
+        },
+
+        // PEÇA GRAVADA NO EDITOR: ENTRA NO ACERVO COMO PEÇA DE PACOTE, VAI PARA MEUS ITENS E PODE SUBSTITUIR A INSTÂNCIA EDITADA (SPEC 01 §8A.5)
+        installPart: async (files, replace) => {
+            const { library } = get()
+            const [moduleId]  = library.addBundle({ sketch: null, parts: files.filter(file => file.name.startsWith('part.')), svgs: files.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
+            await library.load(moduleId ? [moduleId] : [])
+            const part        = library.getPart(moduleId ?? '')
+
+            if (!part)
+                return set({ message: 'a peça gravada não carregou' })
+
+            get().keepParts(files)
+            get().addToMine([part.moduleId])
+            set({ imported: [...get().imported.filter(entry => entry.moduleId !== part.moduleId), entryOf(part)], editing: null })
+
+            if (replace)
+                await get().swap(replace, part.moduleId)
+
+            set({ message: `${part.title} gravada em Meus itens${replace ? ' e trocada no sketch' : ''}` })
         }
     }
 })
 
-const signature = (doc: Doc) => Object.values(doc.instances).filter(instance => instance.moduleIdRef !== WIRE).map(instance => `${instance.modelIndex}:${instance.moduleIdRef}:${instance.title}:${JSON.stringify(instance.properties)}`).join('|')
+const GROUNDED = new Set(['gnd', 'vss', 'ground'])
+
+// DEPOIS DE GIRAR OU ESPELHAR, O PRIMEIRO TERMINAL VOLTA À GRADE (NO ESQUEMÁTICO E NA PCB; NA PROTOBOARD O ENCAIXE DECIDE)
+const settle = (doc: Doc, selection: string[]) => {
+    const { library, view, isAligned, gridOf } = useStore.getState()
+    return view !== 'breadboardView' && isAligned(view) ? alignToGrid(doc, library, view, selection, gridOf(view)) : doc
+}
+
+// CAIXA NA CENA DA PCB DA PLACA DAS OPERAÇÕES; NULO SEM PLACA OU COM VÁRIAS E NENHUMA SELECIONADA (SPEC 03 §2.1)
+const boardArea = (doc: Doc, library: Library, selection: string[]) => {
+    const scene = new Scene(doc, library, 'pcbView')
+    const host  = pickBoard(doc, library, scene, selection).host
+    return host ? scene.getBounds(host.modelIndex) : null
+}
+
+const removeFills = (doc: Doc, library: Library, selection: string[]) => {
+    const area  = boardArea(doc, library, selection)
+    const scene = new Scene(doc, library, 'pcbView')
+    const fills = Object.values(doc.instances).filter(instance => {
+        const box = library.getPart(instance.moduleIdRef)?.kind === 'copperFill' ? scene.getBounds(instance.modelIndex) : null
+        return area && box && boxesTouch(box, area)
+    })
+    return fills.reduce((current, instance) => removeInstance(current, instance.modelIndex), doc)
+}
+
+// PLACA PRONTA PARA DRC, PREENCHIMENTO E AUTOROUTER: NETLIST DO DOCUMENTO, ARTE DA PCB E AJUSTES; OU O MOTIVO DE NÃO HAVER
+const pcbBoard = async ({ doc, library, wasm, selection }: { doc: Doc, library: Library, wasm: NetlistWasm | null, selection: string[] }) => {
+    const problem = boardProblem(doc, library, selection)
+    const artwork = wasm && !problem ? getArtwork(doc, library, await getClipper(), new Scene(doc, library, 'pcbView'), selection) : null
+
+    if (!wasm || !artwork)
+        return problem ?? 'é preciso uma placa na vista PCB'
+
+    const netlist = new Netlist(doc, library, wasm)
+    netlist.update()
+    return { artwork, netlist, config: getConfig(doc.settings.pcbView) }
+}
+
+// NETS DE TERRA DO PREENCHIMENTO: AS DAS SEMENTES MARCADAS, SENÃO A ÚNICA NET COM CONECTOR gnd/vss/ground (SPEC 03 §6.1)
+const getGroundNets = (doc: Doc, library: Library, netlist: Netlist) => {
+    const seeds     = Object.values(doc.instances).flatMap(instance => (instance.views.pcbView?.connectors ?? []).filter(connector => connector.groundFillSeed).map(connector => keyOf(instance.modelIndex, connector.id)))
+    const named     = netlist.keys.filter(key => GROUNDED.has(library.getPart(doc.instances[splitKey(key)[0]]?.moduleIdRef ?? '')?.connectors.find(connector => connector.id === splitKey(key)[1])?.name.trim().toLowerCase() ?? ''))
+    const netOf     = (key: string) => netlist.nets.pcbView?.[netlist.index.get(key) ?? 0] ?? -1
+    const nets      = new Set((seeds.length ? seeds : named).filter(key => netlist.index.has(key)).map(netOf))
+
+    if (!nets.size)
+        return 'nenhum conector de terra: marque uma semente no menu de um conector'
+
+    if (!seeds.length && nets.size > 1)
+        return 'há mais de uma net de terra: marque as sementes no menu de um conector'
+
+    return nets
+}
+
+const signature = (doc: Doc) => [...Object.values(doc.instances).filter(instance => instance.moduleIdRef !== WIRE).map(instance => `${instance.modelIndex}:${instance.moduleIdRef}:${instance.title}:${JSON.stringify(instance.properties)}`), ...doc.probes.map(probe => `${probe.id}:${probe.kind}:${probe.key}:${probe.flip}`), JSON.stringify(doc.projectProperties)].join('|')
 
 let pending: ReturnType<typeof setTimeout> | undefined
 

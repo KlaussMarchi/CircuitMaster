@@ -4,11 +4,12 @@ import { readBundle } from '../src/core/Sketch'
 import { emptyDoc, fromSketch, keyOf } from '../src/core/Document'
 import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
-import { parseXml, walk } from '../src/core/Xml'
-import type { Point } from '../src/core/Geometry'
+import { childrenOf, parseXml, tagOf, walk, type XmlElement } from '../src/core/Xml'
+import { apply, boxOf, multiply, parseTransform, unionBoxes, type Box, type Matrix, type Point } from '../src/core/Geometry'
+import { SvgFile } from '../src/core/SvgFile'
 import { Scene } from '../src/engine/Scene'
 import { createInstance, createWire, moveInstances, rotateInstances, snapConnections } from '../src/engine/Edit'
-import { getDrawing, getImageText } from '../src/engine/Drawing'
+import { getDrawing, getImageText, getUpright } from '../src/engine/Drawing'
 import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
 
 type View = typeof VIEWS[number]
@@ -16,10 +17,28 @@ type View = typeof VIEWS[number]
 const RESISTOR   = 'ResistorModuleID'
 const BREADBOARD = 'BreadboardModuleID'
 const WIRE       = 'WireModuleID'
+const ARDUINO    = 'arduino_Uno_Rev3(fix)'
+const NET_LABEL  = 'v5NetLabelModuleID'
+const TWO_LINES  = '<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="1in" viewBox="0 0 100 100"><g id="label" font-family="Droid Sans" font-size="10"><text x="10" y="40">AB</text><text x="10" y="60">CDEF</text></g></svg>'
+
+// IDENTIDADE, ESPELHO HORIZONTAL, 180°, ESPELHO VERTICAL, 90° E 90° ESPELHADO
+const POSES: Matrix[] = [[1, 0, 0, 1, 0, 0], [-1, 0, 0, 1, 0, 0], [-1, 0, 0, -1, 0, 0], [1, 0, 0, -1, 0, 0], [0, 1, -1, 0, 0, 0], [0, 1, 1, 0, 0, 0]]
 
 const everywhere = (point: Point) => Object.fromEntries(VIEWS.map(view => [view, point])) as Record<View, Point>
 
 const distance = (a: Point | null, b: Point | null) => a && b ? Math.hypot(a[0] - b[0], a[1] - b[1]) : Infinity
+
+const outlines = (text: string) => {
+    const found: XmlElement[] = []
+    walk(parseXml(text), element => tagOf(element) === 'g' && childrenOf(element).some(child => tagOf(child) === 'path') && found.push(element))
+    return found
+}
+
+const inkOf = (group: XmlElement) => {
+    const m       = parseTransform(group.getAttribute('transform'))
+    const numbers = childrenOf(group).flatMap(path => path.getAttribute('d')?.match(/-?[\d.]+/g)?.map(Number) ?? [])
+    return boxOf(Array.from({ length: numbers.length / 2 }, (_, k) => apply(m, numbers[2 * k], numbers[2 * k + 1])))
+}
 
 describe.skipIf(!HAS_FRITZING)('motor de cena e desenho', () => {
     it('desenha toda peça visível com SVG e todo ratsnest dos exemplos', async () => {
@@ -47,7 +66,7 @@ describe.skipIf(!HAS_FRITZING)('motor de cena e desenho', () => {
                 const parts   = drawing.items.filter(item => item.type === 'part')
                 totals.shown    += shown.length
                 totals.drawn    += new Set(drawing.items.map(item => item.modelIndex)).size
-                totals.missing  += shown.filter(instance => !scene.isWire(instance.modelIndex) && !library.getSvg(instance.moduleIdRef, view)).length
+                totals.missing  += shown.filter(instance => !scene.isWire(instance.modelIndex) && library.getPart(instance.moduleIdRef)?.kind !== 'note' && !library.getSvg(instance.moduleIdRef, view)).length
                 totals.ratsnest += drawing.ratsnest.length
                 totals.legs     += parts.reduce((sum, item) => sum + item.legs.length, 0)
 
@@ -131,5 +150,40 @@ describe.skipIf(!HAS_FRITZING)('motor de cena e desenho', () => {
         const snapped = snapConnections(moveInstances(base, library, 'breadboardView', ['2'], dx, dy), library, ['2'])
 
         expect(snapped.edges.map(edge => edge.join('|'))).toContain([hole?.[0] ?? '', keyOf('2', 'connector0')].sort().join('|'))
+    })
+
+    it('texto do esquemático fica legível e no lugar com a peça espelhada ou de cabeça para baixo', async () => {
+        const library = makeLibrary(true)
+        await library.load([ARDUINO, NET_LABEL])
+
+        const label   = createInstance(emptyDoc(), library, NET_LABEL, everywhere([0, 0])).instances['1']
+        const arduino = library.getPart(ARDUINO)
+        const lines   = new SvgFile(TWO_LINES)
+        const cases   = [[arduino, library.getSvg(ARDUINO, 'schematicView')], [library.getPart(NET_LABEL), library.getInstanceSvg(label, 'schematicView')]] as const
+        lines.update()
+
+        for (const [part, svg] of cases) {
+            expect(part && svg).toBeTruthy()
+
+            for (const m of POSES) {
+                const plain  = outlines(part && svg ? getImageText(part, svg, 'schematicView', { fonts: library.fonts }) : '')[0]
+                const turned = outlines(part && svg ? getImageText(part, svg, 'schematicView', { fonts: library.fonts, upright: getUpright(m) }) : '')[0]
+                const total  = multiply(m, parseTransform(turned.getAttribute('transform')))
+                const moved  = inkOf(turned)?.map((value, i) => value - (inkOf(plain)?.[i] ?? NaN))
+
+                expect(total[0] * total[3] - total[1] * total[2], `${part?.moduleId} ${m}`).toBeGreaterThan(0)
+                expect(total[0], `${part?.moduleId} ${m}`).toBeGreaterThan(-0.5)
+                expect(Math.max(...(moved ?? [NaN]).map(Math.abs)), `${part?.moduleId} ${m}`).toBeLessThan(1e-6)
+            }
+        }
+
+        const before = outlines(arduino ? getImageText(arduino, lines, 'schematicView', { fonts: library.fonts }) : '').map(inkOf)
+        const after  = outlines(arduino ? getImageText(arduino, lines, 'schematicView', { fonts: library.fonts, upright: getUpright([-1, 0, 0, -1, 0, 0]) }) : '').map(inkOf)
+        const center = (box: Box | null) => box ? [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2] : [NaN, NaN]
+        const block  = center(unionBoxes(before))
+
+        expect(after).toHaveLength(2)
+        expect(center(after[0])[1]).toBeGreaterThan(center(after[1])[1])
+        after.forEach((box, i) => center(box).forEach((value, k) => expect(value + center(before[i])[k]).toBeCloseTo(2 * block[k], 6)))
     })
 })

@@ -1,5 +1,6 @@
 import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
+import { haystackOf, prepare, rankParts, type Words } from '../../core/Search'
 
 type Listing = { root: string, path: string, size: number, mtime: number }
 
@@ -31,11 +32,12 @@ const CONCURRENCY = 16
 const PROGRESS    = 100
 const SEARCH_MAX  = 300
 const BINS        = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
-
 const scope = self as unknown as { postMessage: (message: unknown) => void, onmessage: ((event: MessageEvent) => void) | null }
 
 let entries: Entry[] = []
 let byId = new Map<string, Entry>()
+let words = new Map<string, Words>()
+let inBins: Set<string>[] = []
 
 const openDb = () => new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
@@ -70,8 +72,7 @@ const toEntry = ({ root, path }: Listing, text: string): Entry | null => {
     if (!part)
         return null
 
-    const fields = [part.title, part.description.replace(/<[^>]*>/g, ' '), part.url, part.author, part.moduleId, ...part.tags, ...Object.entries(part.properties).flat()]
-    return { moduleId: part.moduleId, root, path, title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? '', obsolete: path.startsWith('obsolete/'), properties: part.properties, haystack: fields.join('\n').toLowerCase() }
+    return { moduleId: part.moduleId, root, path, title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? '', obsolete: path.startsWith('obsolete/'), properties: part.properties, haystack: haystackOf(part) }
 }
 
 const fetchText = async (url: string) => {
@@ -121,6 +122,7 @@ const index = async () => {
 
     byId    = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
     entries = [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
+    words   = new Map(entries.map(entry => [entry.moduleId, prepare(entry)]))
     scope.postMessage({ type: 'ready', count: entries.length, total: listings.length })
 
     const bins = await Promise.all(BINS.map(async ([title, file]) => {
@@ -137,16 +139,12 @@ const index = async () => {
         return { title, sections: [...sections].map(([name, items]) => ({ title: name, entries: items })) }
     }))
 
+    inBins = bins.map(bin => new Set(bin.sections.flatMap(section => section.entries.map(entry => entry.moduleId))))
     scope.postMessage({ type: 'bin', bins })
 }
 
-// TÍTULOS QUE CONTÊM TODOS OS TERMOS PRIMEIRO; A ORDENAÇÃO ESTÁVEL MANTÉM A ORDEM ALFABÉTICA DENTRO DE CADA GRUPO
-const search = (text: string) => {
-    const terms   = text.toLowerCase().split(/\s+/).filter(Boolean)
-    const found   = entries.filter(entry => !entry.obsolete && terms.every(term => entry.haystack.includes(term)))
-    const inTitle = (entry: Entry) => terms.every(term => entry.title.toLowerCase().includes(term)) ? 0 : 1
-    return found.sort((a, b) => inTitle(a) - inTitle(b)).slice(0, SEARCH_MAX).map(strip)
-}
+// BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR
+const search = (text: string) => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins).slice(0, SEARCH_MAX).map(strip)
 
 const indexed = index()
 

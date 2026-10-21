@@ -8,8 +8,10 @@ import { getProperty, getSpice, type Circuit } from '../../core/Spice'
 import type { Vectors } from '../../core/Ngspice'
 import { milsToPx } from '../../core/Units'
 
-export type Trace  = { color: string, points: Point[], label: string, marker: number, at: Point }
-export type Effect = { smoke: boolean, color: string | null, light: number, display: string[] | null, arrow: 'cw' | 'ccw' | null, scope: Partial<Record<'breadboardView' | 'schematicView', Trace[]>> | null }
+export type Trace   = { color: string, points: Point[], label: string, marker: number, at: Point }
+export type Effect  = { smoke: boolean, color: string | null, light: number, display: string[] | null, arrow: 'cw' | 'ccw' | null, scope: Partial<Record<'breadboardView' | 'schematicView', Trace[]>> | null }
+export type Reading = { voltage: ArrayLike<number> | null, current: ArrayLike<number> | null }
+export type Stats   = { value: number, min: number, max: number, mean: number, rms: number, pp: number, frequency: number | null }
 
 const FAMILIES: [string[], string][] = [[['capacitor'], 'capacitor'], [['diode'], 'diode'], [['led'], 'led'], [['resistor'], 'resistor'], [['multimeter'], 'multimeter'], [['dc motor'], 'motor'], [['line sensor', 'distance sensor'], 'sensor'], [['battery', 'voltage source'], 'source'], [['potentiometer', 'sparkfun trimpot'], 'potentiometer'], [['oscilloscope'], 'oscilloscope']]
 
@@ -33,6 +35,8 @@ const SCOPE_COLORS     = ['#ffff50', 'lightgreen', 'lightblue', 'pink']
 const SCOPE_LEGEND     = 1.35      // LEGENDA ABAIXO DA TELA, EM UNIDADES DA MARGEM SUPERIOR
 const SCOPE_SCREEN     = { width: 3376.022, height: 2700.072, breadboardView: [290.544, 259.061], schematicView: [906.07449, 354.60801] } as const
 const SI_LETTERS       = [['p', 1e-12], ['n', 1e-9], ['µ', 1e-6], ['m', 1e-3], ['', 1], ['k', 1e3], ['M', 1e6], ['G', 1e9], ['T', 1e12]] as const
+const HYSTERESIS       = 0.1        // FRAÇÃO DO PICO A PICO PARA CONTAR UMA PASSAGEM PELA MÉDIA
+const FLAT             = 1e-6       // PICO A PICO MENOR QUE ISSO DO NÍVEL É RUÍDO NUMÉRICO DO SOLVER
 
 export const ledBase = (part: Part, instance: Instance) => LED_COLORS[getProperty(part, instance, 'color')] ?? null
 
@@ -53,6 +57,30 @@ export const toDisplay = (value: number) => {
     const text    = `${(x / pick[1]).toFixed(Math.max(0, 4 - point))}${pick[0]}`.replace('k', 'K')
     const visible = text.replace('.', '').length
     return ' '.repeat(Math.max(0, DISPLAY_DIGITS - visible)) + text
+}
+
+// MEDIDAS DE UMA SÉRIE ATÉ O PASSO last, PONDERADAS PELO TEMPO NO TRANSITÓRIO (MÉDIA = NÍVEL DC, RMS, PICO A PICO E FREQUÊNCIA PELAS SUBIDAS PELA MÉDIA)
+export const getStats = (values: ArrayLike<number>, time: ArrayLike<number> | null, last: number): Stats => {
+    const count = Math.max(1, Math.min(last + 1, values.length))
+    const list  = Array.from({ length: count }, (_, i) => values[i])
+    const span  = time && count > 1 ? time[count - 1] - time[0] : 0
+    const area  = (read: (value: number) => number) => span > 0 && time ? list.slice(1).reduce((sum, value, i) => sum + (read(value) + read(list[i])) / 2 * (time[i + 1] - time[i]), 0) / span : list.reduce((sum, value) => sum + read(value), 0) / count
+    const [min, max] = [Math.min(...list), Math.max(...list)]
+    const mean  = area(value => value)
+    const band  = (max - min) * HYSTERESIS / 2
+    const rises: number[] = []
+    let low     = list[0] < mean - band
+
+    list.forEach((value, i) => {
+        if (low && value > mean + band)
+            rises.push(time?.[i] ?? i)
+
+        low = value < mean - band ? true : value > mean + band ? false : low
+    })
+
+    const flat      = max - min <= Math.max(FLAT * Math.max(Math.abs(max), Math.abs(min)), TINY)
+    const frequency = time && rises.length > 1 && !flat ? (rises.length - 1) / (rises[rises.length - 1] - rises[0]) : null
+    return { value: list[count - 1], min, max, mean, rms: Math.sqrt(Math.max(0, area(value => value * value))), pp: flat ? 0 : max - min, frequency }
 }
 
 export const familyOf = (part: Part) => {
@@ -112,8 +140,8 @@ export class Simulation {
     getCurrentName(modelIndex: string, sub = '') {
         const instance = this.doc.instances[modelIndex]
         const part     = this.getPart(modelIndex)
-        const first    = part ? getSpice(part).lines[0] ?? '' : ''
-        const device   = (first[first.toLowerCase().indexOf('{instancetitle}') - 1] ?? '').toLowerCase()
+        const text     = part ? getSpice(part).lines.join('\n') : ''
+        const device   = (text[text.toLowerCase().indexOf('{instancetitle}') - 1] ?? '').toLowerCase()
         const title    = `${(instance?.title ?? '').replaceAll(' ', '_').toLowerCase()}${sub.toLowerCase()}`
         const prefixed = title.startsWith(device) ? title : `${device}${title}`
 
@@ -278,7 +306,7 @@ export class Simulation {
             const current = this.getCurrent(modelIndex, step)
             const short   = Math.abs(current) > SAFETY * this.getMax(modelIndex, 'voltage') / this.getMax(modelIndex, 'internal resistance')
             const lab     = part.moduleId.includes('LabDCPowerSupply')
-            return { ...effect, smoke: short, display: lab ? [toDisplay(this.getBetween(keys[0], keys[1], step)), toDisplay(-current)] : null }
+            return { ...effect, smoke: short, display: lab ? [toDisplay(this.getBetween(keyOf(modelIndex, 'connector0'), keyOf(modelIndex, 'connector1'), step)), toDisplay(-current)] : null }
         }
 
         if (family === 'potentiometer') {
@@ -297,4 +325,62 @@ export class Simulation {
     getEffects(step: number) {
         return new Map(this.circuit.simulated.map(modelIndex => [modelIndex, this.getEffect(modelIndex, step)]))
     }
+
+    // SÉRIES DE UMA PONTA DE PROVA: TENSÃO DA NET EM RELAÇÃO AO TERRA E CORRENTE PELA FONTE DE 0 V DO CORTE (ZERO COM UM LADO EM ABERTO) (SPEC 04 §8.7)
+    getProbe(id: string): Reading {
+        const meter   = this.circuit.meters.get(id)
+        const node    = meter?.node ?? null
+        const raw     = meter?.current ? this.vectors[meter.current] : undefined
+        const voltage = node === '0' ? new Float64Array(this.steps) : node ? this.vectors[`v(${node})`] ?? this.vectors[node] ?? null : null
+        const current = raw && meter ? Float64Array.from(raw, value => value * meter.sign) : meter?.open ? new Float64Array(this.steps) : null
+        return { voltage, current }
+    }
+}
+
+// COM O CIRCUITO DESCARREGADO (UIC) O NGSPICE NÃO GRAVA t = 0: ENTRA NO COMEÇO O INSTANTE ANTES DE LIGAR, COM TUDO EM ZERO (SPEC 04 §5.5)
+export const fromRest = (vectors: Vectors): Vectors => {
+    if (!vectors.time?.length || vectors.time[0] <= 0)
+        return vectors
+
+    return Object.fromEntries(Object.entries(vectors).map(([name, values]) => {
+        const joined = new Float64Array(values.length + 1)
+        joined.set(values, 1)
+        return [name, joined]
+    }))
+}
+
+// TENSÃO NO PASSO keep DE CADA NÓ DO CIRCUITO NOVO, LIDA NO NÓ ANTIGO DE UMA PORTA EM COMUM (A NUMERAÇÃO DAS NETS PODE MUDAR) (SPEC 04 §5.3)
+export const getInitial = (previous: Simulation, circuit: Circuit, keep: number): [string, number][] => [...new Map([...circuit.nodes].flatMap(([key, node]) => {
+    const old = previous.circuit.nodes.get(key)
+    return node !== '0' && old ? [[node, previous.getNodeSeries(old)[keep] ?? 0] as const] : []
+})).entries()]
+
+// HISTÓRICO ATÉ O PASSO keep (INCLUSIVE: É A CONDIÇÃO INICIAL) SEGUIDO DA CONTINUAÇÃO ATÉ COMPLETAR OS PASSOS DA JANELA, QUE COM UIC COMEÇA EM t = Δ: TEMPO DESLOCADO, TENSÃO DE NÓ PELA PORTA EM COMUM, O RESTO PELO NOME (ZERO SE NÃO EXISTIA) (SPEC 04 §5.3)
+export const joinRuns = (previous: Simulation, keep: number, circuit: Circuit, vectors: Vectors): Vectors => {
+    const offset = previous.getTime(keep)
+    const half   = (offset - previous.getTime(keep - 1)) / 2
+    const skip   = (vectors.time?.[0] ?? half) < half ? 1 : 0
+    const older  = new Map<string, string>()
+
+    circuit.nodes.forEach((node, key) => {
+        const old = previous.circuit.nodes.get(key)
+
+        if (old && !older.has(node))
+            older.set(node, old)
+    })
+
+    const history = (name: string) => {
+        const node   = name.match(/^v\((.+)\)$/)?.[1]
+        const old    = node !== undefined ? older.get(node) : undefined
+        const series = name === 'time' ? previous.vectors.time : node !== undefined ? old !== undefined ? previous.getNodeSeries(old) : undefined : previous.vectors[name]
+        return series ? Float64Array.from({ length: keep + 1 }, (_, i) => series[i] ?? 0) : new Float64Array(keep + 1)
+    }
+
+    return Object.fromEntries(Object.entries(vectors).map(([name, values]) => {
+        const after  = values.subarray(skip, skip + previous.steps - keep - 1)
+        const joined = new Float64Array(keep + 1 + after.length)
+        joined.set(history(name))
+        joined.set(name === 'time' ? after.map(t => t + offset) : after, keep + 1)
+        return [name, joined]
+    }))
 }

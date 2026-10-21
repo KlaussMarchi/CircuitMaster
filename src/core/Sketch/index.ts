@@ -2,7 +2,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { childNamed, childrenNamed, childrenOf, parseXml, tagOf, textOf, type XmlElement } from '../Xml'
 import { VIEWS, type ViewName } from '../Layer'
 import type { Matrix, Point } from '../Geometry'
-import type { Doc } from '../Document'
+import { PROBES_KEY, type Doc } from '../Document'
 
 export type Connect        = { modelIndex: string, connectorId: string, layer: string }
 export type Leg            = { points: Point[], beziers: (number[] | null)[] }
@@ -31,7 +31,7 @@ export type Sketch = {
 }
 
 export type BundleFile = { name: string, text: string }
-export type Bundle     = { sketch: Sketch | null, parts: BundleFile[], svgs: BundleFile[], others: string[] }
+export type Bundle     = { sketch: Sketch | null, parts: BundleFile[], svgs: BundleFile[], others: string[], bin: Bin | null }
 
 const INSTANCE_ATTRIBUTES = new Set(['moduleIdRef', 'modelIndex', 'originalModelIndex', 'path'])
 const TRANSFORM_KEYS      = ['m11', 'm12', 'm21', 'm22', 'm31', 'm32']
@@ -142,12 +142,14 @@ export const readBundle = (bytes: Uint8Array): Bundle => {
     const names  = Object.keys(files)
     const text   = (name: string) => strFromU8(files[name])
     const sketch = names.find(name => name.endsWith('.fz'))
+    const bin    = names.find(name => name.endsWith('.fzb'))
     const pick   = (prefix: string, suffix: string) => names.filter(name => name.startsWith(prefix) && name.endsWith(suffix)).map(name => ({ name, text: text(name) }))
     return {
         sketch: sketch ? readSketch(text(sketch)) : null,
         parts: pick('part.', '.fzp'),
         svgs: pick('svg.', '.svg'),
-        others: names.filter(name => name !== sketch && !name.startsWith('part.') && !name.startsWith('svg.'))
+        others: names.filter(name => name !== sketch && !name.startsWith('part.') && !name.startsWith('svg.')),
+        bin: bin ? readBin(text(bin)) : null
     }
 }
 
@@ -243,12 +245,23 @@ export const exportSketch = (doc: Doc) => {
         partners.set(b, [...partners.get(b) ?? [], a])
     })
 
-    const properties = Object.entries(doc.projectProperties).map(([key, value]) => element(key, { value })).join('')
+    const probes     = doc.probes.length ? { [PROBES_KEY]: JSON.stringify(doc.probes) } : {}
+    const properties = Object.entries({ ...doc.projectProperties, ...probes }).map(([key, value]) => element(key, { value })).join('')
     const views      = Object.entries(doc.settings).map(([name, attributes]) => element('view', { ...attributes, name })).join('')
     const instances  = Object.values(doc.instances).map(instance => instanceXml(doc, instance, partners)).join('\n')
     const body       = element('project_properties', {}, properties) + (views ? element('views', {}, views) : '') + element('instances', {}, `\n${instances}\n`)
     return `<?xml version="1.0" encoding="UTF-8"?>\n${element('module', { fritzingVersion: doc.fritzingVersion || DEFAULT_VERSION }, `\n${body}\n`)}\n`
 }
+
+// BIN .fzb: UM .fz REDUZIDO COM UMA INSTÂNCIA POR PEÇA NA ORDEM DE EXIBIÇÃO, SÓ COM A VISTA DE ÍCONE (SPEC 01 §6.3)
+export const exportBin = (title: string, moduleIds: string[]) => {
+    const icon      = element('views', {}, element('iconView', { layer: 'icon' }, element('geometry', { z: -1, x: -1, y: -1 })))
+    const instances = moduleIds.map((moduleIdRef, i) => element('instance', { moduleIdRef, modelIndex: i + 1, path: '' }, icon)).join('\n')
+    return `<?xml version="1.0" encoding="UTF-8"?>\n${element('module', { fritzingVersion: DEFAULT_VERSION, icon: `${title}.png` }, `\n${element('title', {}, escapeXml(title))}\n${element('instances', {}, `\n${instances}\n`)}\n`)}\n`
+}
+
+// PACOTE .fzbz: O .fzb E AS PEÇAS NÃO CORE QUE ELE LISTA (SPEC 01 §6.3)
+export const exportBinBundle = (title: string, moduleIds: string[], files: BundleFile[]) => zipSync(Object.fromEntries([[`${title}.fzb`, strToU8(exportBin(title, moduleIds))], ...files.map(file => [file.name, strToU8(file.text)] as const)]))
 
 // PACOTE .fzz: O .fz E AS PEÇAS QUE VIERAM DE PACOTES (part.* E svg.*), QUE O FRITZING NÃO TEM INSTALADAS (SPEC 01 §6.1)
 export const exportBundle = (doc: Doc, name: string, files: BundleFile[]) => zipSync(Object.fromEntries([[`${name}.fz`, strToU8(exportSketch(doc))], ...files.map(file => [file.name, strToU8(file.text)] as const)]))

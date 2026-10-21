@@ -35,7 +35,12 @@ Larguras e raios seguem a mesma escala (sem inversão).
 
 Para cada saída, entram apenas itens **visíveis na PCB** cuja caixa **colide com a placa**, nas camadas listadas,
 em ordem de $z$, renderizados "só preto" (cores ignoradas), com pernas elásticas incluídas como traços e
-**elementos de ponto terminal ocultos** (o retângulo `terminalId` nunca vai para o cobre).
+**elementos de ponto terminal ocultos** (o retângulo `terminalId` nunca vai para o cobre). Vale para peças e
+para trilhas: trilha cuja caixa não toca a caixa da placa (ex.: trilha de outra placa do mesmo sketch) não entra.
+
+**Qual placa.** Com uma só placa na vista PCB, é ela. Com várias, exportação para produção, DRC, autorouter e
+preenchimento de cobre usam a placa **selecionada**; sem exatamente uma placa selecionada a operação não roda e
+pede que o usuário selecione a placa, porque cada uma trabalha com uma placa por vez.
 
 | Saída | Camadas de origem | Observações |
 |---|---|---|
@@ -369,6 +374,15 @@ compatível no `.fz`.
 Itens `…BlockerModuleID` (retângulos de exclusão) entram em $C'$ como obstáculo: o fill não ocupa a área e o
 autorouter evita.
 
+### 6.4 Conferência com o Fritzing
+
+Refazendo os dois planos gravados no exemplo Knock (folga 10 mil): a face de baixo dá 5,014 in² contra 5,015 in²
+(−0,02%); a de cima dá 5,068 contra 4,649 in² (+9%). Em nenhuma das faces o Fritzing cobre algo que o
+CircuitMaster deixa vazio (menos de 0,1% da área); o excesso de cima está 97% numa região só — um recorte
+retangular de cantos redondos em volta do resistor e do piezo onde o arquivo atual não tem cobre nenhum na face de
+cima. O plano de cima do exemplo foi gravado com outra disposição de peças (o de baixo, refeito, não tem esse
+recorte): é dado antigo no `.fzz`, não diferença de regra.
+
 ---
 
 ## 7. DRC (DESIGN RULE CHECK)
@@ -407,7 +421,15 @@ Para cada face $f$:
 6. Saída: lista de violações `{tipo, face, itens, polígono, ponto central}` para destaque na vista e navegação.
 
 Equivalência com a referência: diferenças só são aceitas em casos-limite de discretização (distância entre
-$k - 1/\mathrm{dpi}$ e $k$).
+$k - 1/\mathrm{dpi}$ e $k$). As dilatações usam $k/2 - 0{,}01$ mil (e $k - 0{,}02$ na borda): distância igual a $k$
+passa, e bordas encostadas não viram faixa de área positiva pelo arredondamento das coordenadas inteiras do
+Clipper2.
+
+Nos 98 exemplos atuais do Fritzing, verificando cada placa sozinha (§2.1), 6 acusam violação, todas medidas e
+reais: curto de cobre (Arduino-no-FTDI, Workshop_03_FlipFlop-w-Button, trilha sobre pad de outra net), trilha a
+9,33 mil de pads de CI (Shift_Register_2x), peça fora da placa (full_wave_rectifier) e peças a 1,4–3 mil da borda
+(measure_dc_current, simple_button). O color-fader tem duas placas e cada uma passa; verificar uma delas com as
+trilhas da outra acusaria, falsamente, trilhas fora da placa.
 
 Regras extras opcionais (não existem na referência, desligadas por padrão): largura mínima de trilha, anel
 mínimo, furo–cobre, serigrafia sobre pad, ratsnest pendente.
@@ -453,6 +475,45 @@ mínimo, furo–cobre, serigrafia sobre pad, ratsnest pendente.
 - Pós-processamento: fusão de segmentos colineares e opção de suavização a 45°.
 - Validação obrigatória do resultado pelo DRC vetorial antes de aplicar a transação.
 - Cancelável, com progresso por ciclo e melhor resultado parcial disponível.
+
+### 8.3.1 Placa automática e faces (extensão do CircuitMaster)
+
+- **Criar placa e rotear** (aba Roteamento, PCB sem placa): cria `TwoLayerRectanglePCBModuleID` com `width` e
+  `height` (mm) iguais à caixa das peças que têm cobre na PCB (instrumentos e símbolos ficam de fora) mais 0,15 in
+  de folga em cada lado, com o canto nessa caixa, e roda o autorouter.
+- **Faces** (Ambas, Topo, Base no cabeçalho do quadro na PCB): a face não escolhida é desenhada com opacidade 0,18
+  (camadas `copper0`, `copper0trace`, `silkscreen0` e `groundplane` são de baixo; as de número 1 e `silkscreen`, de
+  cima); com Base escolhida, as trilhas desenhadas à mão vão para `copper0trace`.
+
+### 8.4 Modelo de grade do CircuitMaster
+
+- Passo $g = \max(w, k)/2$ (metade do passo de referência, para passar entre pinos com folga exata); camada 0 =
+  cobre de cima, camada 1 = de baixo (placa de uma face: só a de baixo). Centro da célula $(x, y)$ =
+  $((x + ½)g,\ (y + ½)g)$ no referencial da placa.
+- Cada célula guarda um **dono**: livre, bloqueada ou a net $n$ (a célula está a menos de $k + w/2$ do cobre de $n$
+  e só $n$ pode passar). Célula na zona de duas nets, fora de $P \ominus (k + w/2)$, ou em cobre sem conector, é
+  bloqueada. Uma segunda tabela marca as células de **pad** de cada net (centro dentro do cobre do conector; pad
+  menor que a célula ganha a célula do seu centro): o pad continua acessível à sua net mesmo bloqueado.
+- Nets a rotear: as do ratsnest da PCB (conectividade completa vista na PCB); os grupos já ligados pela relação
+  roteada (trilhas, barramentos) são as subnets; trilhas existentes são cobre da net (não são alvo).
+- Por net (ordem crescente de pinos alheios dentro da caixa da net): árvore = primeira subnet; repete ligando a
+  subnet mais próxima da árvore por A* multi-origem (custo 1 por passo em 4 direções, +7 em célula "evitar", via
+  +2000 só se o disco de raio $(d/2 + a - w/2)/g$ estiver acessível nas duas camadas; heurística = distância de
+  Manhattan à caixa do alvo). O caminho entra na árvore (permite junção em T).
+- Ao aceitar um caminho, o disco de raio $(w + k)/g$ em volta de cada célula (e $(d/2 + a + k + w/2)/g$ em volta
+  de cada via, nas duas camadas) passa a ser da net, ou bloqueado se era de outra; o anel seguinte vira "evitar".
+- Conversão: células → polilinha de centros, fundindo colineares; ponta em pad é ligada ao conector (estendida até
+  o ponto terminal); ponta no meio de outro caminho da mesma net divide aquele trecho (dobra com três fios); troca
+  de camada cria via com o furo/anel configurados.
+- **Esquemático**: uma camada, sem vias, passo = a grade da vista; toda célula que toca a caixa de uma peça ou
+  símbolo é bloqueada (notas, réguas e moldura não), o terminal de cada pino é pad da sua subnet e, a partir dele,
+  as células bloqueadas na direção do pino (spec 02 §4.3 regra 7) passam a ser da subnet até sair da caixa — pino
+  com o terminal dentro da caixa da própria peça (margem do SVG) continua alcançável. Fio reto de outra net pode
+  ser cruzado (+4). Se a grade da vista deixa ligações sem rota, repete-se com **meia grade** e fica o resultado
+  com mais ligações (empate: a grade da vista). Nos 10 exemplos de referência (Knock, Amplification,
+  AnalogInputPot, Button, Op-amp, Relay, Timer, Shift_Register, LCD, Stepper_Motor) o esquemático e a PCB ficam
+  100% roteados; só o Shift_Register precisa da meia grade (8 pinos de CI a 0,1" com 2 colunas livres até os
+  resistores).
 
 ---
 

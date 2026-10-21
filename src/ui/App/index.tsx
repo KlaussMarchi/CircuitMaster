@@ -1,26 +1,18 @@
-import { useEffect } from 'react'
+import { useEffect, type ChangeEvent } from 'react'
 import { useStore } from '../Store'
-import { Toolbar } from '../Toolbar'
-import { PartsBin } from '../PartsBin'
-import { Canvas } from '../Canvas'
-import { Inspector } from '../Inspector'
-import { StatusBar } from '../StatusBar'
+import { Topbar } from '../Topbar'
+import { Rail, toggleSheet } from '../Rail'
+import { LeftPanel } from '../LeftPanel'
+import { Stage } from '../Stage'
 import { SimulationPanel } from '../SimulationPanel'
+import { SidePanel } from '../SidePanel'
+import { StatusBar } from '../StatusBar'
+import { Dialog } from '../Dialog'
+import { PartEditor } from '../PartEditor'
 
 type State = ReturnType<typeof useStore.getState>
 
 const ZOOM_KEY = 1.25     // FATOR DE Ctrl++ / Ctrl+-
-
-const zoomBy = (state: State, factor: number) => {
-    const viewport = state.viewports[state.view]
-    const [w, h]   = state.size
-
-    if (!viewport)
-        return
-
-    const zoom = viewport.zoom * factor
-    state.setViewport(state.view, { x: viewport.x + w / 2 / viewport.zoom - w / 2 / zoom, y: viewport.y + h / 2 / viewport.zoom - h / 2 / zoom, zoom })
-}
 
 const nudge = (state: State, dx: number, dy: number) => {
     const step = state.doc.settings[state.view]?.alignToGrid === '0' ? 1 : state.getGrid()
@@ -29,6 +21,9 @@ const nudge = (state: State, dx: number, dy: number) => {
 
 // ATALHOS DO FRITZING (SPEC 02 §10.3); SÍMBOLOS JÁ TRAZEM O SHIFT NA PRÓPRIA TECLA (} = Shift+])
 const SHORTCUTS: Record<string, (state: State) => void> = {
+    'ctrl+n': state => state.newSketch(),
+    'ctrl+shift+a': state => void state.autoroute(),
+    'ctrl+shift+d': state => void state.checkRules(),
     'ctrl+s': state => state.save(),
     'ctrl+o': () => document.getElementById('open-file')?.click(),
     'ctrl+z': state => state.undo(),
@@ -59,13 +54,16 @@ const SHORTCUTS: Record<string, (state: State) => void> = {
     'shift+arrowleft': state => nudge(state, -10, 0),
     'shift+arrowright': state => nudge(state, 10, 0),
     'ctrl+0': state => state.setViewport(state.view, undefined),
-    'ctrl+=': state => zoomBy(state, ZOOM_KEY),
-    'ctrl++': state => zoomBy(state, ZOOM_KEY),
-    'ctrl+-': state => zoomBy(state, 1 / ZOOM_KEY),
-    'escape': state => state.select([]),
+    'ctrl+)': state => state.setZoom(1),
+    'ctrl+=': state => state.zoom(ZOOM_KEY),
+    'ctrl++': state => state.zoom(ZOOM_KEY),
+    'ctrl+-': state => state.zoom(1 / ZOOM_KEY),
+    'escape': state => state.dialog ? useStore.setState({ dialog: null }) : state.tool !== 'select' ? state.setTool('select') : state.select([]),
     'ctrl+1': state => state.setView('breadboardView'),
     'ctrl+2': state => state.setView('schematicView'),
     'ctrl+3': state => state.setView('pcbView'),
+    'v': state => state.setTool('area'),
+    'h': state => state.setTool('select'),
     '1': state => state.setView('breadboardView'),
     '2': state => state.setView('schematicView'),
     '3': state => state.setView('pcbView')
@@ -77,16 +75,23 @@ const onKey = (event: KeyboardEvent) => {
     const name   = `${event.ctrlKey || event.metaKey ? 'ctrl+' : ''}${event.altKey ? 'alt+' : ''}${shift}${key}`
     const action = SHORTCUTS[name]
 
-    if (!action || (event.target as HTMLElement).closest('input, select, textarea, [contenteditable="true"]'))
+    if (!action || useStore.getState().editing || (event.target as HTMLElement).closest('input, select, textarea, [contenteditable="true"]'))
         return
 
     event.preventDefault()
     action(useStore.getState())
 }
 
-export const App = () => {
-    const simulating = useStore(state => state.simulation.enabled)
+const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
 
+    if (file)
+        await useStore.getState().open(file.name, new Uint8Array(await file.arrayBuffer()))
+}
+
+// JANELA DO EDITOR: BARRA SUPERIOR, TRILHO, PAINEL ESQUERDO, PALCO COM A DOCA DE SIMULAÇÃO, INSPETOR E BARRA DE STATUS (DESIGN.md §6)
+export const App = () => {
     useEffect(() => {
         useStore.getState().setup().catch(error => useStore.setState({ message: `falha ao iniciar: ${error}` }))
         window.addEventListener('keydown', onKey)
@@ -94,19 +99,22 @@ export const App = () => {
     }, [])
 
     return (
-        <div className="flex h-full flex-col bg-neutral-100 text-sm text-neutral-800">
-            <Toolbar />
-            <div className="flex min-h-0 flex-1">
-                <PartsBin />
-                <div className="flex min-w-0 flex-1 flex-col">
-                    <main className="relative min-h-0 flex-1 overflow-hidden">
-                        <Canvas />
-                    </main>
-                    {simulating && <SimulationPanel />}
-                </div>
-                <Inspector />
+        <div className="app">
+            <Topbar />
+            <div className="shell">
+                <Rail />
+                <LeftPanel />
+                <main className="center">
+                    <Stage />
+                    <SimulationPanel />
+                </main>
+                <SidePanel />
+                <button className="sheet-scrim" aria-label="Fechar painel" onClick={() => toggleSheet(null)} />
             </div>
             <StatusBar />
+            <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb" hidden onChange={onFile} />
+            <Dialog />
+            <PartEditor />
         </div>
     )
 }

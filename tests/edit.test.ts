@@ -4,7 +4,7 @@ import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import { cubicAt, distance, nearestOnCubic, type Point } from '../src/core/Geometry'
 import { Scene } from '../src/engine/Scene'
-import { bendWire, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLegEnd, setWireEnds, setZOrder, splitWire } from '../src/engine/Edit'
+import { bendToVia, bendWire, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, viaToBend } from '../src/engine/Edit'
 import { getDrawing } from '../src/engine/Drawing'
 import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
 
@@ -53,6 +53,42 @@ describe.skipIf(!HAS_FRITZING)('edição de fios e peças (spec 02 §4, §10)', 
         expect(distance(back?.[0] ?? [0, 0], ends[0])).toBeLessThan(1e-9)
         expect(distance(back?.[1] ?? [0, 0], ends[1])).toBeLessThan(1e-9)
         expect(joined.edges.map(edge => edge.join('|'))).toContain([keyOf('2', 'connector0'), keyOf('3', 'connector1')].sort().join('|'))
+    })
+
+    it('converte a dobra de uma trilha em via e a via de volta em dobra (spec 02 §10)', async () => {
+        const library = makeLibrary()
+        await library.load([RESISTOR, WIRE, 'ViaModuleID'])
+        const placed  = [[0, 0], [300, 0]].reduce((current, point) => createInstance(current, library, RESISTOR, everywhere(point as Point)), emptyDoc())
+        const traced  = createWire(placed, library, 'pcbView', keyOf('1', 'connector1'), keyOf('2', 'connector0'))
+        const ends    = new Scene(traced, library, 'pcbView').getWireEnds('3') ?? [[0, 0], [0, 0]]
+        const split   = splitWire(traced, 'pcbView', '3', [(ends[0][0] + ends[1][0]) / 2, (ends[0][1] + ends[1][1]) / 2])
+        const via     = bendToVia(split.doc, library, keyOf('3', 'connector1'), '0.4mm,0.3mm')
+        const scene   = new Scene(via, library, 'pcbView')
+        const viaKey  = keyOf('5', 'connector0')
+
+        expect(library.getPart(via.instances['5']?.moduleIdRef ?? '')?.kind).toBe('via')
+        expect(scene.getPartners(viaKey).sort()).toEqual([keyOf('3', 'connector1'), keyOf('4', 'connector0')])
+        expect(distance(scene.getTerminal(viaKey) ?? [0, 0], scene.getWireEnds('3')?.[1] ?? [1, 1])).toBeLessThan(1e-6)
+        expect((await netOf(via, library)).getNet('pcbView', keyOf('1', 'connector1'))).toContain(keyOf('2', 'connector0'))
+
+        const back = viaToBend(via, library, '5')
+        expect(back.instances['5']).toBeUndefined()
+        expect(new Scene(back, library, 'pcbView').getBendpoint(keyOf('3', 'connector1'))?.sort()).toEqual([keyOf('3', 'connector1'), keyOf('4', 'connector0')])
+    })
+
+    it('texto novo do logo regera o SVG e o tamanho (spec 01 §5.7)', async () => {
+        const library = makeLibrary(true)
+        await library.load(['LogoTextModuleID'])
+        const placed  = createInstance(emptyDoc(), library, 'LogoTextModuleID', everywhere([0, 0]))
+        const short   = setLogoText(placed, library, 'pcbView', '1', 'A')
+        const long    = setLogoText(placed, library, 'pcbView', '1', 'CircuitMaster')
+        const svg     = library.getInstanceSvg(long.instances['1'], 'pcbView')
+
+        expect(long.instances['1'].properties.logo).toBe('CircuitMaster')
+        expect(long.instances['1'].properties.shape).toContain('>CircuitMaster</text>')
+        expect(Number(long.instances['1'].properties.width)).toBeGreaterThan(5 * Number(short.instances['1'].properties.width))
+        expect(Number(long.instances['1'].properties.height)).toBeCloseTo(Number(short.instances['1'].properties.height), 6)
+        expect((svg?.width ?? 0) / 90 * 25.4).toBeCloseTo(Number(long.instances['1'].properties.width), 3)
     })
 
     it('curvar o corpo faz a Bézier passar pelo cursor e mover a ponta mantém os controles', async () => {

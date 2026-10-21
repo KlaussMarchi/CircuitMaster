@@ -158,7 +158,9 @@ vira `RVCC1`; `D{instanceTitle}` com `LED1` vira `DLED1`. O valor 0.1 da resist�
 
 Ativo quando o usuário habilita o modo transitório. Janela de tempo:
 
-- para cada osciloscópio do circuito: $t_0 = \min(\text{horizontal position})$,
+- janela escolhida pelo usuário (extensão do CircuitMaster, §9): `circuitmaster_start_time_s` e
+  `circuitmaster_stop_time_s`, quando o fim é válido, maior que o início e o início não é negativo;
+- senão, para cada osciloscópio do circuito: $t_0 = \min(\text{horizontal position})$,
   $t_1 = \max(\text{horizontal position} + 10\cdot\text{time/div})$;
 - sem osciloscópio: $[0, 10]$ s.
 
@@ -171,10 +173,11 @@ Passo (propriedades do projeto):
 
 Diretiva: `.TRAN Δ t_1 t_0` (com `UIC` e `.ic` no modo interativo).
 
-Animação: intervalo entre quadros $= \text{simulator\_animation\_time\_s}\cdot 1000 / N$ ms (padrão `5s`),
-mínimo 10 ms; valor negativo/ inválido ⇒ $(t_1 - t_0)\cdot 1000/N$. O quadro $k$ mostra o estado no passo
-$k = \lfloor t_{decorrido}/\text{intervalo}\rfloor$, limitado aos passos já calculados; rótulo "`<t>` s" (3 casas)
-nas vistas breadboard e esquemático. Ao atingir $N$, a animação para.
+Animação: intervalo entre quadros $= \text{simulator\_animation\_time\_s}\cdot 1000 / N$ ms (padrão `5s` no Fritzing; `3s` no CircuitMaster quando a propriedade falta); valor
+negativo ⇒ tempo real, $(t_1 - t_0)\cdot 1000/N$; zero ou inválido ⇒ mostra o último passo de uma vez. O passo
+mostrado é $k = \lfloor t_{decorrido}/\text{intervalo}\rfloor$, limitado aos passos já calculados (o limite de
+10 ms do Fritzing é só a cadência de redesenho: não muda a velocidade); rótulo "`<t>` s" (3 casas) nas vistas
+breadboard e esquemático. Ao atingir $N$, a animação para.
 
 ### 5.3 Interação durante o transitório
 
@@ -186,10 +189,55 @@ Se o circuito muda durante a animação:
 3. re-simular com `.TRAN Δ (t_1 − (m−1)Δ) 0 UIC` e o novo circuito;
 4. os vetores do osciloscópio concatenam o histórico guardado com os novos.
 
+No CircuitMaster (a simulação inteira da janela já está calculada quando a animação toca): com o simulador ligado
+no transitório, uma mudança com a reprodução no meio da janela (tocando ou pausada, passo $k$ com $0 < k < N$,
+mesma janela e mesmo passo) não recomeça do zero:
+
+1. as condições iniciais saem do resultado anterior no passo $k$, nó a nó **pela porta**: para cada nó $n$ do
+   circuito novo, uma porta de peça dele dá o nó antigo (a numeração das nets pode mudar com a topologia);
+   `.ic v(n)=<valor, 8 casas>`;
+2. as fontes que dependem do tempo são adiantadas até $t_k$: o atraso `TD` de `PULSE(V1 V2 TD …)` e de
+   `SIN(VO VA FREQ TD …)` vira $TD - t_k$ (TD ausente vale 0; expressão entre chaves vira `{(expr)-t_k}`); o
+   ngspice aceita atraso negativo e mantém a fase, o que a referência perde ao recomeçar o tempo em 0;
+3. `.TRAN Δ (N−k)Δ 0 UIC`; com UIC o ngspice não grava o ponto $t = 0$, então o resultado é o histórico anterior
+   até o passo $k$ **inclusive** seguido dos pontos novos com o tempo deslocado de $t_k$ (um ponto em $t = 0$, se
+   vier, é descartado);
+4. vetores de tensão de nó do histórico também são lidos pela porta; os demais (correntes, pontas de prova) pelo
+   nome, com zeros quando não existiam; a animação segue do instante em que estava.
+
 ### 5.4 Disparo
 
 Com o simulador ligado, qualquer modificação do circuito agenda uma simulação para **200 ms** depois da última
 modificação (*debounce*). Iniciar/parar pelo usuário.
+
+### 5.5 Modelos de teste do transitório (extensão do CircuitMaster)
+
+A propriedade de projeto `circuitmaster_preset` (§9) escolhe como a janela do transitório é montada. Sem ela, uma
+janela gravada pelo usuário (`circuitmaster_stop_time_s` válido) vale como **manual** e o resto é **automático**.
+
+| Modelo | Janela | Amostras | Condição inicial |
+|---|---|---|---|
+| `auto` | osciloscópios (§5.2); sem eles, a maior entre a do degrau e 3 períodos da fonte mais lenta | `simulator_number_of_steps`, no mínimo 40 por oscilação | ponto de operação |
+| `step` | acomodação do circuito | 500, no mínimo 40 por oscilação | descarregado |
+| `square` | atraso + 3 períodos da fonte `PULSE` mais lenta (sem ela, a do degrau) | idem | ponto de operação |
+| `sine` | atraso + 5 períodos da fonte `SIN` mais lenta (sem ela, a do automático) | idem | ponto de operação |
+| `custom` | `circuitmaster_start_time_s` a `circuitmaster_stop_time_s`; passo por pontos ou fixo (§5.2) | as do usuário | `circuitmaster_initial` (`zero` ou ponto de operação) |
+
+**Escala de tempo do circuito**, lida do próprio *deck* (linhas de elemento fora de `.subckt`; semicondutores,
+subcircuitos e fontes controladas ficam abertos): para cada capacitor, $\tau = R\cdot C$ com a resistência que ele
+vê (fontes de tensão e indutores em curto, por eliminação de Gauss sobre as condutâncias); para cada indutor,
+$L/R$ com as fontes em curto; para cada par L–C com um nó em comum, $\omega_n = 1/\sqrt{LC}$,
+$\alpha = R_L/2L + 1/(2R_C C)$, $\zeta = \alpha/\omega_n$ e acomodação $4/\alpha$ (superamortecido: $4/$ o polo
+lento). A acomodação do degrau é o maior entre $6\tau$ e $1{,}5\times$ a acomodação de cada par (sem perdas: 10
+períodos). Fontes: `PULSE(V1 V2 TD TR TF PW PER)` e `SIN(VO VA FREQ TD …)` dão período e atraso.
+
+A janela é limitada a $[10^{-9}, 10^{4}]$ s e arredondada para cima na série $\{1; 1{,}2; 1{,}5; 2; 2{,}5; 3; 4; 5;
+6; 8; 10\}\times 10^n$ (um valor até 2% abaixo serve); amostras no máximo 20 000. Sem escala nenhuma, vale a
+janela de §5.2.
+
+**Descarregado**: `.TRAN … UIC`, com capacitores e indutores em zero (as fontes ligam em $t = 0$). Com UIC o
+ngspice não grava $t = 0$; o resultado ganha na frente o instante $t_0$ com todas as grandezas em zero (o circuito
+antes de ligar).
 
 ---
 
@@ -215,7 +263,8 @@ Sequência de referência:
 ## 7. LEITURA DE RESULTADOS
 
 Seja $t$ o rótulo da instância em minúsculas mais o sufixo da subparte SPICE (`A`, `B`, `R`, `G`, …), e $d$ a
-**letra do dispositivo** = caractere imediatamente antes de `{instanceTitle}` na primeira linha SPICE da peça.
+**letra do dispositivo** = caractere imediatamente antes da **primeira ocorrência** de `{instanceTitle}` no texto
+SPICE da peça (as linhas concatenadas; na fonte de bancada a primeira linha é um `.model`, e $d$ = `V`).
 
 | Grandeza | Vetor |
 |---|---|
@@ -258,7 +307,7 @@ breadboards, réguas, `power label`, `net label`, família `breadboard`.
 | `multimeter` | ver 8.4 |
 | `dc motor` | pinos `pin 1`/`pin 2`; fumaça se $|V| >$ `voltage (max)`; se $|V| \ge$ `voltage (min)`, seta de rotação horária ($V > 0$) ou anti-horária, centrada, escala $0{,}5\cdot\max(W_p/W_s, H_p/H_s)$ |
 | `line sensor` / `distance sensor` | conectores por **descrição** (`vcc`/`supply voltage`, `gnd`/`ground`, `out`/`output voltage`); $V = v(vcc) - v(gnd)$; $I$ = corrente de coletor de `q<t>` (sensor de linha) ou da subparte `a`; fumaça se $V >$ `voltage (max)`, $V < -0{,}5$ ou $|I| >$ `max output current` |
-| `battery` / `voltage source` | $I_{max} = 0{,}1\cdot V/R_{int}$ (`voltage`, `internal resistance`); fumaça se $|I| > I_{max}$. Fonte de bancada (`LabDCPowerSupply` no `moduleId`): display com $V$ entre os dois primeiros conectores e $-I$, limite `max current` |
+| `battery` / `voltage source` | $I_{max} = 0{,}1\cdot V/R_{int}$ (`voltage`, `internal resistance`); fumaça se $|I| > I_{max}$. Fonte de bancada (`LabDCPowerSupply` no `moduleId`): display com $V$ = $v(\text{connector0}) - v(\text{connector1})$ (a saída do `ilimit` é `connector0`; no `.fzp` ele vem depois do `connector1`) e $-I$, limite `max current` |
 | `potentiometer` / `sparkfun trimpot` | $P = R_{max}\frac{k}{100}I_A^2 + R_{max}\frac{100-k}{100}I_B^2$ com $k$ = `knob status`; fumaça se $P >$ `power` |
 | `oscilloscope` | ver 8.5 |
 
@@ -327,8 +376,8 @@ Além do estado visual da referência, o CircuitMaster oferece, sem alterar o *d
 
 1. **Controle de simulação**: botão Simular/Parar, escolha entre ponto de operação e transitório, e no transitório
    reprodução da animação (tocar, pausar, reiniciar) com o tempo simulado corrente.
-2. **Painel de instrumentos** (estilo Multisim): um mostrador por multímetro do circuito, com a leitura grande, a
-   grandeza e a unidade, e botões V / A / Ω e DC / AC que trocam a variante da peça (troca de peça por família,
+2. **Visor do multímetro** (estilo Multisim, no inspetor da peça): a leitura grande, a grandeza e a unidade, e
+   botões V / A / Ω e DC / AC que trocam a variante da peça (troca de peça por família,
    doc 02 §5, mantendo as conexões por `connectorId`).
 3. **Multímetro AC**: as variantes AC usam o mesmo modelo da variante DC correspondente (voltímetro: nenhum
    elemento; amperímetro: fonte `V… DC 0` entre A e COM) e exibem o valor **RMS** sobre a janela do transitório
@@ -340,6 +389,104 @@ Além do estado visual da referência, o CircuitMaster oferece, sem alterar o *d
 5. **Chaves interativas**: duplo clique numa peça com propriedade `switch status` troca para a próxima variante
    da família (`Released` ↔ `Pressed`), o que dispara nova simulação; equivale a mudar a propriedade no Inspector.
 
+### 8.7 Pontas de prova (extensão do CircuitMaster, estilo Multisim)
+
+Ferramentas **Ponta de tensão**, **Ponta de corrente** e **Ponta de tensão e corrente**: um clique num fio (no
+ponto do fio mais próximo, parâmetro $t \in [0{,}1;\ 0{,}9]$) ou num terminal de peça (o conector sob o cursor ou o
+terminal a até 14 px de tela) coloca uma ponta `P<n>` (menor $n$ livre) na vista corrente (não na PCB); a ferramenta
+volta à seleção depois de um clique, exceto com Shift; Esc ou botão direito saem.
+
+1. **Dado**: `{ id, kind: voltage|current|both, view, key, t, offset, flip }`. `key` é `<fio>/connector0` (ponta
+   no fio, posição $t$ ao longo dele, na curva se houver) ou a porta do pino. Apagar a instância apaga as pontas
+   dela. Gravação: JSON na propriedade de projeto `circuitmaster_probes` do `.fz` (§9), que o Fritzing ignora; na
+   leitura, só passam itens com a forma certa e cuja instância existe.
+2. **Tensão**: a da net da porta em relação ao terra do circuito (nó 0 ⇒ 0 V); net sem nó simulado ⇒ sem leitura.
+3. **Corrente**: o circuito é cortado na ponta e uma fonte `Vprobe_<id> a b DC 0` liga os lados; a leitura é
+   `i(Vprobe_<id>)`, que é positiva de `a` para `b`. No fio, as ligações da ponta `connector1` passam para um toco de
+   fio novo: $a$ = lado de `connector0`, $b$ = lado de `connector1` (sentido positivo de `connector0` para
+   `connector1`). No pino, as ligações dele passam para o toco: $a$ = o resto da net, $b$ = o pino (positivo
+   **entrando na peça**). `flip` inverte o sinal. Os cortes são feitos um sobre o outro: pontas em série no mesmo
+   ramo ficam ligadas pelos tocos, e um nó formado só por tocos entre duas fontes recebe número próprio. Lado que
+   é só toco tocado por uma única fonte ⇒ ponta em aberto, corrente 0. Os dois lados no mesmo nó (o fio está num
+   laço de fios) ⇒ sem fonte e sem leitura de corrente. O terra é o escolhido no circuito sem cortes (§2.1),
+   identificado pela porta que o define. A exportação "Netlist SPICE" sai sem as fontes das pontas.
+4. **Na vista**: marca no ponto medido (seta no sentido positivo da corrente), linha de chamada tracejada e caixa
+   com o nome e as leituras no passo corrente (4 algarismos, prefixo SI). O lado da caixa é o primeiro entre acima
+   à direita, abaixo à direita, acima à esquerda e abaixo à esquerda que não cobre peça, rótulo ou outra ponta;
+   arrastar a caixa muda `offset`. Menu: medir tensão, corrente ou ambas, inverter o sentido, remover.
+5. **Medidas** até o passo corrente, ponderadas pelo tempo no transitório: valor, média (nível DC), RMS, pico a
+   pico, mínimo, máximo e frequência (subidas pela média com histerese de 10% do pico a pico, $f = (n-1)/(t_n - t_1)$
+   com $n \ge 2$). Pico a pico menor que $10^{-6}$ do nível é ruído numérico do solver: vale 0 e não há frequência.
+6. **Gráfico**: por padrão as curvas das pontas (tensão no eixo da esquerda, corrente tracejada no da direita, na
+   cor da ponta); sem pontas, os canais dos instrumentos; sem eles, as três primeiras nets. Tabela e gráfico só
+   mostram o que a ponta mede: tensão, corrente ou as duas.
+7. **Exibição** (preferência do usuário, guardada no navegador, não no sketch): "valores nas pontas" (sem ela, a
+   caixa da ponta mostra só o nome) e a doca de simulação aberta ou recolhida; as duas começam ligadas.
+
+### 8.8 Resposta da curva (extensão do CircuitMaster)
+
+Medida de uma curva escolhida (por padrão, a primeira tensão de ponta, ou de nó, que não esteja num nó ligado
+direto a uma fonte de tensão; o nó interno entre uma fonte e a resistência interna dela conta como o terminal, e as
+fontes de 0 V das pontas não contam). A fonte de estímulo é a primeira `SIN` do *deck*; sem ela, a primeira
+`PULSE`.
+
+**Degrau** (sem fonte `SIN`): intervalo $[t_0, t_1]$ da janela; com fonte `PULSE`, $[TD, TD + TR + PW]$ (a primeira
+subida até a descida). Com $y_0$ o primeiro valor e $y_\infty$ a média dos últimos 2% do intervalo, a resposta
+normalizada é $r = (y - y_0)/(y_\infty - y_0)$ (sem degrau se $|y_\infty - y_0| \le 10^{-3}$ da escala):
+
+- **subida**: de $r = 0{,}1$ a $r = 0{,}9$ (interpolado entre amostras);
+- **pico** e **sobressinal** $\max(0, r_{max} - 1)$ (pico nos últimos 2% não conta);
+- **acomodação**: último instante fora de $|r - 1| \le 0{,}02$; só vale se os últimos 10% do intervalo variam
+  menos que meia faixa (senão "não acomodou na janela");
+- **τ** ($r = 0{,}632$) só sem oscilação (sobressinal ≤ 0,5%); com oscilação, **período** entre os dois primeiros
+  picos acima da faixa e $\zeta = -\ln(M_p)/\sqrt{\pi^2 + \ln^2 M_p}$.
+
+Os tempos são contados a partir do início do intervalo. No gráfico: faixa de ±2% e valor final (tracejado), ponto
+de pico com o sobressinal, τ (1ª ordem) ou a acomodação (com oscilação), cada marca só depois que a animação passa
+por ela.
+
+**Ganho** (com fonte `SIN`): entrada = tensão entre os terminais da fonte; a partir de $\max(t_0, TD)$, mais um
+período quando cabem 3 ou mais, em um número inteiro de períodos: amplitude e fase de cada série pela componente
+na frequência da fonte (integração trapezoidal de $y\sin\omega t$ e $y\cos\omega t$ sem o nível DC). Ganho =
+razão das amplitudes (negativo quando a defasagem passa de 90°), em dB $20\log_{10}$, fase em $(-180°, 180°]$, e o
+nível DC da saída.
+
+### 8.9 Circuitos de teste (extensão do CircuitMaster)
+
+Sketches prontos no esquemático, abertos com o simulador ligado no transitório e o modelo de teste certo: carga do
+capacitor (5 V, 1 kΩ, 100 µF, degrau, τ = 100 ms), carga e descarga (pulso 0–5 V de 1 s no mesmo RC, onda
+quadrada), RLC série (22 Ω, 10 mH, 10 µF, degrau, ζ ≈ 0,35, sobressinal ≈ 30%), amplificador inversor (OP27,
+−10 kΩ/1 kΩ, ±9 V, senoide de 0,5 V e 1 kHz) e emissor comum (NPN, divisor 47 kΩ/10 kΩ, 4,7 kΩ/1 kΩ, 9 V, senoide
+de 0,2 V e 1 kHz). As peças são criadas nas três vistas, alinhadas à grade e ligadas pelo caminho ortogonal no esquemático e na
+protoboard (fios de jumper), com as pontas de prova da entrada e da saída; na PCB ficam as linhas de ligação para o
+autorouter ("Criar placa e rotear", doc 03 §8.3.1).
+
+### 8.10 Comutação programada de chaves (extensão do CircuitMaster)
+
+Chave ou botão = peça com `switch status` e família contendo `switch`, cujas variantes `Released` e `Pressed` são
+trocáveis (doc 02 §5). A propriedade de projeto `circuitmaster_switching` guarda, por `modelIndex`, as duas
+variantes e a lista de eventos `[t (s), acionada]` em ordem de tempo; JSON inválido ou sem eventos é ignorado.
+
+- **DC e posição inicial**: vale a variante da instância (o `<spice>` dela); no transitório ela vale até o primeiro
+  evento (evento em $t = 0$ redefine o início).
+- **Transitório**: as linhas da peça viram uma fonte de controle `V<título>_sw sw_<título> 0 PWL(…)`, de 0 (solta)
+  a 1 (acionada), com rampa de 1% do passo em cada troca, e um elemento por contato fechado de cada variante (as
+  linhas `R` do `<spice>` da acionada e da solta, com os mesmos tokens): `B<título>_<p|r><i> a b I=V(a,b)*(gₐ +
+  (1/R − gₐ)·k)` com $g_a = 10^{-9}$ S, $k$ = `V(sw)` na acionada e `1 − V(sw)` na solta. Assim o contato fecha com a
+  resistência de contato da peça (0,1 Ω sem valor) e abre com 1 GΩ.
+- **Janela**: a escala de tempo junta a do circuito com as chaves fechadas e abertas (contatos como resistores); os
+  instantes em que os PWL mudam são eventos, e todo modelo de teste vai até o último evento mais a acomodação (ou o
+  dobro do último evento sem escala).
+- **Continuação** (§5.3): o PWL é deslocado como as outras fontes: o valor interpolado no instante vira o ponto
+  $t = 0$ e os pontos seguintes têm o tempo diminuído.
+- **Resposta** (§8.8): sem fonte senoidal ou pulsada, o degrau medido vai do primeiro ao segundo evento (ou ao fim
+  da janela); sobressinal acima de 100% não é degrau e não é mostrado.
+- **Na vista**: a imagem da protoboard e o símbolo do esquemático mostram a posição do instante mostrado; o
+  inspetor da peça lista os eventos (Fechar/Abrir ou Ir para 1/2, instante com unidade s, ms, µs ou ns).
+
+O circuito de teste "Chave temporizada (RC)" fecha um botão em 100 ms e abre em 500 ms num RC (1 kΩ, 100 µF, descarga
+por 2,2 kΩ).
+
 ## 9. PROPRIEDADES DE PROJETO (`.fz`)
 
 | Chave em `<project_properties>` | Padrão |
@@ -347,8 +494,14 @@ Além do estado visual da referência, o CircuitMaster oferece, sem alterar o *d
 | `simulator_time_step_mode` | `false` |
 | `simulator_number_of_steps` | `400` |
 | `simulator_time_step_s` | `1us` |
-| `simulator_animation_time_s` | `5s` |
+| `simulator_animation_time_s` | `3s` (Fritzing: `5s`) |
 | `simulator_spice_options` | vazio |
+| `circuitmaster_start_time_s` | vazio (extensão: início da janela do transitório) |
+| `circuitmaster_stop_time_s` | vazio (extensão: fim da janela; vazio = osciloscópios ou 10 s) |
+| `circuitmaster_probes` | ausente (extensão: pontas de prova em JSON, §8.7) |
+| `circuitmaster_preset` | vazio (extensão: modelo de teste `auto`, `step`, `square`, `sine` ou `custom`, §5.5) |
+| `circuitmaster_initial` | vazio (extensão: `zero` faz a janela manual partir descarregada, §5.5) |
+| `circuitmaster_switching` | vazio (extensão: comutação programada das chaves em JSON, §8.10) |
 
 Cada uma é gravada como `<chave value="…"/>`.
 
@@ -359,9 +512,27 @@ Cada uma é gravada como `<chave value="…"/>`.
 ### 10.1 ngspice em WebAssembly
 
 - Fonte: `../Fritzing/ngspice` (ngspice-47). Compilar com Emscripten como biblioteca compartilhada
-  (`--with-ngshared`), sem Tcl, sem OSDI (MPL, opcional), sem o code model `xspice/icm/table` (**GPLv2+** — excluir
-  para manter o produto livre de GPL); manter os code models analógicos XSPICE (domínio público) para o
-  `ilimit` da fonte de bancada.
+  (`--with-ngshared`), sem Tcl, sem OSDI (MPL, opcional), sem XSPICE (o code model `xspice/icm/table` é
+  **GPLv2+**, e os code models dependem de carga dinâmica por `codemodel`, indisponível no módulo WASM).
+- O único code model usado pelo acervo é o `ilimit` da fonte de bancada. Na montagem do deck, cada elemento
+  `A<n> in pos_pwr neg_pwr out <modelo ilimit>` vira duas fontes comportamentais com os parâmetros do `.model`
+  (padrões do code model: `gain` 1, `in_offset` 0, `r_out_source`/`r_out_sink` 1 Ω, `i_limit_source`/
+  `i_limit_sink` 10 mA), e a linha `.model … ilimit` sai:
+  - `B<n>p pos_pwr out I = min(max((gain·(V(in)+in_offset) − V(out))/r_out_source, 0), i_limit_source)`
+  - `B<n>n out neg_pwr I = min(max((V(out) − gain·(V(in)+in_offset))/r_out_sink, 0), i_limit_sink)`
+
+  A corrente fornecida continua saindo de `pos_pwr` (a cadeia `V<título>Aux`/`V<título>` que o display lê) e a
+  absorvida volta por `neg_pwr`, como no code model; só a suavização de borda (`v_pwr_range`, faixas de 1 nA) é
+  omitida. Conferido contra o code model (`xspice/icm/analog/ilimit`, domínio público): mesmos padrões no
+  `ifspec.ifs` e mesmas equações de regime no `cfunc.mod`; a trava de `veq` nos trilhos nunca atua aqui porque
+  `pos_pwr` fica 5 V acima do ajuste. Conferido também numericamente: `tools/Ngspice/build.sh xspice` compila o
+  ngspice nativo com XSPICE e os code models (só para o teste; nada disso vai para o app), e o ponto de operação da
+  fonte de bancada com cargas de 0,1 Ω, 10 Ω, 100 Ω (limitando em 100 mA), 120 Ω e 1 kΩ (regulando 12 V) sai igual
+  nas fontes B (WASM) e no `ilimit` (nativo) a menos de $10^{-9}$ relativo, em todas as tensões de nó e correntes
+  de fonte. Esse build nativo cai ao destruir o circuito na saída (`CKTdestroy`), depois de gravar os resultados; o
+  teste lê o rawfile gravado com `write` e ignora o código de saída.
+- A exportação "Netlist SPICE" sai como a do Fritzing: título = nome do sketch, sem as opções do projeto nem as
+  pontas de prova, sempre `.OP`, com `IC=0` e o `ilimit` do XSPICE (o deck que o simulador do Fritzing recebe).
 - Licenças embutidas: núcleo BSD modificada; `maths/sparse` MIT; `maths/KLU` e `frontend/numparam` **LGPLv2+**.
   Cumprimento: distribuir o ngspice como **módulo WASM separado** (fronteira de ligação dinâmica), com fonte,
   *scripts* de build e possibilidade de substituição pelo usuário; o código do CircuitMaster não é afetado.
@@ -395,7 +566,16 @@ as regras visuais são funções puras `(vetores, peça, passo) → efeitos`.
    nets (comparação por isomorfismo de nós).
 2. **Substituição**: casos unitários para cada regra da seção 3 (prefixo duplicado, espaços, `M`→`Meg`, µ, Ω,
    propriedade vazia conhecida ⇒ 0, expressão aninhada, token desconhecido mantido sem laço).
-3. **Numérico**: tensões de nó e correntes do ngspice WASM idênticas às do ngspice nativo (erro relativo
-   < 1e-9) nos mesmos decks.
+3. **Numérico**: nos mesmos decks, o ngspice WASM reproduz o nativo compilado da mesma fonte com as mesmas opções
+   (`tools/Ngspice/build.sh native`; vetores do nativo lidos do rawfile binário do modo lote, que é gravado em
+   fluxo: `No. Points` fica com a estimativa e um passo rejeitado regrava o instante, valendo a última gravação).
+   Bit a bit não é garantido: a libm do Emscripten (musl) difere da glibc em 1–2 ulp em `exp`, `pow`, `sin`, `cos`,
+   `tanh`, `atan`, `log10`, `sinh` e `cosh` (`log` e `sqrt` coincidem), e circuitos que comutam amplificam essa
+   diferença. Critério: mesmos vetores; cada um dentro de `reltol` (1e-3) da escala cheia do circuito (maior $|V|$
+   entre as tensões, maior $|I|$ entre as correntes), ponto a ponto; nos osciladores, isso só no ponto inicial, com o
+   mesmo número de bordas no nó de maior excursão e o intervalo médio entre bordas dentro de 1%. Medido nos 11
+   sketches de simulação: os 7 de ponto de operação e o pulso do osciloscópio saem idênticos bit a bit; o retificador
+   difere em 1e-6 da escala cheia (nó ligado ao terra só por 1 GΩ); 555 e pisca-pisca mantêm as bordas, com
+   intervalo médio diferente em 0,06% e 0,11%.
 4. **Visual**: tabelas-verdade das regras de fumaça nos limites ($\pm 1\%$ do limite) para cada família.
 5. **Transitório**: série do osciloscópio contínua através de uma interação (sem salto no passo $m$).

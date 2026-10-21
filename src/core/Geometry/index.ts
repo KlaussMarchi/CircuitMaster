@@ -62,6 +62,8 @@ export const unionBoxes = (boxes: (Box | null)[]) => {
 
 export const mapBox = (m: Matrix, [x0, y0, x1, y1]: Box) => boxOf([apply(m, x0, y0), apply(m, x1, y0), apply(m, x0, y1), apply(m, x1, y1)]) as Box
 
+export const boxesTouch = (a: Box, b: Box) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
+
 export const lerp = (a: Point, b: Point, t: number): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 
 export const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1])
