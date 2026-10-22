@@ -156,6 +156,14 @@ for (const width of WIDTHS)
             await app.shoot(`preferencias-${theme}-${width}`)
             await page.keyboard.press('Escape')
         }
+
+        await page.evaluate(() => cm.store.getState().showTour(1))
+        for (const theme of THEMES) {
+            await setTheme(app, theme)
+            await expect(page.getByRole('dialog', { name: /^Tour:/ })).toBeVisible()
+            await app.shoot(`tour-${theme}-${width}`)
+        }
+        await page.keyboard.press('Escape')
     })
 
 test('Paleta de comandos: Ctrl+K acha ações em português e em inglês, mostra caminho e atalho e executa com Enter', async ({ app, page }) => {
@@ -281,4 +289,35 @@ test('Preferências: roda rola a vista, arrastar curva o fio, atalho trocado val
     await dialog.getByRole('button', { name: 'Restaurar todos os atalhos' }).click()
     await expect(dialog.getByRole('textbox', { name: 'Tecla de Duplicar' })).toHaveValue('Ctrl+D')
     await expect(dialog.getByRole('textbox', { name: 'Tecla de Copiar' })).toHaveValue('Ctrl+C')
+})
+
+test('Tour: aparece uma vez por modo, avança, pula com Esc e volta pela Ajuda', async ({ app, page }) => {
+    await page.evaluate(() => {
+        localStorage.removeItem('circuitmaster.toured')
+        localStorage.setItem('circuitmaster.level', '1')
+    })
+    await app.open()
+    const card = page.getByRole('dialog', { name: /^Tour:/ })
+
+    await expect(card).toHaveAccessibleName('Tour: Peças')
+    await expect(page.locator('.tour-target')).toBeVisible()
+    for (let i = 0; i < 5; i++)
+        await card.getByRole('button', { name: 'Próximo' }).click()
+    await expect(card).toHaveAccessibleName('Tour: Achar qualquer ação')
+    await card.getByRole('button', { name: 'Começar' }).click()
+    await expect(card).toHaveCount(0)
+
+    await app.open()
+    await expect(card).toHaveCount(0)
+
+    await app.menu('Exibir', 'Modo da interface', 'Maker')
+    await expect(card).toHaveAccessibleName('Tour: Placa')
+    await page.keyboard.press('Escape')
+    await expect(card).toHaveCount(0)
+    expect(await page.evaluate(() => cm.store.getState().toured)).toEqual([1, 2])
+
+    await app.menu('Ajuda', 'Tour da interface')
+    await expect(card).toHaveAccessibleName('Tour: Placa')
+    await card.getByRole('button', { name: 'Pular' }).click()
+    await expect(card).toHaveCount(0)
 })

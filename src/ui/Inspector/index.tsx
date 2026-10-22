@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { keyOf, splitKey } from '../../core/Document'
 import { formatReading, formatSi, getPropertyDefs, nameOf, parseSi } from '../../core/Properties'
 import { getNets, getSwitching, switchOf } from '../../core/Spice'
@@ -10,9 +10,11 @@ import type { Part } from '../../core/Part'
 import type { Found } from '../../workers/Indexer'
 import { pickSwap } from '../Catalog'
 import { Icon } from '../Icon'
-import { LessonCard } from '../Lesson'
 import { probeColor } from '../Probe'
 import { useStore } from '../Store'
+
+// CARTÃO DIDÁTICO SÓ CARREGA COM A PRIMEIRA PEÇA SELECIONADA: OS TEXTOS FICAM FORA DO JAVASCRIPT INICIAL
+const LessonCard = lazy(() => import('../Lesson').then(module => ({ default: module.LessonCard })))
 
 const HIDDEN = new Set(['family', 'sticky', 'mn', 'mpn', 'part number', 'shape', 'svg', 'lastfilename', 'switch status'])
 
@@ -318,7 +320,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
             {familyOf(part) === 'multimeter' && <Meter modelIndex={modelIndex} variants={family} />}
             <SwitchEditor modelIndex={modelIndex} />
             <Reading modelIndex={modelIndex} />
-            <LessonCard modelIndex={modelIndex} part={part} properties={merged} />
+            <Suspense fallback={null}><LessonCard modelIndex={modelIndex} part={part} properties={merged} /></Suspense>
             {part.connectors.length > 0 && part.connectors.length <= 16 && (
                 <details className="sec">
                     <summary><h3>Pinos</h3></summary>

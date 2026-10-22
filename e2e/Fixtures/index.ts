@@ -27,8 +27,15 @@ const traceRenderUpdates = () => {
     console.error = (...args: unknown[]) => original(...args, ...String(args[0]).includes('while rendering a different component') ? [new Error().stack] : [])
 }
 
-// OS TESTES ENXERGAM TODOS OS MENUS (MODO PROFISSIONAL) A MENOS QUE ESCOLHAM OUTRO MODO; O TESTE DOS MODOS TROCA E RECARREGA
-const professional = () => localStorage.getItem('circuitmaster.level') === null && localStorage.setItem('circuitmaster.level', '3')
+// NA PRIMEIRA ABERTURA DO CONTEXTO: TODOS OS MENUS (MODO PROFISSIONAL) E OS TOURS JÁ VISTOS; RECARREGAR NÃO DESFAZ O QUE O TESTE MUDOU
+const defaults = () => {
+    if (localStorage.getItem('e2e.defaults'))
+        return
+
+    localStorage.setItem('e2e.defaults', '1')
+    localStorage.setItem('circuitmaster.level', '3')
+    localStorage.setItem('circuitmaster.toured', '[1,2,3]')
+}
 
 // O APP NUMA ABA: ABRE, LÊ O ESTADO PELO STORE QUE A PÁGINA CARREGOU E JUNTA TODO ERRO DE CONSOLE, PÁGINA OU REDE
 export class App {
@@ -43,7 +50,7 @@ export class App {
     async setup() {
         this.watch()
         await this.page.addInitScript(traceRenderUpdates)
-        await this.page.addInitScript(professional)
+        await this.page.addInitScript(defaults)
         await this.open()
     }
 

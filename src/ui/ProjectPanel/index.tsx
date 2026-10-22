@@ -3,7 +3,7 @@ import { VIEW_LABELS } from '../../core/Layer'
 import { Scene } from '../../engine/Scene'
 import { Icon } from '../Icon'
 import { Kv } from '../Inspector'
-import { BOARD_EXPORTS, type ExportKind } from '../Export'
+import { needsBoard, type ExportKind } from '../Export'
 import { useStore } from '../Store'
 
 const GRID_SIZES: Record<string, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }
@@ -57,7 +57,7 @@ export const ProjectPanel = () => {
             </div>
             <div className="sec">
                 <h3>Exportar</h3>
-                <div className="bin-actions">{EXPORTS.map(([label, kind]) => <button key={kind} className="btn sm" disabled={BOARD_EXPORTS.includes(kind) && !board} title={BOARD_EXPORTS.includes(kind) && !board ? 'precisa de uma placa na PCB' : undefined} onClick={() => void exportFile(kind)}>{label}</button>)}</div>
+                <div className="bin-actions">{EXPORTS.map(([label, kind]) => <button key={kind} className="btn sm" disabled={needsBoard(kind) && !board} title={needsBoard(kind) && !board ? 'precisa de uma placa na PCB' : undefined} onClick={() => void exportFile(kind)}>{label}</button>)}</div>
                 <p className="sub" style={{ marginTop: 6 }}>Mais formatos em Arquivo › Exportar.</p>
             </div>
             <div className="sec">

@@ -5,7 +5,7 @@ import { Scene } from '../../engine/Scene'
 import { clearGroundFillSeeds, setAutoroutable, setTraceSide } from '../../engine/Edit'
 import { MenuList, type MenuEntry } from '../ContextMenu'
 import { getMenu } from '../Menus'
-import { BOARD_EXPORTS, type ExportKind } from '../Export'
+import { needsBoard, type ExportKind } from '../Export'
 import { useStore } from '../Store'
 import { shortcutOf } from '../Keys'
 import { BENCHES } from '../../engine/Bench'
@@ -39,7 +39,7 @@ const sampleTree = (state: State, files: string[], depth = 0): MenuEntry[] => {
 const fileMenu = (state: State): MenuEntry[] => {
     const scene = new Scene(state.doc, state.library, 'pcbView')
     const board = Object.values(state.doc.instances).some(instance => scene.isShown(instance) && BOARDS.includes(state.library.getPart(instance.moduleIdRef)?.kind ?? ''))
-    const item  = ([label, kind]: [string, ExportKind]): MenuEntry => ({ label, disabled: BOARD_EXPORTS.includes(kind) && !board, apply: () => void state.exportFile(kind) })
+    const item  = ([label, kind]: [string, ExportKind]): MenuEntry => ({ label, disabled: needsBoard(kind) && !board, apply: () => void state.exportFile(kind) })
 
     return [
         { label: 'Novo', shortcut: shortcutOf(state.keys, 'new'), apply: state.newSketch },
@@ -157,6 +157,7 @@ const simulationMenu = (state: State): MenuEntry[] => {
 const helpMenu = (state: State): MenuEntry[] => [
     { label: 'Paleta de comandos', shortcut: shortcutOf(state.keys, 'palette'), apply: () => useStore.setState({ dialog: 'palette' }) },
     { label: 'Atalhos de teclado', apply: () => useStore.setState({ dialog: 'shortcuts' }) },
+    { label: 'Tour da interface', apply: () => state.showTour(state.level) },
     { label: 'Sobre o CircuitMaster', apply: () => useStore.setState({ dialog: 'about' }) }
 ]
 

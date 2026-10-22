@@ -10,6 +10,7 @@ import { StatusBar } from '../StatusBar'
 import { Dialog } from '../Dialog'
 import { Boundary } from '../Boundary'
 import { Palette } from '../Palette'
+import { Tour } from '../Tour'
 import { getKeyMap, keyOf } from '../Keys'
 
 // EDITOR DE PEÇAS SÓ CARREGA QUANDO ABRE: FORA DO JAVASCRIPT INICIAL (FRIZING_KICAD §8); A PALETA FICA NO INICIAL PARA O PRIMEIRO Ctrl+K NÃO PERDER TECLAS
@@ -42,7 +43,7 @@ const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
 // JANELA DO EDITOR: BARRA SUPERIOR, TRILHO, PAINEL ESQUERDO, PALCO COM A DOCA DE SIMULAÇÃO, INSPETOR E BARRA DE STATUS (DESIGN.md §6)
 export const App = () => {
     useEffect(() => {
-        useStore.getState().setup().catch(error => useStore.setState({ message: `falha ao iniciar: ${error}` }))
+        useStore.getState().setup().then(() => Promise.all([import('../Output'), import('../Lesson')]).catch(() => null), error => useStore.setState({ message: `falha ao iniciar: ${error}` }))    // DEPOIS DA ABERTURA: EXPORTAR E O CARTÃO DIDÁTICO SEGUEM FUNCIONANDO SEM REDE
         window.addEventListener('keydown', onKey)
         document.addEventListener('visibilitychange', onHide)
         window.addEventListener('pagehide', onHide)
@@ -71,6 +72,7 @@ export const App = () => {
             <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><Dialog /></Boundary>
             <Boundary name="Editor de peças" className="modal" close={() => useStore.getState().editPart(null)}><EditorSlot /></Boundary>
             <Boundary name="Paleta de comandos" className="modal" close={() => useStore.setState({ dialog: null })}><Palette /></Boundary>
+            <Boundary name="Tour" className="modal" close={() => useStore.getState().finishTour()}><Tour /></Boundary>
         </div>
     )
 }

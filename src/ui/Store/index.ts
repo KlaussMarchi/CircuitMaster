@@ -26,7 +26,7 @@ import { Simulator } from '../Simulator'
 import { createPcbTools, getConfig, type Progress } from '../Pcb'
 import { createSaver } from '../Saver'
 import { LEVELS, type Level } from '../Modes'
-import { boardProblem, download, exportAs, getClipper, type ExportKind } from '../Export'
+import { boardProblem, download, getClipper, type ExportKind } from '../Export'
 import { PARTS, Vault } from '../Vault'
 import { Autosave, type Snapshot, type Version } from '../Autosave'
 import wasmUrl from '../../core/Netlist/netlist.wasm?url'
@@ -92,6 +92,8 @@ type State = {
     hiddenLayers: string[]
     level: Level
     preferences: Preferences
+    tour: Level | null
+    toured: Level[]
     keys: Record<string, string[]>
     routing: Progress | null
     setup: () => Promise<void>
@@ -134,6 +136,8 @@ type State = {
     setPreferences: (patch: Partial<Preferences>) => void
     setKeys: (keys: Record<string, string[]>) => void
     setDialog: (dialog: Dialog) => void
+    showTour: (level: Level) => void
+    finishTour: () => void
     setHiddenLayers: (ids: string[]) => void
     setTest: (mode: Mode) => void
     selectProbe: (id: string | null) => void
@@ -204,6 +208,7 @@ const BINS_KEY  = 'circuitmaster.bins'
 const SHOW_KEY  = 'circuitmaster.show'     // VALORES NAS PONTAS E PAINEL DE TABELA E GRÁFICO DA SIMULAÇÃO
 const LEVEL_KEY = 'circuitmaster.level'    // MODO DA INTERFACE: INICIANTE, MAKER OU PROFISSIONAL
 const PREFS_KEY = 'circuitmaster.preferences'
+const TOUR_KEY  = 'circuitmaster.toured'    // MODOS CUJO TOUR JÁ FOI VISTO OU PULADO: CADA UM APARECE UMA VEZ SÓ
 const KEYS_KEY  = 'circuitmaster.keys'      // TECLAS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
 const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
 const THEME_KEY = 'cm-theme'               // MESMA CHAVE QUE O <head> LÊ ANTES DE DESENHAR (DESIGN.md §7)
@@ -367,6 +372,8 @@ export const useStore = create<State>((set, get) => {
         level: readStored<Level>(LEVEL_KEY, 1),
         preferences: { ...PREFERENCES, ...readStored<Partial<Preferences>>(PREFS_KEY, {}) },
         keys: readStored<Record<string, string[]>>(KEYS_KEY, {}),
+        tour: null,
+        toured: readStored<Level[]>(TOUR_KEY, []),
         routing: null,
 
         setup: async () => {
@@ -382,6 +389,9 @@ export const useStore = create<State>((set, get) => {
             const added   = get().library.addBundle({ sketch: null, parts: kept.filter(file => file.name.startsWith('part.')), svgs: kept.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
             await Promise.all([started, fonts])
             set({ wasm, samples, ready: true, imported: added.flatMap(moduleId => get().library.bundled.get(moduleId) ?? []).map(entryOf) })
+
+            if (!get().toured.includes(get().level))
+                get().showTour(get().level)
             set(withNetlist(get().doc))
 
             get().autosave.setup()
@@ -662,9 +672,18 @@ export const useStore = create<State>((set, get) => {
 
         setDialog: dialog => set({ dialog }),
 
+        showTour: level => set({ tour: level }),
+
+        finishTour: () => {
+            const { tour, toured } = get()
+            const seen             = tour && !toured.includes(tour) ? [...toured, tour] : toured
+            writeStored(TOUR_KEY, seen)
+            set({ tour: null, toured: seen })
+        },
+
         setLevel: level => {
             writeStored(LEVEL_KEY, level)
-            set({ level, message: `modo ${LEVELS.find(([id]) => id === level)?.[1]}: ${LEVELS.find(([id]) => id === level)?.[2]}; a paleta (Ctrl+K) acha tudo em qualquer modo` })
+            set({ level, tour: get().toured.includes(level) ? get().tour : level, message: `modo ${LEVELS.find(([id]) => id === level)?.[1]}: ${LEVELS.find(([id]) => id === level)?.[2]}; a paleta (Ctrl+K) acha tudo em qualquer modo` })
         },
 
         // TESTE DO TRANSITÓRIO NO PROJETO; O MANUAL COMEÇA DA JANELA QUE ESTAVA VALENDO (SPEC 04 §5.5)
@@ -892,7 +911,7 @@ export const useStore = create<State>((set, get) => {
             set({ message: 'exportando…' })
 
             try {
-                set({ message: await exportAs(kind, { doc, library, netlist, view, name, svg, bounds: getDrawing(new Scene(doc, library, view), null).bounds, selection }) })
+                set({ message: await (await import('../Output')).exportAs(kind, { doc, library, netlist, view, name, svg, bounds: getDrawing(new Scene(doc, library, view), null).bounds, selection }) })
             } catch (error) {
                 if (!(error instanceof Error))
                     throw error

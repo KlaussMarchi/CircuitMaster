@@ -291,6 +291,25 @@ Fotos do antes em `build/ui-antes/` (fim da fase 1); do depois em `build/ui/`.
    ela perdia as primeiras teclas digitadas logo depois do Ctrl+K. Teste: `e2e/perf.spec.ts` e `e2e/ui.spec.ts`
    "Modos" (Ctrl+K e digitar na hora).
 
+10. **Folga no orçamento de JavaScript inicial** para o que ainda entra na fase 2: a geração das exportações
+    (Gerber, BOM, IPC, PDF e imagens) foi para `ui/Output`, importado só ao exportar; `ui/Export` ficou com tipos,
+    `download`, `getClipper`, `boardProblem` e `needsBoard` (a lista das exportações com placa é a fonte única, e o
+    TypeScript confere que o `Output` cobre todas). O cartão didático carrega com a primeira peça selecionada. Os dois
+    são pré-carregados depois da abertura, para exportar sem rede. Inicial: 700 → 671 KB.
+
+- **Tour curto por modo** (`ui/Tour`): aparece uma vez por modo (Iniciante na primeira abertura; Maker e
+  Profissional na primeira troca), um passo por vez perto do alvo, que ganha a linha de seleção; Próximo, Pular e Esc;
+  Ajuda › Tour da interface repete. Passos cujo alvo não está na tela (o painel de peças no celular) são pulados.
+  Os modos já vistos ficam em `circuitmaster.toured`. O fixture dos E2E marca os tours como vistos na primeira
+  abertura do contexto. Teste: `e2e/ui.spec.ts` "Tour" e as fotos `build/ui/tour-*`.
+
+### Desempenho na bateria
+
+Fora da tomada o pan e o zoom com 1.000 footprints passam do orçamento de tarefa longa (95–106 ms contra 50) no
+commit `6f0f884` e na pasta de trabalho igualmente (medido nos dois em seguida): é a potência limitada do processador,
+não regressão. O `verify` de fechamento roda na tomada (a memória do projeto já avisa que o perfil de energia muda os
+números). Na tomada, o mesmo teste deu 0 ms de tarefa longa no pan.
+
 ### Feito (continuação)
 
 - **Preferências** (Editar › Preferências…, Ctrl+,): roda do mouse (zoom ou rolar a vista, com Ctrl+roda para o
@@ -309,9 +328,16 @@ Fotos do antes em `build/ui-antes/` (fim da fase 1); do depois em `build/ui/`.
 - Cartão "Como funciona" no inspetor (`ui/Lesson`, `core/Lesson`): o que é, como funciona, fórmula e a fórmula com
   os valores do circuito simulado; aberto no Iniciante.
 
+### Retomada (2026-10-22, o PC desligou com 30% de bateria)
+
+- Os 3 vermelhos do Firefox na rodada da bateria ("Inspetor e cartão de valor", "Paleta de comandos", "Modos", todos em
+  `app.place`) não voltaram na tomada: `ui.spec.ts` sozinho no Firefox (13 verdes) e a suíte inteira (164 verdes em
+  5,7 min, contra 12,3 min na bateria). Era intermitência sob carga; o `place` do fixture ficou como estava.
+- `npm run verify` na tomada: Vitest 135, E2E 164, desempenho todo dentro do orçamento (pan e zoom com 1.000
+  footprints a 59–60 fps, 0 ms de tarefa longa; JS inicial 674 KB).
+
 ### A seguir (fase 2)
 
 1. Idioma nas preferências (junto com o i18n do item 3).
-2. Tour curto por modo (o cartão didático já existe).
-3. Abas de sketches; i18n pt-BR e en.
-4. Spec 05 com o teste de clareza de cada função existente; README e spec 02 §10.4 com a interface nova; matriz.
+2. Abas de sketches; i18n pt-BR e en.
+3. Spec 05 com o teste de clareza de cada função existente; README e spec 02 §10.4 com a interface nova; matriz.
