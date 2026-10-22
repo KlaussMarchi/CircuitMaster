@@ -1,6 +1,7 @@
 import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
 import { haystackOf, prepare, rankParts, type Words } from '../../core/Search'
+import { GENERATED_ROOT, generateFzp } from '../../core/Generator'
 
 type Listing = { root: string, path: string, size: number, mtime: number }
 
@@ -25,13 +26,14 @@ export type BinTab     = { title: string, sections: BinSection[] }
 
 type Cached = { size: number, mtime: number, entry: Entry | null }
 
-const DB_NAME     = 'circuitmaster'
-const DB_VERSION  = 3
-const STORE       = 'parts'
-const CONCURRENCY = 16
-const PROGRESS    = 100
-const SEARCH_MAX  = 300
-const BINS        = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
+const DB_NAME      = 'circuitmaster'
+const DB_VERSION   = 3
+const STORE        = 'parts'
+const CONCURRENCY  = 16
+const PROGRESS     = 100
+const SEARCH_MAX   = 300
+const BINS         = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
+const ENGINE_FAULT = 'InternalError'
 const scope = self as unknown as { postMessage: (message: unknown) => void, onmessage: ((event: MessageEvent) => void) | null }
 
 let entries: Entry[] = []
@@ -66,8 +68,20 @@ const writeCache = (db: IDBDatabase, records: [string, Cached][]) => new Promise
     transaction.onerror = () => resolve()
 })
 
+// O SPIDERMONKEY ACUSA "too much recursion" NUMA REGEX INTERROMPIDA DENTRO DO WORKER, COM A PILHA RASA E SOB CARGA; A SEGUNDA TENTATIVA PASSA
+const again = <T>(work: () => T): T => {
+    try {
+        return work()
+    } catch (error) {
+        if (error instanceof Error && error.name === ENGINE_FAULT)
+            return work()
+
+        throw error
+    }
+}
+
 const toEntry = ({ root, path }: Listing, text: string): Entry | null => {
-    const part = readPart(text, root === 'app')
+    const part = again(() => readPart(text, root === 'app'))
 
     if (!part)
         return null
@@ -120,13 +134,20 @@ const index = async () => {
     if (db && fresh.length)
         await writeCache(db, fresh)
 
-    byId    = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
+    const read  = await Promise.all(BINS.map(async ([title, file]) => [title, readBin(await fetchText(`/fritzing/parts/bins/${file}`) ?? '')] as const))
+    const named = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
+    const made  = read.flatMap(([, bin]) => bin?.entries ?? []).filter(({ moduleIdRef }) => !named.has(moduleIdRef)).flatMap(({ moduleIdRef }) => {
+        const text  = generateFzp(moduleIdRef)
+        const entry = text ? toEntry({ root: GENERATED_ROOT, path: moduleIdRef, size: 0, mtime: 0 }, text) : null
+        return entry ? [[moduleIdRef, entry] as const] : []
+    })
+
+    byId    = new Map([...named, ...made])
     entries = [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
     words   = new Map(entries.map(entry => [entry.moduleId, prepare(entry)]))
     scope.postMessage({ type: 'ready', count: entries.length, total: listings.length })
 
-    const bins = await Promise.all(BINS.map(async ([title, file]) => {
-        const bin      = readBin(await fetchText(`/fritzing/parts/bins/${file}`) ?? '')
+    const bins = read.map(([title, bin]) => {
         const sections = new Map<string, Found[]>()
 
         bin?.entries.forEach(({ moduleIdRef, section }) => {
@@ -137,14 +158,14 @@ const index = async () => {
         })
 
         return { title, sections: [...sections].map(([name, items]) => ({ title: name, entries: items })) }
-    }))
+    })
 
     inBins = bins.map(bin => new Set(bin.sections.flatMap(section => section.entries.map(entry => entry.moduleId))))
     scope.postMessage({ type: 'bin', bins })
 }
 
 // BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR
-const search = (text: string) => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins).slice(0, SEARCH_MAX).map(strip)
+const search = (text: string) => again(() => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins)).slice(0, SEARCH_MAX).map(strip)
 
 const indexed = index()
 
@@ -161,5 +182,5 @@ scope.onmessage = async ({ data }) => {
         return scope.postMessage({ id: data.id, result: (data.moduleIds as string[]).flatMap(moduleId => byId.has(moduleId) ? [strip(byId.get(moduleId) as Entry)] : []) })
 
     if (data.type === 'locate')
-        return scope.postMessage({ id: data.id, result: Object.fromEntries((data.moduleIds as string[]).flatMap(id => byId.has(id) ? [[id, { root: byId.get(id)?.root, path: byId.get(id)?.path }]] : [])) })
+        return scope.postMessage({ id: data.id, result: Object.fromEntries((data.moduleIds as string[]).flatMap(id => byId.has(id) && byId.get(id)?.root !== GENERATED_ROOT ? [[id, { root: byId.get(id)?.root, path: byId.get(id)?.path }]] : [])) })
 }

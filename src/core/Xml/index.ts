@@ -1,11 +1,21 @@
-import { DOMParser, XMLSerializer, type Element } from '@xmldom/xmldom'
+import { DOMParser, ParseError, XMLSerializer, type Element } from '@xmldom/xmldom'
 
 export type XmlElement = Element
 
 const parser     = new DOMParser({ onError: () => {} })
 const serializer = new XMLSerializer()
 
-export const parseXml = (text: string) => parser.parseFromString(text, 'text/xml').documentElement as XmlElement
+// TEXTO SEM ELEMENTO RAIZ VIRA NULO: O XMLDOM LANÇA ParseError NO ERRO FATAL MESMO COM onError
+export const parseXml = (text: string) => {
+    try {
+        return parser.parseFromString(text, 'text/xml').documentElement
+    } catch (error) {
+        if (error instanceof ParseError)
+            return null
+
+        throw error
+    }
+}
 
 export const serializeXml = (element: XmlElement) => serializer.serializeToString(element)
 

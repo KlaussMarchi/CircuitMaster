@@ -18,7 +18,7 @@ import { parseSi } from '../../core/Properties'
 type View = typeof VIEWS[number]
 
 export type LegItem   = { key: string, points: Point[], width: number, color: string }
-export type PartItem  = { type: 'part', modelIndex: string, z: number, moduleId: string, svg: SvgFile, variant: string, matrix: Matrix, width: number, height: number, legs: LegItem[], hidden: string[], paint: [string, string][], texts: [string, string][], upright: Point, layer: string, recolor: [string, string][] }
+export type PartItem  = { type: 'part', modelIndex: string, z: number, moduleId: string, svg: SvgFile, variant: string, matrix: Matrix, width: number, height: number, legs: LegItem[], hidden: string[], paint: [string, string][], texts: [string, string][], upright: Point, layer: string, recolor: [string, string][], hit: boolean }
 export type WireItem  = { type: 'wire', modelIndex: string, z: number, d: string, width: number, color: string, opacity: number, shadow: string | null, ends: [Point, Point] }
 export type NoteItem  = { type: 'note', modelIndex: string, z: number, x: number, y: number, width: number, height: number, html: string }
 export type RatItem   = { from: string, to: string, a: Point, b: Point, color: string }
@@ -30,6 +30,10 @@ const SVG_NS = 'http://www.w3.org/2000/svg'
 
 const PCB_COLORS: [string, string][] = [['copper0', '#f9a435'], ['copper1', '#fdde68'], ['silkscreen0', '#444444'], ['silkscreen', '#000000']]
 const PCB_DRAWN  = ['board', 'groundplane', 'silkscreen0', 'copper0', 'groundplane1', 'copper1', 'silkscreen', 'partimage']
+
+// CADA CAMADA É UMA IMAGEM QUE COBRE A CAIXA TODA DA PEÇA, ENTÃO SÓ UMA RECEBE CLIQUE: A DE BAIXO NA PLACA E A DE COBRE MAIS ALTA NAS PEÇAS (ACIMA DO PREENCHIMENTO, ABAIXO DAS TRILHAS DE CIMA)
+const BOARD_KINDS   = ['board', 'resizableBoard']
+const COPPER_LAYERS = ['copper0', 'copper1']
 const KEPT_TAGS  = new Set(['defs', 'style'])
 const BLACK            = new Set(['black', '#000000'])
 const STYLE_ATTRIBUTES = ['stroke-width', 'stroke', 'fill', 'fill-opacity', 'stroke-opacity', 'font-size', 'stroke-dasharray']
@@ -147,9 +151,14 @@ const getItem = (scene: Scene, modelIndex: string): (PartItem | WireItem | NoteI
     if (!svg || !m || !part)
         return []
 
-    const item: PartItem = { type: 'part', modelIndex, z: state.geometry.z, moduleId, svg, variant, matrix: m, width: svg.width, height: svg.height, legs: getLegs(scene, modelIndex), hidden: state.hidden, paint: getPaint(scene, modelIndex), texts: getTexts(scene, modelIndex), upright: scene.view === 'schematicView' ? getUpright(m) : [1, 1], layer: '', recolor: [] }
+    const item: PartItem = { type: 'part', modelIndex, z: state.geometry.z, moduleId, svg, variant, matrix: m, width: svg.width, height: svg.height, legs: getLegs(scene, modelIndex), hidden: state.hidden, paint: getPaint(scene, modelIndex), texts: getTexts(scene, modelIndex), upright: scene.view === 'schematicView' ? getUpright(m) : [1, 1], layer: '', recolor: [], hit: true }
     const offset         = Math.min(0.999, Math.max(0, state.geometry.z - getLayerZ('pcbView', state.layer)))
-    return scene.view === 'pcbView' ? getPcbLayers(part, svg, state.hidden).map(({ layer, source, recolor }) => ({ ...item, z: (layer ? getLayerZ('pcbView', layer) : state.geometry.z) + (layer ? offset : 0), layer: source, recolor })) : [item]
+    if (scene.view !== 'pcbView')
+        return [item]
+
+    const layers = getPcbLayers(part, svg, state.hidden)
+    const hit    = BOARD_KINDS.includes(part.kind) ? 0 : Math.max(0, layers.map(({ layer }) => COPPER_LAYERS.includes(layer)).lastIndexOf(true))
+    return layers.map(({ layer, source, recolor }, i) => ({ ...item, z: (layer ? getLayerZ('pcbView', layer) : state.geometry.z) + (layer ? offset : 0), layer: source, recolor, hit: i === hit }))
 }
 
 // COR DE CADA NET PELO NOME DE UM MEMBRO OU PELA PALETA CÍCLICA DA VISTA (SPEC 02 §2.6)
@@ -340,6 +349,10 @@ export type ImageOptions = { hidden?: string[], paint?: [string, string][], text
 // SVG DA PEÇA COMO IMAGEM: VIEWBOX RESOLVIDO, SEM PERNAS ELÁSTICAS NEM CAMADAS OCULTAS, COM CORES PARAMÉTRICAS, SÓ A CAMADA PEDIDA, COR DA CAMADA E TEXTO EM CONTORNO, ENDIREITADO NO ESQUEMÁTICO (SPEC 01 §2.4, §3.3, §3.8)
 export const getImageText = (part: Part, svg: SvgFile, view: ViewName, { hidden = [], paint = [], texts = [], fonts = new Map(), upright = [1, 1], layer = '', recolor: colors = [] }: ImageOptions = {}) => {
     const root    = parseXml(svg.text)
+
+    if (!root)
+        return svg.text
+
     const legs    = view === 'breadboardView' ? part.connectors.flatMap(connector => (connector.views.breadboardView ?? []).map(pin => pin.legId)).filter(Boolean) : []
     const removed = new Set([...legs, ...hidden])
     const kept    = layer ? findById(root, layer) : undefined

@@ -639,7 +639,11 @@ export const useStore = create<State>((set, get) => {
             await get().paste(false)
         },
 
-        selectAll: () => set({ selection: Object.keys(get().doc.instances) }),
+        selectAll: () => {
+            const { doc, library, view } = get()
+            const scene                  = new Scene(doc, library, view)
+            set({ selection: Object.values(doc.instances).filter(instance => scene.isShown(instance)).map(instance => instance.modelIndex) })
+        },
 
         swap: async (modelIndex, moduleId) => {
             const { library } = get()

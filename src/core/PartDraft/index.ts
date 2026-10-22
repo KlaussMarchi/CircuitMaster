@@ -192,17 +192,17 @@ export class PartDraft {
         })
     }
 
-    // variant JÁ USADA NA FAMÍLIA VIRA "variant N" COM O MENOR N LIVRE (SPEC 01 §8A.5)
+    // variant AUSENTE OU JÁ USADA NA FAMÍLIA VIRA "variant N" COM O MENOR N LIVRE (SPEC 01 §8A.5)
     ensureVariant(taken: string[]) {
         const entries = this.getProperties()
         const current = entries.find(([name]) => name.toLowerCase() === 'variant')?.[1] ?? ''
         const used    = new Set(taken.map(value => value.trim().toLowerCase()))
 
-        if (!current || !used.has(current.trim().toLowerCase()))
+        if (current && !used.has(current.trim().toLowerCase()))
             return current
 
         const fresh = `variant ${Array.from({ length: used.size + 1 }, (_, i) => i + 1).find(n => !used.has(`variant ${n}`))}`
-        this.setProperties(entries.map(([name, value]): [string, string] => [name, name.toLowerCase() === 'variant' ? fresh : value]))
+        this.setProperties(current ? entries.map(([name, value]): [string, string] => [name, name.toLowerCase() === 'variant' ? fresh : value]) : [...entries, ['variant', fresh]])
         return fresh
     }
 

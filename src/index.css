@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("./");    /* SÓ src/: AS SPECS E O README NÃO GERAM CLASSES NEM RECARREGAM A PÁGINA */
 @import "./ui/Theme/style.css";
 
 @theme inline {

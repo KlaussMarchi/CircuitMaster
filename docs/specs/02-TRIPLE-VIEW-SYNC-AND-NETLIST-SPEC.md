@@ -266,8 +266,9 @@ pontas ligadas a qualquer outra peça.
      ligação invisível capacidade **2**, de modo que o corte prefere apagar o fio inteiro a deixar uma ponta solta,
    - barramentos e travessias de face têm capacidade 1000;
    calcular o fluxo máximo (Edmonds–Karp) e remover as arestas do corte mínimo (lado alcançável a partir da
-   origem × resto). Na prática, apagar o ratsnest de um esquemático remove o fio de breadboard (ou a trilha de
-   PCB) que o causava, preferindo nunca remover o que está visível onde o usuário está.
+   origem × resto). Um fio cortado sai com a sua cadeia direta (as dobras), como o `collectChained` do Fritzing,
+   para não sobrarem trechos soltos. Na prática, apagar o ratsnest de um esquemático remove o fio de breadboard
+   (ou a trilha de PCB) que o causava, preferindo nunca remover o que está visível onde o usuário está.
 11. **Pernas elásticas** (breadboard): arrastar a ponta da perna estica a perna (o polígono ganha o novo último
     vértice); duplo clique num segmento da perna insere um vértice; duplo clique num vértice interno o remove;
     ao soltar a ponta sobre um conector fêmea, conecta (3.1). As curvas por segmento são preservadas.
@@ -639,7 +640,11 @@ seleção 1 px, ou 1 passo de grade com o alinhamento ligado (`Shift` multiplica
 
 Colar: as peças coladas recebem novos `modelIndex` e títulos; as arestas entre itens copiados são recriadas; as
 arestas para itens fora da cópia são descartadas; a $k$-ésima colagem seguida (k = 0, 1, …) desloca o conjunto de
-$(20 + 20k,\ -20 + 20k)$ px (colar no lugar não desloca).
+$(20 + 20k,\ -20 + 20k)$ px (colar no lugar não desloca). Com o alinhamento à grade ligado, o conjunto colado é
+encaixado na grade depois do deslocamento, pela primeira peça colada que aparece na vista.
+
+`Ctrl+A` seleciona só o que aparece na vista corrente (`Scene.isShown`): na protoboard não entram a placa, as vias
+nem as trilhas da PCB, e apagar em seguida não as leva.
 
 ### 10.4 Barra de menus
 
@@ -651,9 +656,9 @@ Mesma organização da referência, com os rótulos do CircuitMaster em portugu�
 | Exportar ▸ | Como imagem ▸ PNG · JPG · SVG · PDF; Para produção ▸ Gravável PDF · Gravável SVG · Gerber estendido (RS-274X) · Pick-and-place; Lista de materiais (HTML) · Lista de materiais (CSV) · Lista de materiais (PDF); Netlist IPC-D-356A; Netlist XML; Netlist SPICE |
 | Editar | Desfazer · Refazer · Recortar · Copiar · Colar · Colar no lugar · Duplicar · Apagar · Apagar sem fios · Selecionar tudo · Desmarcar · Adicionar nota |
 | Peça | Editar (editor de peças) · Girar ▸ · Espelhar · Elevar e rebaixar ▸ · Alinhar ▸ (esquerda, centro horizontal, direita, topo, centro vertical, base) · Travar peça · Sticky · Mostrar rótulo |
-| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real (`Shift+Ctrl+0`) · Alinhar à grade · Mostrar grade · Fios ortogonais (90°) · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) · Tema claro/escuro |
-| Roteamento (PCB) | Autorotear (`Shift+Ctrl+A`) · DRC (`Shift+Ctrl+D`) · Regras do autorouter e DRC (aba Roteamento do inspetor) · Preenchimento ▸ Preencher com cobre · Preencher com terra · Remover preenchimento · Definir sementes · Limpar sementes · Folga do preenchimento; Mover trilha para a outra face · Não rotear automaticamente; Selecionar todas as trilhas · vias · preenchimentos; Apagar trilhas autoroteadas |
-| Roteamento (esquemático) | Autorotear · Não rotear automaticamente · Selecionar todos os fios |
+| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real · 100% (`Shift+Ctrl+0`, como no Fritzing) · Alinhar à grade · Mostrar grade · Fios ortogonais (90°) · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) · Tema claro/escuro |
+| Roteamento (PCB) | Autorotear (`Shift+Ctrl+A`) · DRC (`Shift+Ctrl+D`) · Regras do autorouter e DRC (aba Roteamento do inspetor) · Preenchimento de cobre ▸ Preencher com terra · Preencher com cobre · Remover preenchimento · Limpar sementes de terra; Mover trilha para a outra face · Não rotear automaticamente; Selecionar todas as trilhas · trilhas autoroteáveis · vias · preenchimentos; Apagar trilhas autoroteadas. As sementes de terra se marcam no menu de contexto do conector e a folga do preenchimento é a "Folga do cobre" da aba Roteamento do inspetor |
+| Roteamento (esquemático) | Autorotear · Não rotear automaticamente · Selecionar todas as trilhas · Apagar fios autoroteados |
 | Roteamento (breadboard) | Selecionar todos os fios |
 | Simulação (extensão) | Simular/Parar · Ponto de operação (DC) · Transitório · Ponta de tensão · Ponta de corrente · Ponta de tensão e corrente · Remover todas as pontas de prova · Tempo, amostragem e testes… · Resposta · Circuitos de teste ▸ (doc 04 §5.5, §8.7–§8.9, §9) |
 

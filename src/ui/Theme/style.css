@@ -453,6 +453,9 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
   .center { order: 1; }
   .stage { min-height: 56vh; }
   .stage-head { flex-wrap: wrap; height: auto; padding: 8px; gap: 4px 12px; }
+  .tools { flex-wrap: wrap; min-width: 0; }
+  .dock-head { flex-wrap: wrap; }
+  .dock-ctl { flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
   .doc { order: -1; width: 100%; margin-left: 0; }
   .dock { height: auto; max-height: none; }
   .dock-body { grid-template-columns: 1fr; }

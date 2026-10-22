@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { readBundle } from '../src/core/Sketch'
 import { emptyDoc, fromSketch, keyOf } from '../src/core/Document'
 import { Netlist } from '../src/core/Netlist'
-import { VIEWS } from '../src/core/Layer'
+import { VIEWS, getLayerZ } from '../src/core/Layer'
 import { childrenOf, parseXml, tagOf, walk, type XmlElement } from '../src/core/Xml'
 import { apply, boxOf, multiply, parseTransform, unionBoxes, type Box, type Matrix, type Point } from '../src/core/Geometry'
 import { SvgFile } from '../src/core/SvgFile'
@@ -30,7 +30,7 @@ const distance = (a: Point | null, b: Point | null) => a && b ? Math.hypot(a[0] 
 
 const outlines = (text: string) => {
     const found: XmlElement[] = []
-    walk(parseXml(text), element => tagOf(element) === 'g' && childrenOf(element).some(child => tagOf(child) === 'path') && found.push(element))
+    walk(parseXml(text)!, element => tagOf(element) === 'g' && childrenOf(element).some(child => tagOf(child) === 'path') && found.push(element))
     return found
 }
 
@@ -73,13 +73,23 @@ describe.skipIf(!HAS_FRITZING)('motor de cena e desenho', () => {
                 expect(drawing.items.every(item => item.type === 'wire' ? !item.d.includes('NaN') : item.type === 'note' ? Number.isFinite(item.x + item.y + item.width + item.height) : item.matrix.every(Number.isFinite))).toBe(true)
                 expect(drawing.ratsnest.length).toBe(netlist.getRatsnest(view, key => scene.getTerminal(key)).length)
 
+                const layers = parts.reduce((map, item) => map.set(item.modelIndex, [...map.get(item.modelIndex) ?? [], item]), new Map<string, typeof parts>())
+                const copper = ['copper0', 'copper1'].map(layer => getLayerZ('pcbView', layer))
+                const target = [...layers].map(([modelIndex, items]) => {
+                    const zs     = items.map(item => item.z)
+                    const copped = zs.filter(z => copper.some(base => z >= base && z < base + 1))
+                    return [modelIndex, ['board', 'resizableBoard'].includes(library.getPart(items[0].moduleId)?.kind ?? '') || !copped.length ? Math.min(...zs) : Math.max(...copped)]
+                })
+                expect(parts.filter(item => item.hit).length).toBe(target.length)
+                expect(Object.fromEntries(parts.filter(item => item.hit).map(item => [item.modelIndex, item.z]))).toEqual(Object.fromEntries(target))
+
                 for (const item of parts.filter(part => part.legs.length)) {
                     const part = library.getPart(item.moduleId)
                     const svg  = library.getSvg(item.moduleId, view)
                     const legs = new Set(part?.connectors.flatMap(connector => (connector.views.breadboardView ?? []).map(pin => pin.legId)).filter(Boolean))
                     let left   = 0
 
-                    walk(parseXml(part && svg ? getImageText(part, svg, view) : ''), element => {
+                    walk(parseXml(part && svg ? getImageText(part, svg, view) : '<svg/>')!, element => {
                         left += legs.has(element.getAttribute('id') ?? '') ? 1 : 0
                     })
                     totals.leftLegs += left

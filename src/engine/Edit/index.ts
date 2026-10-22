@@ -642,7 +642,8 @@ export const createInstance = (doc: Doc, library: Library, moduleId: string, pla
         return [view, state]
     }))
 
-    const added   = addInstance(doc, { moduleIdRef: moduleId, modelIndex, path: '', title: getTitle(doc, part.label), text: '', properties: {}, localConnectors: {}, views })
+    const sticky  = ['board', 'resizableBoard'].includes(part.kind) && (part.views.pcbView?.sticky.length ?? 0) > 0    // PLACA NOVA NASCE STICKY, COMO O applyBoardCreationDefaults DO FRITZING
+    const added   = addInstance(doc, { moduleIdRef: moduleId, modelIndex, path: '', title: getTitle(doc, part.label), text: '', properties: sticky ? { sticky: 'true' } : {}, localConnectors: {}, views })
     const labeled = LABELED_KINDS.includes(part.kind)
 
     return VIEWS.reduce((current, view) => {
@@ -963,9 +964,9 @@ export const deleteRatsnest = (doc: Doc, library: Library, view: ViewName, from:
 
     const reached = search()
     const cut     = links.filter(link => reached.has(link.a) !== reached.has(link.b))
-    const wires   = cut.flatMap(link => link.wire ? [link.wire] : [])
+    const wires   = new Set(cut.flatMap(link => link.wire ? getChain(scene, link.wire) : []))    // O FIO CORTADO SAI COM AS DOBRAS, COMO O collectChained DO FRITZING
     const edges   = new Set(cut.flatMap(link => link.edge ? [link.edge.join('|')] : []))
-    return wires.reduce(removeInstance, removeEdges(doc, edge => edges.has(edge.join('|'))))
+    return [...wires].reduce(removeInstance, removeEdges(doc, edge => edges.has(edge.join('|'))))
 }
 
 // TROCA A PEÇA DA INSTÂNCIA MANTENDO GEOMETRIA E AS CONEXÕES DOS connectorId QUE EXISTEM NA PEÇA NOVA (SPEC 02 §5)

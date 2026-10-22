@@ -191,6 +191,8 @@ const FZP_RULES: [RegExp, (match: RegExpMatchArray) => string][] = [
     [/^(\d+)\.(\d+)(Perfboard|Stripboard2?)ModuleID$/, ([id, x, y, type]) => boardFzp(id, Number(x), Number(y), type.replace(/2$/, ''))]
 ]
 
+export const GENERATED_ROOT = 'generated'    // RAIZ DAS PEÇAS GERADAS NO ÍNDICE: NÃO HÁ ARQUIVO, A Library CAI EM generateFzp
+
 export const generateFzp = (moduleId: string) => {
     for (const [pattern, build] of FZP_RULES) {
         const match = moduleId.match(pattern)
@@ -362,11 +364,14 @@ export const logoTextSvg = (template: string, text: string, fonts: Fonts) => {
     const root  = parseXml(template)
     let label: XmlElement | undefined
 
+    if (!root)
+        return null
+
     walk(root, element => label = label ?? (tagOf(element) === 'text' && element.getAttribute('id') === 'label' ? element : undefined))
 
     const font = label ? pickFont(fonts, label.getAttribute('font-family'), null) : undefined
 
-    if (!root || !label || !font)
+    if (!label || !font)
         return null
 
     const size   = Number(label.getAttribute('font-size') ?? 10) * LOGO_PIXELS
@@ -401,6 +406,9 @@ export const isResizableBoard = (moduleId: string) => RESIZABLE_BOARDS.has(modul
 export const resizeBoardSvg = (text: string, width: number, height: number) => {
     const root   = parseXml(text)
     const leaves: XmlElement[] = []
+
+    if (!root)
+        return text
 
     walk(root, element => {
         if (element !== root && !childrenOf(element).length && ['rect', 'ellipse', 'circle', 'path', 'polygon'].includes(tagOf(element)))

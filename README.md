@@ -18,13 +18,18 @@ BOM, IPC-D-356A, netlist XML, PDF e SVG.
 ## Uso
 
 ```bash
-npm install
+npm ci
 npm run dev       # compila os módulos Rust e sobe o Vite
-npm test          # testes; os relatórios vão para build/
+npm test          # testes Vitest; os relatórios vão para build/
+npm run e2e       # fluxos no navegador (Playwright), no Chromium e no Firefox
+npm run perf      # build de produção e medição de desempenho → build/perf-report.txt
+npm run verify    # tipos, Vitest, E2E e desempenho: tem de passar antes de cada commit
 npm run build     # verificação de tipos e build de produção em dist/
+npm run preview   # serve o dist/ com o acervo
 ```
 
-O próprio Vite serve o acervo do Fritzing em `/fritzing`, tanto no `dev` quanto no `npx vite preview`.
+O próprio Vite serve o acervo do Fritzing em `/fritzing`, tanto no `dev` quanto no `preview`. Os E2E usam o
+Chromium e o Firefox do Playwright (`npx playwright install chromium firefox` na primeira vez).
 
 ## Interface
 
@@ -99,11 +104,13 @@ botão do trilho (ou Exibir › Tema), guardado no navegador (`cm-theme`).
 | `tools` | acesso ao acervo e scripts de build do Clipper2 e do ngspice |
 | `docs/specs` | especificação que a implementação segue |
 | `tests` | testes Vitest sobre as peças e os exemplos do Fritzing |
+| `e2e` | testes Playwright: fluxos da interface, exemplos, exportações e desempenho (`perf.spec.ts`) |
 
-## Sala limpa
+## Licença
 
-O fritzing-app é GPLv3 e foi lido apenas para escrever a especificação em `docs/specs`. O código foi
-implementado a partir da especificação, sem transcrever o código do Fritzing.
+GPL-3.0-or-later (`LICENSE`), a mesma do Fritzing e do KiCad, o que permite portar código dos dois. Cada módulo
+com código portado ou adaptado traz a origem na primeira linha e é listado em `THIRD_PARTY.md`. Até 2026-10-21 o
+código foi escrito a partir das especificações em `docs/specs`, sem transcrever o código do Fritzing.
 
 ## Terceiros
 

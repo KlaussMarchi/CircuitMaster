@@ -77,13 +77,13 @@ export const Stage = () => {
                 <div className="tools" role="toolbar" aria-label="Ferramentas">
                     <button className="tool" aria-pressed={tool === 'select'} aria-label="Editar" title="Editar: clique seleciona, arraste o fundo para mover a vista, clique num terminal para ligar (H)" onClick={() => setTool('select')}><Icon name="hand" /></button>
                     <button className="tool" aria-pressed={tool === 'area'} aria-label="Seletor" title="Seletor: arraste no quadro para selecionar várias peças de uma vez (V)" onClick={() => setTool(tool === 'area' ? 'select' : 'area')}><Icon name="select" /></button>
-                    {PROBES.map(([kind, letters, hint]) => <button key={kind} className="tool" aria-pressed={tool === kind} aria-label={hint} title={`${hint}${sheet ? '' : ' (só na protoboard e no esquemático)'}`} disabled={!ready || !sheet} onClick={() => setTool(tool === kind ? 'select' : kind)}><ProbeIcon /><b>{letters}</b></button>)}
+                    {sheet && PROBES.map(([kind, letters, hint]) => <button key={kind} className="tool" aria-pressed={tool === kind} aria-label={hint} title={hint} disabled={!ready} onClick={() => setTool(tool === kind ? 'select' : kind)}><ProbeIcon /><b>{letters}</b></button>)}
                     <span className="sep" />
                     <button className="tool" aria-label="Desfazer" title="Desfazer (Ctrl+Z)" disabled={!past} onClick={undo}><Icon name="undo" /></button>
                     <button className="tool" aria-label="Refazer" title="Refazer (Ctrl+Shift+Z)" disabled={!future} onClick={redo}><Icon name="redo" /></button>
                     <span className="sep" />
                     <button className="tool" aria-label="Girar" title="Girar 90° (])" disabled={!selected} onClick={() => rotate(90)}><Icon name="rotate" /></button>
-                    <button className="tool" aria-label="Espelhar" title="Espelhar (|, esquemático)" disabled={!selected || view !== 'schematicView'} onClick={() => flip(true)}><Icon name="flip" /></button>
+                    {view === 'schematicView' && <button className="tool" aria-label="Espelhar" title="Espelhar (|)" disabled={!selected} onClick={() => flip(true)}><Icon name="flip" /></button>}
                     <button className="tool" aria-label="Apagar" title="Apagar (Delete)" disabled={!selected} onClick={() => remove(false)}><Icon name="trash" /></button>
                 </div>
                 {view === 'pcbView' && (

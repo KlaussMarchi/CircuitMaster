@@ -173,6 +173,29 @@ describe.skipIf(!HAS_FRITZING)('edição de fios e peças (spec 02 §4, §10)', 
         expect(net.getNet('schematicView', keyOf('1', 'connector1'))).not.toContain(keyOf('2', 'connector0'))
     })
 
+    it('placa nova nasce sticky na PCB, como no Fritzing; protoboard e peças comuns não', async () => {
+        const library = makeLibrary()
+        await library.load(['TwoLayerRectanglePCBModuleID', RESISTOR])
+        const doc     = [RESISTOR, 'TwoLayerRectanglePCBModuleID'].reduce((current, moduleId) => createInstance(current, library, moduleId, everywhere([0, 0])), emptyDoc())
+
+        expect(doc.instances['1'].properties.sticky).toBeUndefined()
+        expect(doc.instances['2'].properties.sticky).toBe('true')
+    })
+
+    it('apagar a linha de ratsnest leva a cadeia inteira do fio com dobras, como o collectChained do Fritzing', async () => {
+        const { library, doc } = await twoResistors()
+        const bent             = splitWire(splitWire(doc, 'breadboardView', '3', [100, 0]).doc, 'breadboardView', '3', [50, 0]).doc
+        const wires            = Object.values(bent.instances).filter(instance => instance.moduleIdRef === WIRE).map(instance => instance.modelIndex)
+        const rats             = getDrawing(new Scene(bent, library, 'schematicView'), await netOf(bent, library)).ratsnest
+
+        expect(wires).toHaveLength(3)
+
+        const after = deleteRatsnest(bent, library, 'schematicView', rats[0].from, rats[0].to)
+
+        expect(wires.filter(wire => after.instances[wire])).toEqual([])
+        expect(Object.keys(after.instances)).toEqual(['1', '2'])
+    })
+
     it('perna elástica estica até o ponto e ganha e perde vértices; espelhar duas vezes volta ao início', async () => {
         const library = makeLibrary()
         await library.load([LED])

@@ -21,7 +21,7 @@ const indexOf = (draft: PartDraft, view: DraftView, id: string) => draft.element
 
 describe('SVG de arquivo saneado (spec 01 §8A.4)', () => {
     it('tira script, foreignObject, atributos on* e links javascript:', () => {
-        const root = cleanSvg(parseXml(`<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script><rect id='a' onclick='x()' width='1' height='1'/><a href='javascript:alert(1)'><circle r='1'/></a><foreignObject><div/></foreignObject></svg>`))
+        const root = cleanSvg(parseXml(`<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script><rect id='a' onclick='x()' width='1' height='1'/><a href='javascript:alert(1)'><circle r='1'/></a><foreignObject><div/></foreignObject></svg>`)!)
         const text = root.toString()
         expect(text).not.toMatch(/script|onclick|javascript|foreignObject/)
         expect(text).toContain(`id="a"`)
@@ -144,6 +144,13 @@ describe.skipIf(!HAS_FRITZING)('editor de peças: cópia de trabalho (spec 01 §
         draft.setProperties([...draft.getProperties().filter(([name]) => name !== 'variant'), ['variant', 'variant 1']])
         expect(draft.ensureVariant(['variant 1', 'variant 2'])).toBe('variant 3')
         expect(draft.ensureVariant(['outra'])).toBe('variant 3')
+    })
+
+    it('peça sem variant ganha a variant N livre da família, como o editor do Fritzing ao abrir a peça', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        draft.setProperties(draft.getProperties().filter(([name]) => name !== 'variant'))
+        expect(draft.ensureVariant(['variant 1'])).toBe('variant 2')
+        expect(draft.getProperties()).toContainEqual(['variant', 'variant 2'])
     })
 
     it('a peça exportada carrega pelo pacote e o pino reatribuído tem a geometria do elemento novo', async () => {

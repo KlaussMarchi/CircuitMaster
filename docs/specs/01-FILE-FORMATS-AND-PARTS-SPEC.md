@@ -1093,8 +1093,8 @@ links `javascript:`), como todo SVG vindo de arquivo.
 ### 8A.5 Gravar
 
 Gravar cria sempre uma **peça nova**: `moduleId = <prefixo>_<guid de 32 hex>_1`, com o prefixo vindo do título
-(letras, números e `_`); se a família já tem a mesma `variant`, ela vira `variant N` com o menor $N$ livre na
-família. Cada vista grava o SVG em `<vista>/<moduleId>_<vista>.svg` (o `image` das `<layers>`), e o pacote é o
+(letras, números e `_`); se a peça não tem `variant` ou a família já tem a mesma, ela vira `variant N` com o
+menor $N$ livre na família (o editor do Fritzing também dá `variant N` à peça sem `variant`). Cada vista grava o SVG em `<vista>/<moduleId>_<vista>.svg` (o `image` das `<layers>`), e o pacote é o
 `.fzpz` da §6.2: `part.<moduleId>.fzp` e `svg.<vista>.<moduleId>_<vista>.svg`. A peça entra no acervo da sessão
 como as de pacote, vai para **Meus itens**, pode substituir a instância editada (troca de peça, doc 02 §5) e o
 `.fzpz` pode ser baixado.

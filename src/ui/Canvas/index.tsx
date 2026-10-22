@@ -38,7 +38,7 @@ type Drag =
 type Mode    = 'path' | 'line' | 'shift' | 'free'
 type Pointed = { index: string, end: string | null }
 type Aim    = { end: WireEnd, heading: Heading }
-type Wiring = { from: string[], points: Point[], start: Heading, first: Heading, axis: Heading, cursor: Point, aim: Aim | null, mode: Mode }
+type Wiring = { from: string[], points: Point[], start: Heading, axis: Heading, cursor: Point, aim: Aim | null, mode: Mode, previous: Wiring | null }
 
 const ZOOM_STEP   = 1.0015    // POR PX DE ROLAGEM
 const LINE_PX     = 33        // PX POR LINHA QUANDO deltaMode = 1
@@ -166,7 +166,7 @@ const modeOf = (event: { shiftKey: boolean, altKey: boolean }, routed: boolean):
 const GREYED = 'grayscale(1) brightness(0.8)'    // PEÇA FORA DA SIMULAÇÃO (SPEC 04 §8.1)
 
 const PartShape = ({ item, image, effect, greyed, view, lab, art }: { item: PartItem, image: string | undefined, effect: Effect | null, greyed: boolean, view: View, lab: boolean, art: ReactNode }) => (
-    <g data-index={item.modelIndex}>
+    <g data-index={item.modelIndex} pointerEvents={item.hit ? undefined : 'none'}>
         {effect && view === 'breadboardView' && <Glow item={item} effect={effect} />}
         {art ? <rect width={item.width} height={item.height} transform={`matrix(${item.matrix.join(' ')})`} fill="transparent" /> : <image href={image} width={item.width} height={item.height} preserveAspectRatio="none" transform={`matrix(${item.matrix.join(' ')})`} style={greyed ? { filter: GREYED } : undefined} />}
         {art && <g opacity={greyed ? 0.45 : 1}>{art}</g>}
@@ -315,7 +315,7 @@ export const Canvas = () => {
                 spaceRef.current = event.type === 'keydown'
         }
 
-        // DURANTE O FIO: Esc CANCELA E Backspace/Delete DESFAZ A ÚLTIMA DOBRA, SEM CHEGAR AOS ATALHOS GERAIS
+        // DURANTE O FIO: Esc CANCELA E Backspace/Delete VOLTA A ANTES DA ÚLTIMA DOBRA (COM O CAMINHO QUE ELA CRIOU), SEM CHEGAR AOS ATALHOS GERAIS
         const onWiringKey = (event: KeyboardEvent) => {
             const current = wiringRef.current
 
@@ -325,11 +325,10 @@ export const Canvas = () => {
             event.preventDefault()
             event.stopImmediatePropagation()
 
-            if (event.key === 'Escape' || current.points.length < 2)
+            if (event.key === 'Escape' || !current.previous)
                 return setWiring(null)
 
-            const points = current.points.slice(0, -1)
-            setWiring({ ...current, points, start: points.length === 1 ? current.first : null, axis: null })
+            setWiring({ ...current.previous, cursor: current.cursor, aim: current.aim, mode: current.mode })
         }
 
         window.addEventListener('keydown', onWiringKey, true)
@@ -470,7 +469,7 @@ export const Canvas = () => {
     }
 
     const startWiring = (from: string[], point: Point, heading: Heading, event: { shiftKey: boolean, altKey: boolean }) => {
-        setWiring({ from, points: [point], start: heading, first: heading, axis: null, cursor: point, aim: null, mode: modeOf(event, routed) })
+        setWiring({ from, points: [point], start: heading, axis: null, cursor: point, aim: null, mode: modeOf(event, routed), previous: null })
         setHover(null)
         setPointed(null)
     }
@@ -485,7 +484,7 @@ export const Canvas = () => {
         const points = [...current.points, ...legOf(current)]
         const [p, q] = points.slice(-2)
         const along  = p && q ? toHeading([q[0] - p[0], q[1] - p[1]]) : null
-        setWiring({ ...current, points, start: null, axis: along && [Math.abs(along[1]), Math.abs(along[0])], aim: null })
+        setWiring({ ...current, points, start: null, axis: along && [Math.abs(along[1]), Math.abs(along[0])], aim: null, previous: current })
     }
 
     const finishWiring = (current: Wiring, aim: Aim | null) => {

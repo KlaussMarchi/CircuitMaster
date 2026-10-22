@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { FEATURED, FEATURED_GROUPS, type Featured } from '../../core/Featured'
+import { GENERATED_ROOT, generateSvg } from '../../core/Generator'
 import type { Found } from '../../workers/Indexer'
 import { Icon } from '../Icon'
 import { promptBin } from '../Menus'
@@ -14,8 +15,9 @@ const MINE = 'Meus itens'
 
 const icons = new Map<string, string>()
 
-const bundleIcon = (entry: Found) => {
-    const text = entry.root === 'bundle' ? useStore.getState().library.findBundled(entry.icon)?.text : undefined
+// ÍCONE DE PEÇA SEM ARQUIVO NO ACERVO: DE PACOTE OU GERADA (DIP, BARRA DE PINOS…)
+const ownIcon = (entry: Found) => {
+    const text = entry.root === 'bundle' ? useStore.getState().library.findBundled(entry.icon)?.text : entry.root === GENERATED_ROOT ? generateSvg(entry.icon) : undefined
 
     if (text && !icons.has(entry.icon))
         icons.set(entry.icon, URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' })))
@@ -23,7 +25,7 @@ const bundleIcon = (entry: Found) => {
     return icons.get(entry.icon) ?? null
 }
 
-const iconOf = (entry: Found) => useStore.getState().catalog.getIcon(entry) ?? bundleIcon(entry)
+const iconOf = (entry: Found) => useStore.getState().catalog.getIcon(entry) ?? ownIcon(entry)
 
 const Glyph = ({ item }: { item: Featured }) => (
     <svg viewBox="0 0 64 64" aria-hidden>

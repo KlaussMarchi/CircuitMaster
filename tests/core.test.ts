@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { toInches } from '../src/core/Units'
 import { apply, parseTransform } from '../src/core/Geometry'
 import { SvgFile, flattenPath } from '../src/core/SvgFile'
+import { parseXml } from '../src/core/Xml'
+import { readPart } from '../src/core/Part'
+import { readBin, readSketch } from '../src/core/Sketch'
+import { PartDraft } from '../src/core/PartDraft'
 import { loadWasm } from './Fixtures'
 
 describe('unidades', () => {
@@ -16,6 +20,18 @@ describe('unidades', () => {
         expect(toInches('180')).toBe(2)
         expect(toInches('')).toBeNull()
         expect(toInches('abc')).toBeNull()
+    })
+})
+
+describe('arquivo escolhido pela pessoa', () => {
+    it('texto sem XML vira nulo em vez de exceção', () => {
+        for (const text of ['', 'isto não é svg', '<svg', '\u0000\u0001'])
+            expect(parseXml(text), JSON.stringify(text)).toBeNull()
+
+        expect(readPart('isto não é fzp')).toBeNull()
+        expect(readSketch('isto não é fz')).toBeNull()
+        expect(readBin('isto não é fzb')).toBeNull()
+        expect(new PartDraft('<module moduleId="x"/>', {}).setSvg('breadboardView', 'isto não é svg')).toBe(false)
     })
 })
 
