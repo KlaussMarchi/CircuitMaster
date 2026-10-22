@@ -34,7 +34,7 @@ teste de clareza de cada função existente. Fase 2 do plano `FRIZING_KICAD.md` 
 | Palco (`ui/Stage`) | ferramentas (Editar, Seletor, pontas V/A/V·A, desfazer, girar, espelhar, apagar), face da placa na PCB, o nome do sketch com o selo (ou as abas de sketches) e o quadro (`ui/Canvas`) com chip da simulação, barra da seleção múltipla, zoom, legenda de camadas e boas-vindas |
 | Doca (`ui/SimulationPanel`) | o painel único de simulação (§3) |
 | Inspetor (`ui/SidePanel`) | Propriedades (`ui/Inspector`), Roteamento (`ui/RoutingPanel`) e Documento (`ui/ProjectPanel`) |
-| Barra de status (`ui/StatusBar`) | vista, peças, ligações pendentes, a última mensagem, o autorouter em andamento e o zoom |
+| Barra de status (`ui/StatusBar`) | vista, peças, ligações pendentes, a última mensagem, o autorouter em andamento, as coordenadas do cursor (do Maker em diante, §11) e o zoom |
 
 Até 1280 px os painéis estreitam e curvas e medidas da doca dividem a coluna da esquerda; até 860 px (celular) o
 trilho vira barra inferior, os painéis viram folhas sobre o quadro e a doca empilha.
@@ -130,7 +130,31 @@ dela. A tecla escolhida para uma ação sai da ação que a tinha; "padrão" e "
 - O DRC roda sozinho 600 ms depois de cada mudança na PCB (e ao chegar nela) e marca cada violação no desenho
   (`[data-drc]`); Problemas lista com "Mostrar na placa".
 
-## 11. ESTILO
+## 11. CURSOR, COORDENADAS, GRADE E NAVEGAÇÃO (KICAD)
+
+As funções comuns dos editores do KiCad, com as teclas padrão dele, no `ui/Navigation` e na tabela `ui/Keys`:
+
+| Função | Como |
+|---|---|
+| Coordenadas | X e Y do cursor (na grade) pela origem da grade, na barra de status; com origem local, dX e dY ou r e θ (Exibir › Unidades › Coordenadas polares) |
+| Unidades | milímetros (padrão), polegadas ou mils; `Ctrl+U` alterna métrico e polegadas |
+| Origem local | `Espaço` zera as coordenadas relativas no cursor; segurado, o Espaço ainda arrasta a vista como no Fritzing |
+| Cursor do teclado | sem seleção, as setas andam um passo de grade e `Ctrl`+setas, dez; perto da borda a vista acompanha; com seleção, as setas movem a seleção (Fritzing) |
+| Clique pelo teclado | `Enter` clica no cursor e `End` dá duplo clique (o quadro recebe o clique como do mouse); durante o fio, `End` termina com a ponta solta |
+| Cursor em cruz | pequeno (padrão), na janela toda ou a 45°; aparece com o cursor do teclado ou sempre (Exibir › Cursor) |
+| Vista | `Shift`+setas sem seleção movem um quarto da janela; `F4` centraliza no cursor; Centralizar na seleção; Zoom na seleção; `Ctrl+F5` zoom na área arrastada; desfazer e refazer o último zoom (50 por vista; só zoom e enquadrar entram, mover não) |
+| Grade | lista de grades de cada vista nas Preferências; `N` e `Shift+N` andam por ela; as duas primeiras são as grades rápidas (`Alt+1`, `Alt+2`, `Alt+4` alterna) |
+| Origem da grade | colocada com um clique (Exibir › Grade), no cursor, digitada na aba Documento (x, y na unidade escolhida) ou restaurada; peças coladas e postas, fios, dobras e os pontos da grade partem dela; gravada na vista do `.fz` (`gridOrigin`) |
+| Grade por tipo | Preferências › Grade das peças e Grade dos fios sobrepõem a da vista (grid overrides) |
+| Seleção | Editar › Seleção por laço (o centro da peça dentro do polígono) e Apagar com cliques |
+| Copiar como texto | `Ctrl+Shift+C`: uma linha por peça selecionada (rótulo, peça e propriedades, separados por tabulação) |
+| Ver em outra vista | Peça › Ver na protoboard, no esquemático ou na PCB: a mesma seleção, centralizada (seleção cruzada) |
+| Painel da esquerda | o botão do painel aberto no trilho o recolhe na tela larga; Exibir › Painel da esquerda |
+
+Limites: o roteamento de fios (`engine/Path`) põe as dobras intermediárias na grade a partir do zero, não da origem
+da grade; as pontas e as peças seguem a origem.
+
+## 12. ESTILO
 
 Estilo "data terminal" (CLAUDE.md, Interface): só os tokens de `src/ui/Theme/style.css`, definidos nos dois temas; cor
 só em dados; seleção como linha de 1px em `--accent`; Public Sans no texto e JetBrains Mono só em números; um estilo
@@ -139,7 +163,7 @@ de botão, aba e pílula; ícones de linha; sombra só em menus e janelas. O edi
 invertido no tema escuro como no quadro. Nome de classe nosso não pode coincidir com utilitário do Tailwind (a camada
 `utilities` passa por cima de `components`: `.btn.block` virava `display: block`).
 
-## 12. TESTE DE CLAREZA
+## 13. TESTE DE CLAREZA
 
 Como um iniciante chega a cada função, a partir da tela normal. Toda ação dos menus também está a dois passos pela
 paleta (`Ctrl+K` e o nome, em português ou em inglês).
@@ -173,7 +197,7 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Recuperar trabalho depois de fechar sem salvar | o diálogo aparece sozinho ao abrir; depois, Arquivo › Versões salvas automaticamente |
 | Desfazer vários passos | Projeto no trilho e clicar no passo |
 | Ver o que está errado | Problemas no trilho (o número aparece no ícone) |
-| Criar a placa e rotear | PCB e "Criar placa e rotear" na aba Roteamento |
+| Criar a placa e rotear | abre a PCB: "Criar placa e rotear" aparece no próprio quadro quando há peças e não há placa |
 | Verificar a placa (DRC) | abrir a PCB: roda sozinho e marca no desenho |
 | Ligar e desligar camadas | clica na camada na legenda do quadro da PCB |
 | Preencher com terra | Roteamento › Preencher com terra (menu ou aba) |
@@ -183,11 +207,15 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Editar uma peça | botão direito na peça › Editar (editor de peças) |
 | Guardar peças num bin | botão direito › Adicionar ao bin |
 | Trocar a roda do mouse, o fio curvo ou as teclas | Editar › Preferências (Ctrl+,) |
-| Mudar o idioma | Editar › Preferências › Idioma |
+| Mudar o idioma | Exibir › Idioma (ou `Ctrl+,` e o idioma) |
 | Ver menos ou mais opções | Exibir › Modo da interface |
+| Mover o cursor e clicar pelo teclado | setas sem nada selecionado e Enter |
+| Mudar a grade | N e Shift+N, ou Alt+1 e Alt+2 |
+| Ver a peça em outra vista | Peça › Ver na PCB (ou no esquemático, na protoboard) |
+| Aprender o básico | Ajuda › Guia de uso ou Ajuda › Tour da interface |
 | Achar qualquer outra ação | Ctrl+K e o nome |
 
-## 13. AUDITORIA DE CLIQUES
+## 14. AUDITORIA DE CLIQUES
 
 | Fluxo | Antes da fase 2 | Depois |
 |---|---|---|
@@ -199,13 +227,14 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Janela manual | 3 | 1 |
 | Opções raras da simulação | 1 + rolar | 1 ("⋯") |
 | Achar uma ação sem saber o menu | percorrer os menus | 2 (Ctrl+K e o nome) |
+| Criar a placa a partir da PCB vazia | 2 (aba Roteamento + botão) | 1 (o botão no quadro) |
 | DRC depois de mexer na placa | 1 a 2 (Roteamento › Verificar) | 0 |
 | Ocultar uma camada da PCB | ausente | 1 |
 | Abrir outro sketch sem perder o atual | ausente (descartava) | 1 |
 
 Fotos do antes em `build/ui-antes/`; do depois em `build/ui/`.
 
-## 14. PLANO DE TESTES
+## 15. PLANO DE TESTES
 
 | Teste | Onde |
 |---|---|
@@ -224,4 +253,5 @@ Fotos do antes em `build/ui-antes/`; do depois em `build/ui/`.
 | Camadas da PCB na legenda e no menu; DRC automático marcado no desenho | `e2e/pcb.spec.ts` |
 | Tudo para fabricar (zip) | `e2e/export.spec.ts` |
 | Editor de peças no estilo da interface (abas, conectores, terminal, gravar) | `e2e/parts.spec.ts` |
+| Cursor do teclado, coordenadas, unidades, Espaço, Enter e F4; zoom (desfazer, refazer, seleção, área) e Shift+setas; grades, grades rápidas, origem e grade por tipo; laço, apagar com cliques, copiar como texto, End; painel recolhível, ver em outra vista, PCB sem placa, guia e boas-vindas; manutenção | `e2e/navigation.spec.ts` |
 | Fotos de cada tela nos dois temas a 1920, 1280 e 390 px | `e2e/ui.spec.ts` (`build/ui/`) |

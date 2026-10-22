@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { keyOf, removeEdges, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
-import { apply, boxesTouch, distance, invert, lerp, nearestOnCubic, nearestOnSegment, unionBoxes, type Box, type Point } from '../../core/Geometry'
+import { apply, boxesTouch, distance, insidePolygon, invert, lerp, nearestOnCubic, nearestOnSegment, unionBoxes, type Box, type Point } from '../../core/Geometry'
 import { milsToPx } from '../../core/Units'
 import { formatReading } from '../../core/Properties'
 import type { Library } from '../../core/Library'
@@ -23,11 +23,14 @@ import { FEATURED } from '../../core/Featured'
 import { getSwitching, isPressedAt, switchOf } from '../../core/Spice'
 import { switchText } from '../Inspector'
 import { t } from '../../core/Text'
+import { clampZoom as clamp, fit, useCursor } from '../Navigation'
 
 type Drag =
     { type: 'pan', client: Point, viewport: Viewport, moved: boolean, clear: boolean } |
     { type: 'press', client: Point, first: boolean, moved: boolean } |
     { type: 'marquee', start: Point, end: Point, base: string[], count: number, crossing: boolean } |
+    { type: 'lasso', points: Point[], base: string[] } |
+    { type: 'zoom', start: Point, end: Point } |
     { type: 'move', origin: Doc, start: Point, moved: string[], dx: number, dy: number, stretch: boolean, anchor: Point | null } |
     { type: 'end', origin: Doc, detached: Doc, keys: string[], bend: boolean, anchor: Point | null, moved: boolean, client: Point } |
     { type: 'body', origin: Doc, wire: string, start: Point, curve: boolean, moved: boolean, bend: string[] | null, base: Doc | null } |
@@ -44,9 +47,8 @@ type Wiring = { from: string[], points: Point[], start: Heading, axis: Heading, 
 
 const ZOOM_STEP   = 1.0015    // POR PX DE ROLAGEM
 const LINE_PX     = 33        // PX POR LINHA QUANDO deltaMode = 1
-const ZOOM_MIN    = 0.05
-const ZOOM_MAX    = 64
-const FIT_MARGIN  = 0.9
+const CROSS_PX    = 12        // MEIO BRAÇO DO CURSOR EM CRUZ PEQUENO
+const ORIGIN_PX   = 6         // MEIO BRAÇO DA MARCA DA ORIGEM LOCAL
 const HIT_PX      = 8         // LARGURA DE CLIQUE DE FIOS E RATSNEST NA TELA
 const HANDLE_PX   = 6         // RAIO DE CLIQUE NA PONTA DE FIO OU DE PERNA NA TELA
 const SNAP_PX     = 16        // O FIO EM DESENHO ENCAIXA NO TERMINAL A ATÉ ISSO NA TELA
@@ -94,16 +96,6 @@ const getImage = (library: Library, item: PartItem, view: View, paint: [string, 
         images.set(key, URL.createObjectURL(new Blob([getImageText(part, item.svg, view, options)], { type: 'image/svg+xml' })))
 
     return images.get(key)
-}
-
-const clamp = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom))
-
-const fit = (bounds: Box | null, [w, h]: Point): Viewport => {
-    if (!bounds)
-        return { x: -w / 2, y: -h / 2, zoom: 1 }
-
-    const zoom = clamp(Math.min(w / Math.max(1, bounds[2] - bounds[0]), h / Math.max(1, bounds[3] - bounds[1])) * FIT_MARGIN)
-    return { x: (bounds[0] + bounds[2]) / 2 - w / zoom / 2, y: (bounds[1] + bounds[3]) / 2 - h / zoom / 2, zoom }
 }
 
 // SHIFT: PROJEÇÃO MAIS PRÓXIMA ENTRE HORIZONTAL, VERTICAL E ±45° A PARTIR DA OUTRA PONTA (SPEC 02 §4.3)
@@ -209,6 +201,31 @@ const saveNote = (modelIndex: string, html: string) => {
         commit(setNoteText(doc, modelIndex, html))
 }
 
+// CURSOR EM CRUZ (PEQUENO, NA JANELA TODA OU A 45°) NO PONTO DA GRADE SOB O MOUSE OU DO TECLADO, E A ORIGEM DAS COORDENADAS RELATIVAS
+const Crosshair = () => {
+    const { point, origin, keyboard } = useCursor()
+    const always    = useStore(state => state.preferences.crosshairAlways)
+    const shape     = useStore(state => state.preferences.crosshair)
+    const viewport  = useStore(state => state.viewports[state.view])
+    const [w, h]    = useStore(state => state.size)
+    const screen    = (at: Point | null) => at && viewport ? [(at[0] - viewport.x) * viewport.zoom, (at[1] - viewport.y) * viewport.zoom] : null
+    const cursor    = always || keyboard ? screen(point) : null
+    const mark      = screen(origin)
+    const far       = w + h
+
+    if (!cursor && !mark)
+        return null
+
+    return (
+        <svg className="crosshair" width={w} height={h} aria-hidden>
+            {cursor && shape === 'small' && <path d={`M${cursor[0] - CROSS_PX} ${cursor[1]}H${cursor[0] + CROSS_PX}M${cursor[0]} ${cursor[1] - CROSS_PX}V${cursor[1] + CROSS_PX}`} />}
+            {cursor && shape === 'full' && <path d={`M0 ${cursor[1]}H${w}M${cursor[0]} 0V${h}`} />}
+            {cursor && shape === 'diagonal' && <path d={`M${cursor[0] - far} ${cursor[1] - far}L${cursor[0] + far} ${cursor[1] + far}M${cursor[0] - far} ${cursor[1] + far}L${cursor[0] + far} ${cursor[1] - far}`} />}
+            {mark && <path className="origin" d={`M${mark[0] - ORIGIN_PX} ${mark[1]}H${mark[0] + ORIGIN_PX}M${mark[0]} ${mark[1] - ORIGIN_PX}V${mark[1] + ORIGIN_PX}`} />}
+        </svg>
+    )
+}
+
 // VIEWPORT AO VIVO: DURANTE O GESTO SÓ O TRANSFORM CSS MUDA (COMPOSITOR) E O viewBox É REFEITO QUANDO O GESTO PARA OU O QUADRO JÁ NÃO COBRE A TELA; FICA FORA DO ESCOPO DO Canvas PARA OS CALLBACKS GUARDADOS NÃO PRENDEREM DESENHOS DE RENDERS ANTIGOS
 const useLiveViewport = (svgRef: RefObject<SVGSVGElement | null>, view: View, vp: Viewport, size: Point) => {
     const liveRef   = useRef<Viewport | null>(null)
@@ -270,11 +287,12 @@ export const Canvas = () => {
     const placing   = useStore(state => state.placing)
     const values    = useStore(state => state.show.values)
     const planesOff = useStore(state => state.hiddenLayers)
-    const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, getGrid, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing } = useStore.getState()
+    const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, gridOf, originOf, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing, setGridOrigin, remove } = useStore.getState()
 
     const svgRef              = useRef<SVGSVGElement>(null)
     const spaceRef            = useRef(false)
     const wiringRef           = useRef<Wiring | null>(null)
+    const finishRef           = useRef<((current: Wiring) => void) | null>(null)
     const [drag, setDrag]     = useState<Drag | null>(null)
     const [wiring, setWiring] = useState<Wiring | null>(null)
     const [menu, setMenu]     = useState<{ x: number, y: number, items: MenuEntry[] } | null>(null)
@@ -298,10 +316,12 @@ export const Canvas = () => {
         return box ? [<circle key={instance.modelIndex} data-index={instance.modelIndex} cx={(box[0] + box[2]) / 2} cy={(box[1] + box[3]) / 2} r={(box[2] - box[0]) / 2} fill="transparent" />] : []
     }), [doc, library, scene, view])    // A VIA RECEBE O CLIQUE ACIMA DAS TRILHAS QUE CHEGAM NELA, COMO NO KICAD
     const plans      = useMemo(() => getSwitching(doc), [doc])
-    const probing    = tool !== 'select' && tool !== 'area'
+    const probing    = tool === 'voltage' || tool === 'current' || tool === 'both'
     const settings   = doc.settings[view] ?? {}
     const dotColor   = useMemo(() => view === 'pcbView' ? PCB_DOTS : theme && getComputedStyle(document.documentElement).getPropertyValue('--grid-dot').trim(), [theme, view]) || '#2a292e'
-    const grid       = getGrid()
+    const grid       = gridOf(view, 'wires')
+    const partGrid   = gridOf(view, 'parts')
+    const origin     = originOf(view)
     const align      = settings.alignToGrid !== '0'
     const orthogonal = isOrthogonal(view)
     const routed     = orthogonal || view === 'pcbView'
@@ -330,19 +350,24 @@ export const Canvas = () => {
 
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
-            if (event.code === 'Space' && !(event.target as HTMLElement).closest(`input, select, textarea, ${EDITABLE}`))
-                spaceRef.current = event.type === 'keydown'
+            if (event.code !== 'Space' || (event.target as HTMLElement).closest(`input, select, textarea, button, ${EDITABLE}`))
+                return
+
+            spaceRef.current = event.type === 'keydown'    // SEGURADO, ARRASTA A VISTA (FRITZING); A TECLA SOZINHA ZERA AS COORDENADAS RELATIVAS (ui/Keys)
         }
 
         // DURANTE O FIO: Esc CANCELA E Backspace/Delete VOLTA A ANTES DA ÚLTIMA DOBRA (COM O CAMINHO QUE ELA CRIOU), SEM CHEGAR AOS ATALHOS GERAIS
         const onWiringKey = (event: KeyboardEvent) => {
             const current = wiringRef.current
 
-            if (!current || !['Escape', 'Backspace', 'Delete'].includes(event.key))
+            if (!current || !['Escape', 'Backspace', 'Delete', 'End'].includes(event.key))
                 return
 
             event.preventDefault()
             event.stopImmediatePropagation()
+
+            if (event.key === 'End')
+                return finishRef.current?.(current)
 
             if (event.key === 'Escape' || !current.previous)
                 return setWiring(null)
@@ -391,8 +416,8 @@ export const Canvas = () => {
         return [seen.x + (clientX - (rect?.left ?? 0)) / seen.zoom, seen.y + (clientY - (rect?.top ?? 0)) / seen.zoom]
     }
 
-    const snap      = (value: number) => align ? Math.round(value / grid) * grid : value
-    const snapPoint = (point: Point): Point => [snap(point[0]), snap(point[1])]
+    const snapAt    = (value: number, start: number, step = grid) => align ? Math.round((value - start) / step) * step + start : value
+    const snapPoint = (point: Point): Point => [snapAt(point[0], origin[0]), snapAt(point[1], origin[1])]
     const handle    = (width: number) => Math.max(HANDLE_PX / vp.zoom, width / 2 + 1)
     const far       = (from: Point, to: Point) => distance(from, to) > DRAG_PX
     const isBoard   = (modelIndex: string) => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')?.kind === 'breadboard'
@@ -464,7 +489,7 @@ export const Canvas = () => {
         const along   = lerp(ends[0], ends[1], nearestOnSegment(ends[0], ends[1], point))
         const [x0, x1] = [Math.min(ends[0][0], ends[1][0]), Math.max(ends[0][0], ends[1][0])]
         const [y0, y1] = [Math.min(ends[0][1], ends[1][1]), Math.max(ends[0][1], ends[1][1])]
-        const spot: Point = isAxisAligned(...ends) ? [Math.min(x1, Math.max(x0, snap(along[0]))), Math.min(y1, Math.max(y0, snap(along[1])))] : along
+        const spot: Point = isAxisAligned(...ends) ? [Math.min(x1, Math.max(x0, snapAt(along[0], origin[0]))), Math.min(y1, Math.max(y0, snapAt(along[1], origin[1])))] : along
         return { end: { keys: [], wire: index, point: spot }, heading: null }
     }
 
@@ -533,7 +558,7 @@ export const Canvas = () => {
         const near  = index && !ends ? scene.getKeys(index).map(key => [key, distance(scene.getTerminal(key) ?? [Infinity, Infinity], point)] as const).filter(([, d]) => d * vp.zoom <= PIN_PX).sort((a, b) => a[1] - b[1])[0]?.[0] : null
         const key   = ends ? keyOf(index, 'connector0') : index ? scene.getConnectorAt(point, modelIndex => modelIndex === index) ?? near : scene.getConnectorNear(point, PIN_PX / vp.zoom, modelIndex => !scene.isWire(modelIndex))
 
-        if (!key || tool === 'select' || tool === 'area')
+        if (!key || (tool !== 'voltage' && tool !== 'current' && tool !== 'both'))
             return useStore.setState({ message: t('clique num fio ou no terminal de uma peça para medir') })
 
         const spot   = ends ? scene.getPointOn(index, Math.min(0.9, Math.max(0.1, along))) : scene.getTerminal(key)
@@ -595,7 +620,9 @@ export const Canvas = () => {
         if (event.button === 2 || target.closest(EDITABLE))
             return
 
-        event.currentTarget.setPointerCapture(event.pointerId)
+        if (event.nativeEvent.isTrusted)
+            event.currentTarget.setPointerCapture(event.pointerId)    // O CLIQUE DO CURSOR DO TECLADO NÃO TEM PONTEIRO DE VERDADE
+
         setMenu(null)
 
         if (event.button === 1 || spaceRef.current)
@@ -614,6 +641,22 @@ export const Canvas = () => {
 
         if (probing)
             return placeProbe(point, target, event.shiftKey)
+
+        if (tool === 'origin') {
+            setGridOrigin(snapPoint(point))
+            return setTool('select')
+        }
+
+        if (tool === 'zoomArea')
+            return setDrag({ type: 'zoom', start: point, end: point })
+
+        if (tool === 'erase' && index) {
+            select([index])
+            return remove(false)
+        }
+
+        if (tool === 'lasso' || tool === 'erase')
+            return setDrag(tool === 'lasso' ? { type: 'lasso', points: [point], base: event.shiftKey ? selection : [] } : { type: 'pan', client, viewport: liveRef.current ?? vp, moved: false, clear: false })
 
         if (found) {
             selectProbe(found.id)
@@ -699,6 +742,7 @@ export const Canvas = () => {
         const moving = (start: Point) => distance(start, point) * vp.zoom > DRAG_PX
 
         const next   = wiring && drag?.type !== 'pan' ? follow(wiring, point, event.clientX, event.clientY, event) : null
+        useCursor.setState({ point: snapPoint(point), keyboard: false })
 
         if (next)
             setWiring(next)
@@ -726,6 +770,18 @@ export const Canvas = () => {
                 setDrag({ ...drag, moved: true })
 
             return showLive({ ...drag.viewport, x: drag.viewport.x - (event.clientX - drag.client[0]) / drag.viewport.zoom, y: drag.viewport.y - (event.clientY - drag.client[1]) / drag.viewport.zoom })
+        }
+
+        if (drag.type === 'zoom')
+            return setDrag({ ...drag, end: point })
+
+        if (drag.type === 'lasso') {
+            const points = [...drag.points, point]
+            select([...new Set([...drag.base, ...Object.values(doc.instances).filter(instance => scene.isShown(instance) && !scene.getView(instance.modelIndex)?.locked).map(instance => instance.modelIndex).filter(modelIndex => {
+                const bounds = scene.getBounds(modelIndex)
+                return bounds && insidePolygon([(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2], points)
+            })])])
+            return setDrag({ ...drag, points })
         }
 
         if (drag.type === 'marquee') {
@@ -766,7 +822,7 @@ export const Canvas = () => {
 
         if (drag.type === 'segment') {
             const raw   = drag.horizontal ? point[1] - drag.start[1] : point[0] - drag.start[0]
-            const shift = snap(drag.level + raw) - drag.level
+            const shift = snapAt(drag.level + raw, drag.horizontal ? origin[1] : origin[0]) - drag.level
 
             if (!drag.moved && !moving(drag.start))
                 return
@@ -799,7 +855,7 @@ export const Canvas = () => {
             return
 
         const raw      = [point[0] - drag.start[0], point[1] - drag.start[1]]
-        const [dx, dy] = drag.anchor && align ? [snap(drag.anchor[0] + raw[0]) - drag.anchor[0], snap(drag.anchor[1] + raw[1]) - drag.anchor[1]] : [snap(raw[0]), snap(raw[1])]
+        const [dx, dy] = drag.anchor && align ? [snapAt(drag.anchor[0] + raw[0], origin[0], partGrid) - drag.anchor[0], snapAt(drag.anchor[1] + raw[1], origin[1], partGrid) - drag.anchor[1]] : [snapAt(raw[0], 0, partGrid), snapAt(raw[1], 0, partGrid)]
 
         if (dx === drag.dx && dy === drag.dy)
             return
@@ -825,6 +881,11 @@ export const Canvas = () => {
 
         if (drag?.type === 'pan')
             settle()
+
+        if (drag?.type === 'zoom' && distance(drag.start, drag.end) * vp.zoom > DRAG_PX) {
+            setViewport(view, fit([Math.min(drag.start[0], drag.end[0]), Math.min(drag.start[1], drag.end[1]), Math.max(drag.start[0], drag.end[0]), Math.max(drag.start[1], drag.end[1])], size))
+            setTool('select')
+        }
 
         if (drag?.type === 'marquee' && distance(drag.start, drag.end) * vp.zoom <= DRAG_PX && !drag.base.length) {
             select([])
@@ -1031,8 +1092,8 @@ export const Canvas = () => {
     const [mx, my]  = [size[0] * OVERSCAN, size[1] * OVERSCAN]
     const [w, h]    = [(size[0] + 2 * mx) / vp.zoom || 1, (size[1] + 2 * my) / vp.zoom || 1]
     const frame     = { left: -mx, top: -my, width: size[0] + 2 * mx, height: size[1] + 2 * my, transformOrigin: `${mx}px ${my}px` }
-    const cell      = grid * vp.zoom
-    const gridStyle = settings.showGrid !== '0' && cell >= MIN_GRID_PX ? { backgroundImage: `url(${gridTile(cell, dotColor)})`, backgroundSize: `${cell}px ${cell}px`, backgroundPosition: `${-vp.x * vp.zoom + mx}px ${-vp.y * vp.zoom + my}px` } : {}
+    const cell      = partGrid * vp.zoom
+    const gridStyle = settings.showGrid !== '0' && cell >= MIN_GRID_PX ? { backgroundImage: `url(${gridTile(cell, dotColor)})`, backgroundSize: `${cell}px ${cell}px`, backgroundPosition: `${(origin[0] - vp.x) * vp.zoom + mx}px ${(origin[1] - vp.y) * vp.zoom + my}px` } : {}
 
     const style    = WIRE_STYLE[view]
     const marks    = (hover && netlist ? netlist.getNet(view, hover) : []).map(key => scene.getTerminal(key)).filter((point): point is Point => point !== null)
@@ -1060,7 +1121,7 @@ export const Canvas = () => {
     const dash     = `${4 / vp.zoom} ${3 / vp.zoom}`
     const ends     = pointed && wireItems.has(pointed.index) ? scene.getWireEnds(pointed.index) : null
     const flat     = ends && orthogonal && isAxisAligned(...ends) && !scene.getWireCurve(pointed?.index ?? '') ? Math.abs(ends[0][1] - ends[1][1]) < Math.abs(ends[0][0] - ends[1][0]) ? 'ns-resize' : 'ew-resize' : 'move'
-    const cursor   = drag?.type === 'pan' || drag?.type === 'move' ? 'grabbing' : wiring || placing || probing || hover || pointed?.end ? 'crosshair' : pointed && wireItems.has(pointed.index) ? flat : pointed ? 'move' : tool === 'area' ? 'default' : 'grab'
+    const cursor   = drag?.type === 'pan' || drag?.type === 'move' ? 'grabbing' : wiring || placing || probing || hover || pointed?.end ? 'crosshair' : pointed && wireItems.has(pointed.index) ? flat : pointed && tool === 'select' ? 'move' : tool === 'area' ? 'default' : tool !== 'select' ? 'crosshair' : 'grab'
     const inverted = theme === 'dark' && view === 'schematicView'
     const ink      = (color: string) => view === 'pcbView' ? color === '#000000' ? ALTIUM.silkscreen : ALTIUM.silkscreen0 : /^#0{3,6}$/.test(color) ? 'var(--text)' : color
     const hint     = wiring ? t('Clique para dobrar · clique num terminal termina · botão direito deixa a ponta solta · Backspace desfaz · Esc cancela') :
@@ -1073,12 +1134,18 @@ export const Canvas = () => {
                      pointed && wireItems.has(pointed.index) ? (flat === 'move' ? t('Fio · arraste para dobrar · duplo clique cria uma dobra') : t('Fio · arraste para deslocar o trecho · duplo clique cria uma dobra · Ctrl+arrastar faz curva')) :
                      pointed && switchOf(library.getPart(doc.instances[pointed.index]?.moduleIdRef ?? '')) ? t('Chave · clique no selo acima dela para abrir ou fechar') :
                      pointed && !selection.includes(pointed.index) ? t('Clique para selecionar e editar o valor · arraste para mover') :
-                     tool === 'area' ? t('Seletor · arraste no quadro para selecionar várias peças · Esc volta') : ''
+                     tool === 'area' ? t('Seletor · arraste no quadro para selecionar várias peças · Esc volta') :
+                     tool === 'lasso' ? t('Laço · desenhe em volta das peças para selecioná-las · Esc volta') :
+                     tool === 'erase' ? t('Apagar · clique em cada peça ou fio para apagar · Esc volta') :
+                     tool === 'zoomArea' ? t('Zoom na área · arraste um retângulo no quadro') :
+                     tool === 'origin' ? t('Origem da grade · clique no ponto que vira a origem') : ''
     const marquee  = drag?.type === 'marquee' ? [Math.min(drag.start[0], drag.end[0]), Math.min(drag.start[1], drag.end[1]), Math.abs(drag.end[0] - drag.start[0]), Math.abs(drag.end[1] - drag.start[1])] : null
     const probes   = doc.probes.flatMap((probe, i) => {
         const anchor = probe.view === view ? probeAnchor(probe) : null
         return anchor ? [<ProbeShape key={probe.id} probe={probe} anchor={anchor} along={probeAlong(probe)} color={probeColor(i)} lines={probeLines(probe)} selected={focused === probe.id} />] : []
     })
+
+    finishRef.current = current => finishWiring(current, null)    // End NO FIO: TERMINA COM A PONTA SOLTA, COMO O BOTÃO DIREITO
 
     return (
         <>
@@ -1114,6 +1181,8 @@ export const Canvas = () => {
                         <text x={22} y={-13} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{aimText}</text>
                     </g>
                 )}
+                {drag?.type === 'lasso' && <path d={`M${drag.points.map(([x, y]) => `${x} ${y}`).join('L')}Z`} fill={SELECTED} fillOpacity={0.08} stroke={SELECTED} strokeWidth={zoomed(1)} pointerEvents="none" />}
+                {drag?.type === 'zoom' && <rect x={Math.min(drag.start[0], drag.end[0])} y={Math.min(drag.start[1], drag.end[1])} width={Math.abs(drag.end[0] - drag.start[0])} height={Math.abs(drag.end[1] - drag.start[1])} fill="none" stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" />}
                 {marquee && drag?.type === 'marquee' && (
                     <g pointerEvents="none">
                         <rect x={marquee[0]} y={marquee[1]} width={marquee[2]} height={marquee[3]} rx={zoomed(2)} fill={SELECTED} fillOpacity={drag.crossing ? 0.05 : 0.1} stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={drag.crossing ? dash : undefined} />
@@ -1124,6 +1193,7 @@ export const Canvas = () => {
                     </g>
                 )}
             </svg>
+            <Crosshair />
             {quick && <QuickValue key={quick.index} modelIndex={quick.index} at={quick.at} focus={focus} />}
             <p className="hint" role="status">{hint}</p>
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={() => setMenu(null)} />}

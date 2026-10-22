@@ -52,6 +52,14 @@ guardado no navegador (`cm-theme`).
   reusada); cada aba tem o seu circuito, histórico de desfazer e vistas. Fechar uma aba com alterações pergunta;
   Arquivo › Salvar todos baixa o `.fzz` de cada sketch alterado. O salvamento automático guarda cada aba.
 - **Tour** curto por modo, uma vez só (Ajuda › Tour da interface repete).
+- **Navegação do KiCad** (Exibir e o teclado; spec 05 §11): coordenadas do cursor na barra de status em mm, polegadas
+  ou mils (`Ctrl+U` alterna; `Espaço` zera as relativas; polares opcionais), cursor do teclado (setas sem seleção,
+  `Ctrl`+setas rápido, `Enter` clica, `End` dá duplo clique ou termina o fio), cursor em cruz pequeno, na janela toda
+  ou a 45°, `Shift`+setas e `F4` para mover a vista, zoom na seleção e na área arrastada (`Ctrl+F5`), desfazer e
+  refazer o último zoom, lista de grades por vista (`N`, `Shift+N`, grades rápidas `Alt+1`/`Alt+2`), origem da grade,
+  grade própria para peças ou fios, seleção por laço, apagar com cliques, copiar como texto (`Ctrl+Shift+C`), ver a
+  seleção em outra vista e recolher o painel da esquerda pelo trilho.
+- **Ajuda**: Guia de uso (como fazer cada coisa), Tour, Boas-vindas, Atalhos de teclado e a paleta (`Ctrl+K`).
 
 - **Peças** (painel esquerdo, atalho `/` para buscar): os básicos (resistor, capacitor, fonte DC, gerador, terra,
   diodo, LED, transistores, amp-op, 555…) vêm primeiro, agrupados, e depois a biblioteca completa do Fritzing. A

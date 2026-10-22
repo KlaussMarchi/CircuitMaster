@@ -68,6 +68,12 @@ export const mapBox = (m: Matrix, [x0, y0, x1, y1]: Box) => boxOf([apply(m, x0, 
 
 export const boxesTouch = (a: Box, b: Box) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
 
+// PONTO DENTRO DO POLÍGONO PELA PARIDADE DOS CRUZAMENTOS DE UM RAIO HORIZONTAL
+export const insidePolygon = ([x, y]: Point, polygon: Point[]) => polygon.reduce((inside, [x1, y1], i) => {
+    const [x0, y0] = polygon[(i + polygon.length - 1) % polygon.length]
+    return (y1 > y) !== (y0 > y) && x < (x0 - x1) * (y - y1) / (y0 - y1) + x1 ? !inside : inside
+}, false)
+
 export const lerp = (a: Point, b: Point, t: number): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 
 export const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1])

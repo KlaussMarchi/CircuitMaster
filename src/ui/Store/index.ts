@@ -26,6 +26,7 @@ import { Simulator } from '../Simulator'
 import { createPcbTools, getConfig, type Progress } from '../Pcb'
 import { createSaver } from '../Saver'
 import { LEVELS, type Level } from '../Modes'
+import type { Crosshair, Unit } from '../Navigation'
 import { getTag, setWords, t, type Language } from '../../core/Text'
 import { boardProblem, download, getClipper, type ExportKind } from '../Export'
 import { PARTS, Vault } from '../Vault'
@@ -34,14 +35,15 @@ import wasmUrl from '../../core/Netlist/netlist.wasm?url'
 
 export type View       = typeof VIEWS[number]
 export type Viewport   = { x: number, y: number, zoom: number }
-export type Tool       = 'select' | 'area' | ProbeKind
+export type Tool       = 'select' | 'area' | 'lasso' | 'erase' | 'zoomArea' | 'origin' | ProbeKind
+export type GridKind   = 'parts' | 'wires'
 export type Panel      = 'properties' | 'routing' | 'document'
 export type Left       = 'parts' | 'project' | 'problems'
 export type Theme      = 'dark' | 'light'
 export type Side       = 'both' | 'top' | 'bottom'
 export type UserBin    = { title: string, moduleIds: string[] }
-export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'palette' | 'preferences' | null
-export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean }
+export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'palette' | 'preferences' | 'guide' | null
+export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean, units: Unit, polar: boolean, crosshair: Crosshair, crosshairAlways: boolean, grids: Partial<Record<View, string[]>>, overrides: Record<GridKind, string> }
 export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
 export type Show       = { values: boolean, chart: boolean }
 export type Sheet      = { id: number, name: string, doc: Doc, saved: Doc, stored: boolean, past: Doc[], future: Doc[], viewports: Partial<Record<View, Viewport>>, view: View, selection: string[], probe: string | null, drc: Checked | null }
@@ -69,6 +71,8 @@ type State = {
     tool: Tool
     panel: Panel
     left: Left
+    leftHidden: boolean
+    welcome: boolean
     theme: Theme
     side: Side
     placing: string | null
@@ -121,8 +125,17 @@ type State = {
     setHover: (hover: string | null) => void
     setViewport: (view: View, viewport: Viewport | undefined) => void
     setSize: (size: Point) => void
-    getGrid: () => number
-    gridOf: (view: View) => number
+    gridOf: (view: View, kind: GridKind) => number
+    originOf: (view: View) => Point
+    gridsOf: (view: View) => string[]
+    cycleGrid: (step: number) => void
+    setFastGrid: (index: number) => void
+    cycleFastGrid: () => void
+    setGridOrigin: (point: Point | null) => void
+    zooms: Partial<Record<View, { back: Viewport[], ahead: Viewport[] }>>
+    undoZoom: () => void
+    redoZoom: () => void
+    copyAsText: () => void
     isAligned: (view: View) => boolean
     isOrthogonal: (view: View) => boolean
     tidy: (origin: Doc, doc: Doc) => Doc
@@ -132,6 +145,10 @@ type State = {
     setTool: (tool: Tool) => void
     setPanel: (panel: Panel) => void
     setLeft: (left: Left) => void
+    setMessage: (message: string) => void
+    toggleLeft: () => void
+    resetSettings: () => void
+    rebuildIndex: () => void
     toggleTheme: () => void
     setSide: (side: Side) => void
     makeBoard: () => Promise<void>
@@ -205,6 +222,7 @@ type State = {
 const HISTORY   = 200
 const START_VIEW: View = 'schematicView'    // O APP, O SKETCH NOVO E O ARQUIVO ABERTO COMEÇAM NO ESQUEMÁTICO (FRIZING_KICAD §5, DECISÃO 1)
 const TOOL_NAMES: Record<ProbeKind, string> = { voltage: 'Ponta de tensão', current: 'Ponta de corrente', both: 'Ponta de tensão e corrente' }
+const TOOL_HINTS: Partial<Record<Tool, string>> = { area: 'Seletor: arraste no quadro para selecionar várias peças (Esc volta)', lasso: 'Laço: desenhe em volta das peças para selecioná-las (Esc volta)', erase: 'Apagar: clique em cada peça ou fio para apagar (Esc volta)', zoomArea: 'Zoom na área: arraste um retângulo no quadro', origin: 'Origem da grade: clique no ponto que vira a origem (Esc cancela)' }
 const NOTE      = 'NoteModuleID'
 const FILL      = 'GroundPlaneModuleID'
 const VIA       = 'ViaModuleID'
@@ -220,8 +238,17 @@ const LANG_KEY  = 'circuitmaster.language'
 const PREFS_KEY = 'circuitmaster.preferences'
 const TOUR_KEY  = 'circuitmaster.toured'    // MODOS CUJO TOUR JÁ FOI VISTO OU PULADO: CADA UM APARECE UMA VEZ SÓ
 const KEYS_KEY  = 'circuitmaster.keys'      // TECLAS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
-const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
+const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false, units: 'mm', polar: false, crosshair: 'small', crosshairAlways: false, grids: {}, overrides: { parts: '', wires: '' } }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
+export const GRID_SIZES: Record<View, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }    // AS DUAS PRIMEIRAS SÃO AS GRADES RÁPIDAS 1 E 2 (Alt+1, Alt+2)
+const ZOOMS = 50    // ZOOMS GUARDADOS POR VISTA PARA DESFAZER
+
+// ORIGEM DA GRADE GRAVADA NA VISTA COMO "x,y" EM PX DA CENA; SEM ELA, O ZERO
+export const parseOrigin = (text: string | undefined): Point => {
+    const [x, y] = (text ?? '').split(',').map(Number)
+    return text && Number.isFinite(x) && Number.isFinite(y) ? [x, y] : [0, 0]
+}
 const THEME_KEY = 'cm-theme'               // MESMA CHAVE QUE O <head> LÊ ANTES DE DESENHAR (DESIGN.md §7)
+const INDEX_DB  = 'circuitmaster'          // BANCO DO workers/Indexer
 const PARTS_KEY = 'circuitmaster.parts'    // ARQUIVOS DAS PEÇAS QUE VIERAM DE .fzpz/.fzbz OU DO EDITOR (SPEC 01 §8A.6)
 const PASTE     = 20     // PX POR COLAGEM SEGUIDA (SPEC 02 §10.3)
 const GRID: Record<View, string> = { breadboardView: '0.1in', schematicView: '0.1in', pcbView: '0.05in' }
@@ -343,7 +370,7 @@ export const useStore = create<State>((set, get) => {
 
     // ABA QUE VIRA A ATIVA: O NETLIST É REFEITO E A SIMULAÇÃO, SE LIGADA, RECOMEÇA NO SKETCH DELA
     const activate = ({ id, ...sheet }: Sheet, sheets: Sheet[], message: string) => {
-        set({ ...sheet, ...withNetlist(sheet.doc, null), sheet: id, sheets: sheets.map(item => item.id === id ? { id, ...sheet } : item), hover: null, pasted: 0, placing: null, simulation: { ...get().simulation, result: null, error: null, playing: false, step: 0 }, message })
+        set({ ...sheet, ...withNetlist(sheet.doc, null), sheet: id, sheets: sheets.map(item => item.id === id ? { id, ...sheet } : item), hover: null, pasted: 0, placing: null, zooms: {}, simulation: { ...get().simulation, result: null, error: null, playing: false, step: 0 }, message })
     }
 
     // SKETCH ABERTO OU NOVO NUMA ABA NOVA; A ATIVA É REUSADA SE ESTÁ VAZIA SEM MUDANÇA OU É O MESMO ARQUIVO SEM MUDANÇA
@@ -380,6 +407,8 @@ export const useStore = create<State>((set, get) => {
         tool: 'select',
         panel: 'properties',
         left: 'parts',
+        leftHidden: false,
+        welcome: false,
         theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
         side: 'both',
         placing: null,
@@ -389,6 +418,7 @@ export const useStore = create<State>((set, get) => {
         past: [],
         future: [],
         viewports: {},
+        zooms: {},
         size: [0, 0],
         clipboard: null,
         pasted: 0,
@@ -604,13 +634,88 @@ export const useStore = create<State>((set, get) => {
                 set({ hover })
         },
 
-        setViewport: (view, viewport) => set({ viewports: { ...get().viewports, [view]: viewport } }),
+        // ZOOM (E ENQUADRAR) GUARDA O ENQUADRAMENTO ANTERIOR PARA DESFAZER; SÓ MOVER A VISTA NÃO GUARDA
+        setViewport: (view, viewport) => {
+            const { viewports, zooms } = get()
+            const before               = viewports[view]
+            const history              = zooms[view] ?? { back: [], ahead: [] }
+            const zoomed               = before !== undefined && (viewport === undefined || viewport.zoom !== before.zoom)
+            set({ viewports: { ...viewports, [view]: viewport }, ...zoomed ? { zooms: { ...zooms, [view]: { back: [...history.back, before].slice(-ZOOMS), ahead: [] } } } : {} })
+        },
+
+        undoZoom: () => {
+            const { view, viewports, zooms } = get()
+            const history                    = zooms[view]
+            const last                       = history?.back.at(-1)
+            const current                    = viewports[view]
+
+            if (!history || !last || !current)
+                return set({ message: t('nenhum zoom para desfazer') })
+
+            set({ viewports: { ...viewports, [view]: last }, zooms: { ...zooms, [view]: { back: history.back.slice(0, -1), ahead: [...history.ahead, current] } } })
+        },
+
+        redoZoom: () => {
+            const { view, viewports, zooms } = get()
+            const history                    = zooms[view]
+            const next                       = history?.ahead.at(-1)
+            const current                    = viewports[view]
+
+            if (!history || !next || !current)
+                return set({ message: t('nenhum zoom para refazer') })
+
+            set({ viewports: { ...viewports, [view]: next }, zooms: { ...zooms, [view]: { back: [...history.back, current], ahead: history.ahead.slice(0, -1) } } })
+        },
+
+        // COPIAR COMO TEXTO: UMA LINHA POR PEÇA SELECIONADA (RÓTULO, PEÇA E PROPRIEDADES), PARA COLAR EM OUTROS PROGRAMAS
+        copyAsText: () => {
+            const { doc, library, selection } = get()
+            const lines = selection.map(modelIndex => doc.instances[modelIndex]).filter(instance => instance && instance.moduleIdRef !== WIRE).map(instance => [instance.title, library.getPart(instance.moduleIdRef)?.title ?? instance.moduleIdRef, ...Object.entries(instance.properties).map(([key, value]) => `${key}=${value}`)].join('\t'))
+
+            if (!lines.length)
+                return set({ message: t('selecione peças para copiar como texto') })
+
+            void navigator.clipboard?.writeText(lines.join('\n')).then(() => set({ message: t('{0} linhas copiadas como texto', lines.length) }), () => set({ message: t('o navegador não deixou copiar') }))
+        },
 
         setSize: size => set({ size }),
 
-        getGrid: () => get().gridOf(get().view),
+        // A GRADE DA VISTA, OU A DO TIPO DE OBJETO QUANDO AS PREFERÊNCIAS A SOBREPÕEM (GRID OVERRIDES DO KICAD)
+        gridOf: (view, kind) => (toInches(get().preferences.overrides[kind] || (get().doc.settings[view]?.gridSize ?? GRID[view])) ?? 0.1) * PX_PER_INCH,
 
-        gridOf: view => (toInches(get().doc.settings[view]?.gridSize ?? GRID[view]) ?? 0.1) * PX_PER_INCH,
+        originOf: view => parseOrigin(get().doc.settings[view]?.gridOrigin),
+
+        gridsOf: view => get().preferences.grids[view] ?? GRID_SIZES[view],
+
+        // PRÓXIMA OU ANTERIOR DA LISTA DE GRADES DA VISTA (N, Shift+N)
+        cycleGrid: step => {
+            const { doc, view, gridsOf } = get()
+            const list    = gridsOf(view)
+            const current = list.indexOf(doc.settings[view]?.gridSize ?? GRID[view])
+            const next    = list[(Math.max(0, current) + step + list.length) % list.length]
+            get().setViewSetting('gridSize', next)
+            set({ message: t('grade de {0}', next) })
+        },
+
+        setFastGrid: index => {
+            const next = get().gridsOf(get().view)[index]
+
+            if (!next)
+                return
+
+            get().setViewSetting('gridSize', next)
+            set({ message: t('grade rápida {0}: {1}', index + 1, next) })
+        },
+
+        cycleFastGrid: () => {
+            const { doc, view, gridsOf } = get()
+            get().setFastGrid((doc.settings[view]?.gridSize ?? GRID[view]) === gridsOf(view)[0] ? 1 : 0)
+        },
+
+        setGridOrigin: point => {
+            get().setViewSetting('gridOrigin', point ? `${+point[0].toFixed(3)},${+point[1].toFixed(3)}` : '')
+            set({ message: point ? t('origem da grade no cursor') : t('origem da grade de volta a zero') })
+        },
 
         isAligned: view => get().doc.settings[view]?.alignToGrid !== '0',
 
@@ -623,7 +728,7 @@ export const useStore = create<State>((set, get) => {
             if (!isOrthogonal(view))
                 return doc
 
-            const squared = squareWires(origin, doc, library, view, gridOf(view))
+            const squared = squareWires(origin, doc, library, view, gridOf(view, 'wires'))
             return tidyWires(squared, library, view, getChangedWires(origin, squared, view))
         },
 
@@ -649,14 +754,14 @@ export const useStore = create<State>((set, get) => {
             if (made === doc)
                 return set({ message: t('{0}: peça não encontrada', moduleId) })
 
-            get().commit(VIEWS.filter(isAligned).reduce((current, other) => alignToGrid(current, library, other, [index], gridOf(other)), next))
+            get().commit(VIEWS.filter(isAligned).reduce((current, other) => alignToGrid(current, library, other, [index], gridOf(other, 'parts'), get().originOf(other)), next))
             set({ selection: [index] })
         },
 
         connect: async (from, to) => {
             await get().library.load([WIRE])
             const { doc, library, view, gridOf, isOrthogonal } = get()
-            const made = connectByPath(doc, library, view, from, to, gridOf(view), isOrthogonal(view) || view === 'pcbView')
+            const made = connectByPath(doc, library, view, from, to, gridOf(view, 'wires'), isOrthogonal(view) || view === 'pcbView')
             get().commit(made.doc)
             set({ selection: made.indexes })
         },
@@ -673,11 +778,28 @@ export const useStore = create<State>((set, get) => {
             set({ selection: made.indexes, message: t(made.indexes.length > 1 ? (end ? 'fio com {0} trechos' : 'fio com {0} trechos, ponta solta') : (end ? 'fio com {0} trecho' : 'fio com {0} trecho, ponta solta'), made.indexes.length) })
         },
 
-        setTool: tool => set({ tool, message: tool === 'select' ? '' : tool === 'area' ? t('Seletor: arraste no quadro para selecionar várias peças (Esc volta)') : t('{0}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)', t(TOOL_NAMES[tool])) }),
+        setTool: tool => set({ tool, message: tool === 'select' ? '' : TOOL_HINTS[tool] ? t(TOOL_HINTS[tool]) : t('{0}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)', t(TOOL_NAMES[tool as ProbeKind])) }),
 
         setPanel: panel => set({ panel }),
 
-        setLeft: left => set({ left }),
+        setLeft: left => set({ left, leftHidden: false }),
+
+        setMessage: message => set({ message }),
+
+        // OCULTAR A ÁRVORE DE BIBLIOTECAS (KICAD): O PAINEL ESQUERDO SAI E O QUADRO GANHA A LARGURA; O MESMO BOTÃO DO TRILHO VOLTA
+        toggleLeft: () => set({ leftHidden: !get().leftHidden }),
+
+        // MANUTENÇÃO: PREFERÊNCIAS, TECLAS, MODO, LÍNGUA, TEMA, PAINEL E TOURS VOLTAM AO PADRÃO; PEÇAS, BINS E VERSÕES FICAM
+        resetSettings: () => {
+            [PREFS_KEY, KEYS_KEY, LEVEL_KEY, LANG_KEY, THEME_KEY, SHOW_KEY, TOUR_KEY].forEach(key => writeStored(key, null))
+            location.reload()
+        },
+
+        // ÍNDICE DO ACERVO REFEITO DO ZERO: O BANCO DO INDEXADOR SAI E A PÁGINA RECARREGA (A EXCLUSÃO TERMINA QUANDO O WORKER FECHA)
+        rebuildIndex: () => {
+            indexedDB.deleteDatabase(INDEX_DB)
+            location.reload()
+        },
 
         setSide: side => set({ side, message: side === 'both' ? '' : t(side === 'top' ? 'trilhas novas na face de cima (vermelha); a outra face fica esmaecida' : 'trilhas novas na face de baixo (azul); a outra face fica esmaecida') }),
 
@@ -851,7 +973,7 @@ export const useStore = create<State>((set, get) => {
             const result        = pasteItems(get().doc, library, clipboard, offset)
             const scene         = new Scene(result.doc, library, view)
             const anchor        = result.indexes.find(index => !scene.isWire(index) && scene.isShown(result.doc.instances[index]))
-            const [dx, dy]      = anchor && isAligned(view) && !inPlace ? getGridShift(scene, anchor, gridOf(view)) : [0, 0]
+            const [dx, dy]      = anchor && isAligned(view) && !inPlace ? getGridShift(scene, anchor, gridOf(view, 'parts'), get().originOf(view)) : [0, 0]
             get().commit(dx || dy ? moveInstances(result.doc, library, view, result.indexes, dx, dy) : result.doc)
             set({ selection: result.indexes, pasted: inPlace ? pasted : pasted + 1 })
         },
@@ -1155,8 +1277,8 @@ export const useStore = create<State>((set, get) => {
                 return get().pcb.request<{ plan: Plan, connected: number, requested: number }>({ type: 'sheet', grid, frame, terminals: Object.fromEntries(sheet.pins), cycles: config.cycles }, progress => set({ routing: progress }))
             }
 
-            const whole  = await attempt(get().getGrid())
-            const half   = whole && whole.connected < whole.requested ? await attempt(get().getGrid() / 2) : null
+            const whole  = await attempt(get().gridOf('schematicView', 'wires'))
+            const half   = whole && whole.connected < whole.requested ? await attempt(get().gridOf('schematicView', 'wires') / 2) : null
             const routed = half && whole && half.connected > whole.connected ? half : whole
             set({ routing: null })
 
@@ -1326,8 +1448,8 @@ const GROUNDED = new Set(['gnd', 'vss', 'ground'])
 
 // DEPOIS DE GIRAR OU ESPELHAR, O PRIMEIRO TERMINAL VOLTA À GRADE (NO ESQUEMÁTICO E NA PCB; NA PROTOBOARD O ENCAIXE DECIDE)
 const settle = (doc: Doc, selection: string[]) => {
-    const { library, view, isAligned, gridOf } = useStore.getState()
-    return view !== 'breadboardView' && isAligned(view) ? alignToGrid(doc, library, view, selection, gridOf(view)) : doc
+    const { library, view, isAligned, gridOf, originOf } = useStore.getState()
+    return view !== 'breadboardView' && isAligned(view) ? alignToGrid(doc, library, view, selection, gridOf(view, 'parts'), originOf(view)) : doc
 }
 
 // CAIXA NA CENA DA PCB DA PLACA DAS OPERAÇÕES; NULO SEM PLACA OU COM VÁRIAS E NENHUMA SELECIONADA (SPEC 03 §2.1)

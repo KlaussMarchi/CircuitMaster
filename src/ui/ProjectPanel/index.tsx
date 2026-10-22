@@ -4,10 +4,11 @@ import { Scene } from '../../engine/Scene'
 import { Icon } from '../Icon'
 import { Kv } from '../Inspector'
 import { needsBoard, type ExportKind } from '../Export'
-import { useStore } from '../Store'
+import { GRID_SIZES, parseOrigin, useStore } from '../Store'
+import { formatLength, lengthToPx } from '../Navigation'
+import { Entry } from '../Inspector'
 import { t } from '../../core/Text'
 
-const GRID_SIZES: Record<string, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }
 const EXPORTS: [string, ExportKind][] = [['PNG', 'png'], ['SVG', 'svg'], ['PDF', 'pdf'], ['Netlist SPICE', 'spice'], ['Lista de materiais', 'bomHtml'], ['Para produção', 'production']]
 const BOARDS  = ['board', 'resizableBoard']
 
@@ -25,7 +26,21 @@ export const ProjectPanel = () => {
     const changed         = useStore(state => state.doc !== state.saved)
     const stored          = useStore(state => state.stored)
     const [text, setText] = useState('')
-    const { setViewSetting, openSample, exportFile, newSketch, save } = useStore.getState()
+    const grids           = useStore(state => state.preferences.grids[state.view]) ?? GRID_SIZES[view]
+    const units           = useStore(state => state.preferences.units)
+    const { setViewSetting, openSample, exportFile, newSketch, save, setGridOrigin } = useStore.getState()
+    // "x, y" NA UNIDADE ESCOLHIDA (VÍRGULA DECIMAL TAMBÉM VALE: "12,7 5,08"); VAZIO VOLTA A ORIGEM A ZERO
+    const setOrigin       = (text: string) => {
+        const [x, y] = text.trim().split(/\s*;\s*|,\s+|\s+/).map(part => Number(part.replace(',', '.')))
+
+        if (!text.trim())
+            return setGridOrigin(null)
+
+        if (!Number.isFinite(x) || !Number.isFinite(y))
+            return useStore.setState({ message: t('origem da grade inválida: use x, y') })
+
+        setGridOrigin([lengthToPx(x, units), lengthToPx(y, units)])
+    }
     const settings        = doc.settings[view] ?? {}
     const instances       = Object.values(doc.instances)
     const wires           = instances.filter(instance => instance.moduleIdRef === 'WireModuleID').length
@@ -69,11 +84,15 @@ export const ProjectPanel = () => {
                 <div className="field">
                     <label>{t('Grade')}</label>
                     <div className="in">
-                        <select value={settings.gridSize ?? GRID_SIZES[view][0]} onChange={event => setViewSetting('gridSize', event.target.value)}>
-                            {[...new Set([settings.gridSize ?? GRID_SIZES[view][0], ...GRID_SIZES[view]])].map(size => <option key={size} value={size}>{size}</option>)}
+                        <select value={settings.gridSize ?? grids[0]} onChange={event => setViewSetting('gridSize', event.target.value)}>
+                            {[...new Set([settings.gridSize ?? grids[0], ...grids])].map(size => <option key={size} value={size}>{size}</option>)}
                         </select>
                         <Icon name="chevronDown" />
                     </div>
+                </div>
+                <div className="field">
+                    <label title={t('Origem da grade em {0} (x, y); vazio volta a zero', units)}>{t('Origem da grade')}</label>
+                    <Entry value={parseOrigin(settings.gridOrigin).map(value => formatLength(value, units)).join(', ')} options={[]} numeric commit={text => setOrigin(text)} />
                 </div>
             </div>
             <div className="sec">

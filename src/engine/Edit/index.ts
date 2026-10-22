@@ -347,15 +347,16 @@ export const getAnchor = (scene: Scene, modelIndex: string) => {
     return scene.getKeys(modelIndex).map(key => scene.getTerminal(key)).find((point): point is Point => point !== null) ?? (box ? [box[0], box[1]] as Point : null)
 }
 
-export const getGridShift = (scene: Scene, modelIndex: string, grid: number): Point => {
+// DESLOCAMENTO QUE PÕE O PRIMEIRO TERMINAL NA GRADE QUE PARTE DE origin
+export const getGridShift = (scene: Scene, modelIndex: string, grid: number, origin: Point = [0, 0]): Point => {
     const anchor = getAnchor(scene, modelIndex)
-    return anchor && grid > 0 ? [Math.round(anchor[0] / grid) * grid - anchor[0], Math.round(anchor[1] / grid) * grid - anchor[1]] : [0, 0]
+    return anchor && grid > 0 ? [Math.round((anchor[0] - origin[0]) / grid) * grid + origin[0] - anchor[0], Math.round((anchor[1] - origin[1]) / grid) * grid + origin[1] - anchor[1]] : [0, 0]
 }
 
 // CADA PEÇA COM O PRIMEIRO TERMINAL NA GRADE; FIOS LIGADOS ACOMPANHAM
-export const alignToGrid = (doc: Doc, library: Library, view: ViewName, modelIndexes: string[], grid: number) => modelIndexes.reduce((current, modelIndex) => {
+export const alignToGrid = (doc: Doc, library: Library, view: ViewName, modelIndexes: string[], grid: number, origin: Point = [0, 0]) => modelIndexes.reduce((current, modelIndex) => {
     const scene    = new Scene(current, library, view)
-    const [dx, dy] = getGridShift(scene, modelIndex, grid)
+    const [dx, dy] = getGridShift(scene, modelIndex, grid, origin)
 
     if (scene.isWire(modelIndex) || scene.getView(modelIndex)?.locked || (!dx && !dy))
         return current

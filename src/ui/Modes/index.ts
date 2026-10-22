@@ -14,7 +14,8 @@ const ADVANCED: Record<string, Level> = {
     'Gravável (PDF)…': 2, 'Gravável (SVG)…': 2, 'Netlist SPICE…': 2, 'Regras do autorouter e DRC…': 2, 'Mover trilha para a outra face': 2, 'Selecionar todas as vias': 2,
     'Selecionar todos os preenchimentos': 2, 'Converter via em dobra': 2, 'Converter dobra em via': 2,
     'Tamanho real': 3, 'Pick-and-place…': 3, 'Netlist IPC-D-356A…': 3, 'Netlist XML…': 3, 'Definir semente de preenchimento de terra': 3, 'Limpar sementes de preenchimento de terra': 3,
-    'Limpar sementes de terra': 3, 'Selecionar trilhas autoroteáveis': 3, 'Não rotear automaticamente': 3, 'Ocultar serigrafia da peça': 3, 'Mostrar serigrafia da peça': 3
+    'Limpar sementes de terra': 3, 'Copiar como texto': 3, 'Cursor': 3, 'Apagar com cliques': 2, 'Seleção por laço': 2, 'Zoom na área arrastada': 2, 'Desfazer o último zoom': 2, 'Refazer o último zoom': 2,
+    'Centralizar no cursor': 2, 'Grade': 2, 'Unidades': 2, 'Selecionar trilhas autoroteáveis': 3, 'Não rotear automaticamente': 3, 'Ocultar serigrafia da peça': 3, 'Mostrar serigrafia da peça': 3
 }
 
 export const levelOf = (label: string): Level => ADVANCED[label] ?? 1

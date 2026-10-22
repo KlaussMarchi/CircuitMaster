@@ -74,8 +74,13 @@ export class App {
     }
 
     async open() {
+        await this.reloadedBy(() => this.page.goto('/'))
+    }
+
+    // NAVEGAÇÃO PEDIDA PELO TESTE OU PELO PRÓPRIO APP (location.reload): AS CARGAS ABORTADAS NO CAMINHO NÃO CONTAM E O STORE DA PÁGINA NOVA VOLTA A window.cm
+    async reloadedBy(action: () => Promise<unknown>) {
         this.navigating = true
-        await this.page.goto('/')
+        await Promise.all([this.page.waitForEvent('load'), action()])
         this.navigating = false
         await expect(this.page.getByRole('button', { name: /^(Simular|Simulate)$/ })).toBeEnabled()    // A LÍNGUA ESCOLHIDA FICA NA RECARGA
         await this.page.evaluate(async () => {

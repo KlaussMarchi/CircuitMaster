@@ -5,6 +5,7 @@ import { useStore, type Left } from '../Store'
 import { t } from '../../core/Text'
 
 const ITEMS: [Left, IconName, string][] = [['parts', 'parts', 'Peças'], ['project', 'layers', 'Projeto'], ['problems', 'alert', 'Problemas']]
+const PHONE = 860    // PX: ATÉ AQUI OS PAINÉIS SÃO FOLHAS (style.css) E O TRILHO SÓ AS ABRE E FECHA
 
 // NO CELULAR OS PAINÉIS VIRAM FOLHAS SOBRE O QUADRO (DESIGN.md §2)
 export const toggleSheet = (sheet: 'sheet-left' | 'sheet-insp' | null) => {
@@ -17,15 +18,17 @@ export const toggleSheet = (sheet: 'sheet-left' | 'sheet-insp' | null) => {
 // TRILHO: PAINÉIS DA ESQUERDA, TEMA E ATALHOS
 export const Rail = () => {
     const left     = useStore(state => state.left)
+    const hidden   = useStore(state => state.leftHidden)
     const theme    = useStore(state => state.theme)
     const state    = useProblemState()
     const count    = useMemo(() => countProblems(getProblems(state)), [state])
-    const { setLeft, toggleTheme } = useStore.getState()
+    const { setLeft, toggleLeft, toggleTheme } = useStore.getState()
+    const choose   = (id: Left) => left === id && innerWidth > PHONE ? toggleLeft() : (setLeft(id), toggleSheet('sheet-left'))    // NA TELA LARGA, O BOTÃO DO PAINEL ABERTO O RECOLHE
 
     return (
         <nav className="rail" aria-label={t('Painéis')}>
             {ITEMS.map(([id, icon, label]) => (
-                <button key={id} className="rail-btn" aria-pressed={left === id} aria-label={t(label)} title={t(label)} onClick={() => { setLeft(id); toggleSheet('sheet-left') }}>
+                <button key={id} className="rail-btn" aria-pressed={left === id && !hidden} aria-label={t(label)} title={t(label)} onClick={() => choose(id)}>
                     <Icon name={icon} />
                     {id === 'problems' && count > 0 && <span className="badge">{count}</span>}
                 </button>

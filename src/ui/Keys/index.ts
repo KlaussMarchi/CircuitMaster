@@ -1,4 +1,6 @@
 import type { useStore } from '../Store'
+import { centerOnCursor, clickAtCursor, moveCursor, moveCursorFast, panBy, resetOrigin } from '../Navigation'
+import { t } from '../../core/Text'
 
 type State = ReturnType<typeof useStore.getState>
 
@@ -7,9 +9,13 @@ export type KeyAction = { id: string, label: string, keys: string[], apply: (sta
 const ZOOM_KEY = 1.25     // FATOR DE Ctrl++ / Ctrl+-
 
 const nudge = (state: State, dx: number, dy: number) => {
-    const step = state.doc.settings[state.view]?.alignToGrid === '0' ? 1 : state.getGrid()
+    const step = state.doc.settings[state.view]?.alignToGrid === '0' ? 1 : state.gridOf(state.view, 'parts')
     state.nudge(dx * step, dy * step)
 }
+
+// SETAS: COM SELEÇÃO MOVEM A SELEÇÃO (FRITZING); SEM ELA, O CURSOR DO TECLADO (KICAD); COM Shift, 10 PASSOS OU A VISTA
+const arrow = (dx: number, dy: number) => (state: State) => state.selection.length ? nudge(state, dx, dy) : moveCursor(state, dx, dy)
+const far   = (dx: number, dy: number) => (state: State) => state.selection.length ? nudge(state, 10 * dx, 10 * dy) : panBy(state, dx, dy)
 
 // AÇÕES DE TECLADO COM AS TECLAS DO FRITZING (SPEC 02 §10.3); SÍMBOLOS JÁ TRAZEM O SHIFT NA PRÓPRIA TECLA (} = Shift+])
 export const KEY_ACTIONS: KeyAction[] = [
@@ -35,14 +41,30 @@ export const KEY_ACTIONS: KeyAction[] = [
     { id: 'forward', label: 'Avançar', keys: ['ctrl+]'], apply: state => state.zOrder('forward') },
     { id: 'backward', label: 'Recuar', keys: ['ctrl+['], apply: state => state.zOrder('backward') },
     { id: 'back', label: 'Enviar para trás', keys: ['ctrl+{'], apply: state => state.zOrder('back') },
-    { id: 'up', label: 'Mover para cima', keys: ['arrowup'], apply: state => nudge(state, 0, -1) },
-    { id: 'down', label: 'Mover para baixo', keys: ['arrowdown'], apply: state => nudge(state, 0, 1) },
-    { id: 'left', label: 'Mover para a esquerda', keys: ['arrowleft'], apply: state => nudge(state, -1, 0) },
-    { id: 'right', label: 'Mover para a direita', keys: ['arrowright'], apply: state => nudge(state, 1, 0) },
-    { id: 'upFar', label: 'Mover 10 passos para cima', keys: ['shift+arrowup'], apply: state => nudge(state, 0, -10) },
-    { id: 'downFar', label: 'Mover 10 passos para baixo', keys: ['shift+arrowdown'], apply: state => nudge(state, 0, 10) },
-    { id: 'leftFar', label: 'Mover 10 passos para a esquerda', keys: ['shift+arrowleft'], apply: state => nudge(state, -10, 0) },
-    { id: 'rightFar', label: 'Mover 10 passos para a direita', keys: ['shift+arrowright'], apply: state => nudge(state, 10, 0) },
+    { id: 'up', label: 'Mover a seleção ou o cursor para cima', keys: ['arrowup'], apply: arrow(0, -1) },
+    { id: 'down', label: 'Mover a seleção ou o cursor para baixo', keys: ['arrowdown'], apply: arrow(0, 1) },
+    { id: 'left', label: 'Mover a seleção ou o cursor para a esquerda', keys: ['arrowleft'], apply: arrow(-1, 0) },
+    { id: 'right', label: 'Mover a seleção ou o cursor para a direita', keys: ['arrowright'], apply: arrow(1, 0) },
+    { id: 'upFar', label: 'Mover a seleção 10 passos ou a vista para cima', keys: ['shift+arrowup'], apply: far(0, -1) },
+    { id: 'downFar', label: 'Mover a seleção 10 passos ou a vista para baixo', keys: ['shift+arrowdown'], apply: far(0, 1) },
+    { id: 'leftFar', label: 'Mover a seleção 10 passos ou a vista para a esquerda', keys: ['shift+arrowleft'], apply: far(-1, 0) },
+    { id: 'rightFar', label: 'Mover a seleção 10 passos ou a vista para a direita', keys: ['shift+arrowright'], apply: far(1, 0) },
+    { id: 'cursorUpFast', label: 'Cursor rápido para cima', keys: ['ctrl+arrowup'], apply: state => moveCursorFast(state, 0, -1) },
+    { id: 'cursorDownFast', label: 'Cursor rápido para baixo', keys: ['ctrl+arrowdown'], apply: state => moveCursorFast(state, 0, 1) },
+    { id: 'cursorLeftFast', label: 'Cursor rápido para a esquerda', keys: ['ctrl+arrowleft'], apply: state => moveCursorFast(state, -1, 0) },
+    { id: 'cursorRightFast', label: 'Cursor rápido para a direita', keys: ['ctrl+arrowright'], apply: state => moveCursorFast(state, 1, 0) },
+    { id: 'click', label: 'Clicar no cursor', keys: ['enter'], apply: state => clickAtCursor(state, false) },
+    { id: 'doubleClick', label: 'Duplo clique no cursor (no fio: terminar com a ponta solta)', keys: ['end'], apply: state => clickAtCursor(state, true) },
+    { id: 'resetOrigin', label: 'Zerar coordenadas relativas no cursor', keys: [' '], apply: () => resetOrigin() },
+    { id: 'centerCursor', label: 'Centralizar no cursor', keys: ['f4'], apply: state => centerOnCursor(state) },
+    { id: 'zoomArea', label: 'Zoom na área arrastada', keys: ['ctrl+f5'], apply: state => state.setTool('zoomArea') },
+    { id: 'nextGrid', label: 'Próxima grade', keys: ['n'], apply: state => state.cycleGrid(1) },
+    { id: 'previousGrid', label: 'Grade anterior', keys: ['shift+n'], apply: state => state.cycleGrid(-1) },
+    { id: 'fastGrid1', label: 'Grade rápida 1', keys: ['alt+1'], apply: state => state.setFastGrid(0) },
+    { id: 'fastGrid2', label: 'Grade rápida 2', keys: ['alt+2'], apply: state => state.setFastGrid(1) },
+    { id: 'cycleFastGrid', label: 'Alternar grade rápida', keys: ['alt+4'], apply: state => state.cycleFastGrid() },
+    { id: 'units', label: 'Alternar unidades (métrico e polegadas)', keys: ['ctrl+u'], apply: state => state.setPreferences({ units: state.preferences.units === 'mm' ? 'in' : 'mm' }) },
+    { id: 'copyText', label: 'Copiar como texto', keys: ['ctrl+shift+c'], apply: state => state.copyAsText() },
     { id: 'zoomIn', label: 'Ampliar', keys: ['ctrl++', 'ctrl+='], apply: state => state.zoom(ZOOM_KEY) },
     { id: 'zoomOut', label: 'Reduzir', keys: ['ctrl+-'], apply: state => state.zoom(1 / ZOOM_KEY) },
     { id: 'fit', label: 'Enquadrar', keys: ['ctrl+0'], apply: state => state.setViewport(state.view, undefined) },
@@ -57,7 +79,7 @@ export const KEY_ACTIONS: KeyAction[] = [
     { id: 'preferences', label: 'Preferências…', keys: ['ctrl+,'], apply: state => state.setDialog('preferences') }
 ]
 
-const SHOWN: Record<string, string> = { '}': 'Shift+]', '{': 'Shift+[', ')': 'Shift+0', escape: 'Esc', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' }
+const SHOWN: Record<string, string> = { '}': 'Shift+]', '{': 'Shift+[', ')': 'Shift+0', ' ': 'Espaço', escape: 'Esc', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' }
 
 const capital = (text: string) => text.length === 1 ? text.toUpperCase() : text[0].toUpperCase() + text.slice(1)
 
@@ -68,7 +90,7 @@ export const getKeys = (custom: Record<string, string[]>, id: string) => custom[
 export const showKey = (key: string) => {
     const main      = key.endsWith('++') || key === '+' ? '+' : key.split('+').pop() ?? ''
     const modifiers = key.slice(0, key.length - main.length).split('+').filter(Boolean)
-    return [...modifiers.map(capital), SHOWN[main] ?? capital(main)].join('+')
+    return [...modifiers.map(capital), t(SHOWN[main] ?? capital(main))].join('+')
 }
 
 

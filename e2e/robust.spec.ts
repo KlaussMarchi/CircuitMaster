@@ -195,6 +195,7 @@ test('Abrir um exemplo com alterações abre outra aba sem perguntar; o circuito
 
 const VIEW_TABS = ['Protoboard', 'Esquemático', 'PCB']
 const MENUS     = ['Editar', 'Peça', 'Exibir', 'Roteamento', 'Simulação']
+const SKIPPED   = ['Idioma']    // TROCA OS NOMES DE TUDO: TESTADO À PARTE NO E2E "Inglês"
 
 // ITENS HABILITADOS DE UMA LISTA DE MENU ABERTA: [RÓTULO, TEM SUBMENU]
 const items = (app: App, level: number) => app.page.locator('.menu-pop').nth(level).evaluate(menu => [...menu.querySelectorAll(':scope > li > button[role=menuitem]:not([disabled])')].map(button => [button.querySelector('.label')?.textContent ?? '', Boolean(button.querySelector('.arrow'))] as [string, boolean]))
@@ -209,6 +210,9 @@ const leaves = async (app: App, title: string) => {
             paths.push([item])
             continue
         }
+
+        if (SKIPPED.includes(item))
+            continue
 
         await app.page.getByRole('menuitem').filter({ has: app.page.getByText(item, { exact: true }) }).first().hover()
         paths.push(...(await items(app, 1)).filter(([, nested]) => !nested).map(([leaf]) => [item, leaf]))

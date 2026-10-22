@@ -1,7 +1,9 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { LEVELS } from '../Modes'
 import { assignKey, getKeyMap, KEY_ACTIONS, keyOf, shortcutOf, showKey } from '../Keys'
-import { useStore } from '../Store'
+import { GRID_SIZES, useStore, type GridKind, type View } from '../Store'
+import { CROSSHAIRS, UNITS } from '../Navigation'
+import { VIEWS, VIEW_LABELS } from '../../core/Layer'
 import { getTag, LANGUAGES, t } from '../../core/Text'
 
 // GESTOS DE MOUSE E DO FIO EM DESENHO: FIXOS; AS TECLAS SAEM DA TABELA DE AÇÕES (ui/Keys), COM AS ESCOLHAS DAS PREFERÊNCIAS
@@ -35,14 +37,25 @@ const Choice = <T extends string | number | boolean,>({ label, value, options, c
     </div>
 )
 
-// PREFERÊNCIAS DO NAVEGADOR: RODA, FIOS CURVOS, MODO, TEMA E AS TECLAS DE CADA AÇÃO (A TECLA ESCOLHIDA SAI DA AÇÃO QUE A TINHA)
+const OVERRIDES: [GridKind, string][] = [['parts', 'Grade das peças'], ['wires', 'Grade dos fios']]
+
+// TEXTO QUE SÓ GRAVA AO SAIR DO CAMPO OU COM Enter
+const Field = ({ label, value, placeholder, commit }: { label: string, value: string, placeholder: string, commit: (text: string) => void }) => (
+    <div className="pref">
+        <span>{t(label)}</span>
+        <div className="in"><input className="text" aria-label={t(label)} defaultValue={value} placeholder={placeholder} onBlur={event => event.target.value !== value && commit(event.target.value.trim())} onKeyDown={event => event.key === 'Enter' && event.currentTarget.blur()} /></div>
+    </div>
+)
+
+// PREFERÊNCIAS DO NAVEGADOR: RODA, FIOS CURVOS, MODO, LÍNGUA, TEMA, UNIDADES E CURSOR, GRADES, MANUTENÇÃO E AS TECLAS DE CADA AÇÃO (A TECLA ESCOLHIDA SAI DA AÇÃO QUE A TINHA)
 const Preferences = () => {
     const preferences = useStore(state => state.preferences)
     const level       = useStore(state => state.level)
     const language    = useStore(state => state.language)
     const theme       = useStore(state => state.theme)
     const keys        = useStore(state => state.keys)
-    const { setPreferences, setLevel, setLanguage, toggleTheme, setKeys } = useStore.getState()
+    const { setPreferences, setLevel, setLanguage, toggleTheme, setKeys, resetSettings, rebuildIndex } = useStore.getState()
+    const grids = (view: View, text: string) => setPreferences({ grids: { ...preferences.grids, [view]: text ? text.split(/[,;\s]+/).filter(Boolean) : undefined } })
 
     const capture = (id: string) => (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'Escape' || event.key === 'Tab' || MODIFIERS.includes(event.key))
@@ -60,6 +73,13 @@ const Preferences = () => {
             <Choice label="Modo da interface" value={level} options={LEVELS.map(([id, text]) => [id, text])} change={setLevel} />
             <Choice label="Idioma" value={language} options={LANGUAGES.map(([id, text]) => [id, text])} change={next => void setLanguage(next)} />
             <Choice label="Tema" value={theme} options={[['dark', 'Escuro'], ['light', 'Claro']]} change={next => next !== theme && toggleTheme()} />
+            <Choice label="Unidades" value={preferences.units} options={UNITS} change={units => setPreferences({ units })} />
+            <Choice label="Coordenadas relativas" value={preferences.polar} options={[[false, 'Cartesianas (dX, dY)'], [true, 'Polares (r, θ)']]} change={polar => setPreferences({ polar })} />
+            <Choice label="Cursor em cruz" value={preferences.crosshair} options={CROSSHAIRS} change={crosshair => setPreferences({ crosshair })} />
+            <Choice label="Mostrar o cursor em cruz" value={preferences.crosshairAlways} options={[[false, 'Só com o teclado'], [true, 'Sempre']]} change={crosshairAlways => setPreferences({ crosshairAlways })} />
+            <p className="soft" style={{ margin: '14px 0 6px' }}>{t('Grades: a lista de cada vista (N e Shift+N andam por ela; as duas primeiras são as grades rápidas Alt+1 e Alt+2) e as que valem só para peças ou só para fios.')}</p>
+            {VIEWS.map(view => <Field key={view} label={VIEW_LABELS[view]} value={(preferences.grids[view] ?? GRID_SIZES[view]).join(', ')} placeholder={GRID_SIZES[view].join(', ')} commit={text => grids(view, text)} />)}
+            {OVERRIDES.map(([kind, label]) => <Field key={kind} label={label} value={preferences.overrides[kind]} placeholder={t('a da vista')} commit={text => setPreferences({ overrides: { ...preferences.overrides, [kind]: text } })} />)}
             <p className="soft" style={{ margin: '14px 0 6px' }}>{t('Atalhos: clique no campo e aperte a tecla nova. Uma tecla já usada passa para esta ação.')}</p>
             <table className="tbl keys prefs-keys">
                 <tbody>
@@ -73,6 +93,11 @@ const Preferences = () => {
                 </tbody>
             </table>
             {Object.keys(keys).length > 0 && <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm" onClick={() => setKeys({})}>{t('Restaurar todos os atalhos')}</button></div>}
+            <p className="soft" style={{ margin: '14px 0 6px' }}>{t('Manutenção: as peças, os bins e as versões salvas ficam.')}</p>
+            <div className="boundary-actions">
+                <button className="btn sm" onClick={() => window.confirm(t('Voltar todas as preferências, teclas, modo, idioma e tema ao padrão e recarregar?')) && resetSettings()}>{t('Restaurar todos os ajustes')}</button>
+                <button className="btn sm" onClick={() => window.confirm(t('Refazer o índice do acervo do zero? A página recarrega e a busca volta em alguns segundos.')) && rebuildIndex()}>{t('Refazer o índice do acervo')}</button>
+            </div>
         </>
     )
 }
@@ -121,6 +146,34 @@ const Versions = ({ startup }: { startup: boolean }) => {
     )
 }
 
+// COMO FAZER CADA COISA, A PARTIR DA TELA NORMAL (O TESTE DE CLAREZA DA SPEC 05 §13)
+const GUIDE: [string, string][] = [
+    ['Pôr uma peça', 'clique na peça do painel e depois no quadro (ou arraste)'],
+    ['Achar uma peça', 'digite o nome na busca do painel, em português ou em inglês'],
+    ['Ligar dois terminais', 'clique num terminal e no outro'],
+    ['Dobrar um fio', 'clique no meio do caminho ao desenhar, ou arraste o fio'],
+    ['Mudar um valor', 'selecione e digite no cartão abaixo da peça'],
+    ['Simular', 'clique em Simular; o painel abre embaixo'],
+    ['Medir', 'escolha V, A ou V·A na barra do quadro e clique num fio'],
+    ['Ver a carga de um capacitor', 'Simular e Degrau no painel'],
+    ['Ver o ganho de um amplificador', 'Simular e Senoide no painel'],
+    ['Entender uma peça', 'selecione: o cartão "Como funciona" está no inspetor'],
+    ['Trabalhar em dois sketches', 'Arquivo › Novo ou abra outro: cada um ganha a sua aba'],
+    ['Criar a placa e rotear', 'abra a PCB e clique em "Criar placa e rotear"'],
+    ['Ligar e desligar camadas', 'clique na camada na legenda do quadro da PCB'],
+    ['Mandar fabricar', 'Arquivo › Exportar › Para produção › Tudo para fabricar (zip)'],
+    ['Mover o cursor pelo teclado', 'setas sem nada selecionado (Ctrl: rápido); Enter clica; Espaço zera as coordenadas relativas'],
+    ['Mudar a grade', 'N e Shift+N, ou Alt+1 e Alt+2 para as grades rápidas'],
+    ['Trocar a unidade das coordenadas', 'Ctrl+U, ou Editar › Preferências'],
+    ['Achar qualquer outra ação', 'Ctrl+K e o nome dela']
+]
+
+const Guide = () => (
+    <table className="tbl keys">
+        <tbody>{GUIDE.map(([task, how]) => <tr key={task}><td>{t(task)}</td><td>{t(how)}</td></tr>)}</tbody>
+    </table>
+)
+
 const About = () => <><p className="soft" style={{ marginBottom: 12 }}>{t('Editor de circuitos compatível com o Fritzing 1.0.8: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM).')}</p><Table rows={CREDITS} /></>
 
 const CONTENT: Record<string, [string, ReactNode]> = {
@@ -128,6 +181,7 @@ const CONTENT: Record<string, [string, ReactNode]> = {
     versions: ['Versões salvas automaticamente', <Versions startup={false} />],
     shortcuts: ['Atalhos de teclado', <Shortcuts />],
     preferences: ['Preferências', <Preferences />],
+    guide: ['Guia de uso', <Guide />],
     about: ['Sobre o CircuitMaster', <About />]
 }
 

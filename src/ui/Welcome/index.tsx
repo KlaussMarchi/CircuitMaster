@@ -7,17 +7,18 @@ const STEPS: [string, string][] = [['Peças', 'escolha à esquerda e clique no q
 
 // QUADRO VAZIO: COMO COMEÇAR, ABRIR UM ARQUIVO, VER OS EXEMPLOS OU ABRIR UM CIRCUITO DE TESTE
 export const Welcome = () => {
-    const empty = useStore(state => Object.keys(state.doc.instances).length === 0)
-    const ready = useStore(state => state.ready)
+    const empty   = useStore(state => Object.keys(state.doc.instances).length === 0)
+    const ready   = useStore(state => state.ready)
+    const asked   = useStore(state => state.welcome)
     const { setPanel, openBench } = useStore.getState()
 
-    if (!empty || !ready)
+    if (!(empty || asked) || !ready)
         return null
 
     return (
         <div className="welcome">
             <section className="card">
-                <h2>{t('Comece um circuito')}</h2>
+                <div className="modal-head"><h2>{t('Comece um circuito')}</h2>{asked && <button className="btn sm" onClick={() => useStore.setState({ welcome: false })}>{t('Fechar')}</button>}</div>
                 <p className="sub">{t('Protoboard, esquemático e PCB sempre sincronizados')}</p>
                 <ol>{STEPS.map(([title, text], i) => <li key={title}><span className="step">{i + 1}</span><span><b>{t(title)}:</b> {t(text)}</span></li>)}</ol>
                 <div className="acts">

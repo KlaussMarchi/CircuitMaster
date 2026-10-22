@@ -8,7 +8,7 @@ test('Editar: copiar, colar, colar no lugar, duplicar, recortar, apagar, desfaze
     await page.keyboard.press('Control+v')
     await expect.poll(() => app.count()).toBe(2)
     const pasted = (await app.state((await app.selection())[0]))?.geometry
-    const grid   = await page.evaluate(() => cm.store.getState().getGrid())
+    const grid   = await page.evaluate(() => cm.store.getState().gridOf(cm.store.getState().view, 'parts'))
     expect(Math.abs((pasted?.x ?? 0) - (origin?.x ?? 0) - 20)).toBeLessThanOrEqual(grid / 2)
     expect(Math.abs((pasted?.y ?? 0) - (origin?.y ?? 0) + 20)).toBeLessThanOrEqual(grid / 2)
 
@@ -104,7 +104,7 @@ test('Peça: girar, travar, elevar, alinhar, rótulo e mover pelo teclado', asyn
     await page.getByRole('toolbar', { name: 'Ferramentas' }).getByRole('button', { name: 'Girar' }).click()
     await expect.poll(() => app.angle(first)).toBe(180)
 
-    const grid = await page.evaluate(() => cm.store.getState().getGrid())
+    const grid = await page.evaluate(() => cm.store.getState().gridOf(cm.store.getState().view, 'parts'))
     const x    = (await app.state(first))?.geometry.x ?? 0
     await page.keyboard.press('ArrowRight')
     await expect.poll(async () => (await app.state(first))?.geometry.x).toBeCloseTo(x + grid)
@@ -319,7 +319,7 @@ test('Editar: colar duas vezes, duplicar pelo contexto e pela barra, Backspace, 
     await page.getByRole('tab', { name: 'Protoboard' }).click()
     const resistor = await app.place('Resistor', [-300, 0])
     const origin   = (await app.state(resistor))?.geometry
-    const grid     = await page.evaluate(() => cm.store.getState().getGrid())
+    const grid     = await page.evaluate(() => cm.store.getState().gridOf(cm.store.getState().view, 'parts'))
 
     await page.keyboard.press('Control+c')
     await page.keyboard.press('Control+v')
@@ -415,7 +415,7 @@ test('Exibir: Ctrl+Shift+0, encaixe na grade ao soltar, grade gravada no .fzz', 
 
     const onGrid = async (modelIndex: string) => {
         const [key] = Object.values(await app.pins(modelIndex))
-        const grid  = await page.evaluate(() => cm.store.getState().getGrid())
+        const grid  = await page.evaluate(() => cm.store.getState().gridOf(cm.store.getState().view, 'parts'))
         const point = await page.evaluate(key => {
             const { doc, library, view } = cm.store.getState()
             return new cm.Scene(doc, library, view).getTerminal(key)

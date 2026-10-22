@@ -13,7 +13,8 @@ import { getMode } from '../../core/Spice'
 import { TESTS } from '../SimulationPanel'
 import { LAYER_GROUPS } from '../Layers'
 import { LEVELS } from '../Modes'
-import { t } from '../../core/Text'
+import { LANGUAGES, t } from '../../core/Text'
+import { CROSSHAIRS, UNITS, centerOnCursor, centerOnSelection, showIn, useCursor, zoomToSelection } from '../Navigation'
 import type { ProbeKind } from '../../core/Document'
 
 type State = ReturnType<typeof useStore.getState>
@@ -22,6 +23,7 @@ const ZOOM_STEP  = 1.25
 const REAL_SIZE  = 96 / 90    // TELA DE 96 PX/in SOBRE CENA DE 90 PX/in
 const BOARDS     = ['board', 'resizableBoard']
 const AUTOROUTED = 32
+const SHOW_IN: Record<typeof VIEWS[number], string> = { breadboardView: 'Ver na protoboard', schematicView: 'Ver no esquemático', pcbView: 'Ver na PCB' }
 
 const ALIGNS: [string, Parameters<State['align']>[0]][] = [['Esquerda', 'left'], ['Centro horizontal', 'hcenter'], ['Direita', 'right'], ['Topo', 'top'], ['Centro vertical', 'vcenter'], ['Base', 'bottom']]
 const IMAGES: [string, ExportKind][] = [['PNG…', 'png'], ['JPG…', 'jpg'], ['SVG…', 'svg'], ['PDF…', 'pdf']]
@@ -68,7 +70,11 @@ const editMenu = (state: State): MenuEntry[] => [
     { label: 'Apagar', shortcut: shortcutOf(state.keys, 'remove'), disabled: !state.selection.length, apply: () => state.remove(false) },
     { label: 'Apagar sem fios', shortcut: shortcutOf(state.keys, 'removeMinus'), disabled: !state.selection.length, apply: () => state.remove(true) },
     null,
+    { label: 'Copiar como texto', shortcut: shortcutOf(state.keys, 'copyText'), disabled: !state.selection.length, apply: state.copyAsText },
+    { label: 'Apagar com cliques', checked: state.tool === 'erase', apply: () => state.setTool(state.tool === 'erase' ? 'select' : 'erase') },
+    null,
     { label: 'Selecionar tudo', shortcut: shortcutOf(state.keys, 'selectAll'), apply: state.selectAll },
+    { label: 'Seleção por laço', checked: state.tool === 'lasso', apply: () => state.setTool(state.tool === 'lasso' ? 'select' : 'lasso') },
     { label: 'Desmarcar', shortcut: shortcutOf(state.keys, 'escape'), disabled: !state.selection.length, apply: () => state.select([]) },
     null,
     { label: 'Adicionar nota', apply: () => void state.addNote() },
@@ -81,7 +87,8 @@ const partMenu = (state: State): MenuEntry[] => {
     const target = state.selection.find(modelIndex => !scene.isWire(modelIndex))
     const parts  = target ? getMenu({ kind: 'part', modelIndex: target, key: null, point: [0, 0], rat: null }) : []
     const align  = { label: 'Alinhar', disabled: state.selection.length < 2, items: ALIGNS.map(([label, mode]): MenuEntry => ({ label, apply: () => state.align(mode) })) }
-    return target ? [...parts.slice(0, 3), align, ...parts.slice(3)] : [{ label: 'Selecione uma peça', disabled: true }]
+    const others = VIEWS.filter(view => view !== state.view).map((view): MenuEntry => ({ label: SHOW_IN[view], apply: () => showIn(state, view) }))
+    return target ? [...parts.slice(0, 3), align, ...parts.slice(3), null, ...others] : [{ label: 'Selecione uma peça', disabled: true }]
 }
 
 const viewMenu = (state: State): MenuEntry[] => {
@@ -90,8 +97,30 @@ const viewMenu = (state: State): MenuEntry[] => {
         { label: 'Ampliar', shortcut: shortcutOf(state.keys, 'zoomIn'), apply: () => state.zoom(ZOOM_STEP) },
         { label: 'Reduzir', shortcut: shortcutOf(state.keys, 'zoomOut'), apply: () => state.zoom(1 / ZOOM_STEP) },
         { label: 'Enquadrar', shortcut: shortcutOf(state.keys, 'fit'), apply: () => state.setViewport(state.view, undefined) },
+        { label: 'Zoom na seleção', disabled: !state.selection.length, apply: () => zoomToSelection(state) },
+        { label: 'Zoom na área arrastada', shortcut: shortcutOf(state.keys, 'zoomArea'), apply: () => state.setTool('zoomArea') },
+        { label: 'Desfazer o último zoom', disabled: !state.zooms[state.view]?.back.length, apply: state.undoZoom },
+        { label: 'Refazer o último zoom', disabled: !state.zooms[state.view]?.ahead.length, apply: state.redoZoom },
+        { label: 'Centralizar na seleção', disabled: !state.selection.length, apply: () => centerOnSelection(state) },
+        { label: 'Centralizar no cursor', shortcut: shortcutOf(state.keys, 'centerCursor'), disabled: !useCursor.getState().point, apply: () => centerOnCursor(state) },
         { label: 'Tamanho real', apply: () => state.setZoom(REAL_SIZE) },
         { label: '100%', shortcut: shortcutOf(state.keys, 'actual'), apply: () => state.setZoom(1) },
+        null,
+        { label: 'Grade', items: [
+            ...state.gridsOf(state.view).map((size, i): MenuEntry => ({ label: size, shortcut: i < 2 ? shortcutOf(state.keys, i ? 'fastGrid2' : 'fastGrid1') : undefined, checked: (settings.gridSize ?? state.gridsOf(state.view)[0]) === size, apply: () => state.setViewSetting('gridSize', size) })),
+            null,
+            { label: 'Próxima grade', shortcut: shortcutOf(state.keys, 'nextGrid'), apply: () => state.cycleGrid(1) },
+            { label: 'Grade anterior', shortcut: shortcutOf(state.keys, 'previousGrid'), apply: () => state.cycleGrid(-1) },
+            { label: 'Alternar grade rápida', shortcut: shortcutOf(state.keys, 'cycleFastGrid'), apply: state.cycleFastGrid },
+            { label: 'Editar grades…', apply: () => state.setDialog('preferences') },
+            null,
+            { label: 'Colocar a origem da grade', checked: state.tool === 'origin', apply: () => state.setTool('origin') },
+            { label: 'Origem da grade no cursor', disabled: !useCursor.getState().point, apply: () => state.setGridOrigin(useCursor.getState().point) },
+            { label: 'Restaurar a origem da grade', disabled: !settings.gridOrigin, apply: () => state.setGridOrigin(null) }
+        ] },
+        { label: 'Unidades', items: [...UNITS.map(([unit, label]): MenuEntry => ({ label, checked: state.preferences.units === unit, apply: () => state.setPreferences({ units: unit }) })), null, { label: 'Alternar unidades', shortcut: shortcutOf(state.keys, 'units'), apply: () => state.setPreferences({ units: state.preferences.units === 'mm' ? 'in' : 'mm' }) }, { label: 'Coordenadas polares', checked: state.preferences.polar, apply: () => state.setPreferences({ polar: !state.preferences.polar }) }] },
+        { label: 'Cursor', items: [...CROSSHAIRS.map(([shape, label]): MenuEntry => ({ label, checked: state.preferences.crosshair === shape, apply: () => state.setPreferences({ crosshair: shape }) })), null, { label: 'Sempre mostrar o cursor em cruz', checked: state.preferences.crosshairAlways, apply: () => state.setPreferences({ crosshairAlways: !state.preferences.crosshairAlways }) }] },
+        { label: 'Painel da esquerda', checked: !state.leftHidden, apply: state.toggleLeft },
         null,
         { label: 'Alinhar à grade', checked: settings.alignToGrid !== '0', apply: () => state.setViewSetting('alignToGrid', settings.alignToGrid === '0' ? '1' : '0') },
         { label: 'Mostrar grade', checked: settings.showGrid !== '0', apply: () => state.setViewSetting('showGrid', settings.showGrid === '0' ? '1' : '0') },
@@ -101,6 +130,7 @@ const viewMenu = (state: State): MenuEntry[] => {
         ...state.view === 'pcbView' ? [{ label: 'Camadas da PCB', items: [...LAYER_GROUPS.map(([id, label]): MenuEntry => ({ label, checked: !state.hiddenLayers.includes(id), apply: () => state.toggleLayer(id) })), null, { label: 'Mostrar todas as camadas', apply: () => state.setHiddenLayers([]) }, { label: 'Ocultar todas as camadas', apply: () => state.setHiddenLayers(LAYER_GROUPS.map(([id]) => id)) }] }] : [],
         null,
         { label: 'Modo da interface', items: LEVELS.map(([level, label]): MenuEntry => ({ label, checked: state.level === level, apply: () => state.setLevel(level) })) },
+        { label: 'Idioma', items: LANGUAGES.map(([language, label]): MenuEntry => ({ label, checked: state.language === language, apply: () => void state.setLanguage(language) })) },
         { label: state.theme === 'dark' ? 'Tema claro' : 'Tema escuro', apply: state.toggleTheme }
     ]
 }
@@ -160,7 +190,9 @@ const simulationMenu = (state: State): MenuEntry[] => {
 const helpMenu = (state: State): MenuEntry[] => [
     { label: 'Paleta de comandos', shortcut: shortcutOf(state.keys, 'palette'), apply: () => useStore.setState({ dialog: 'palette' }) },
     { label: 'Atalhos de teclado', apply: () => useStore.setState({ dialog: 'shortcuts' }) },
+    { label: 'Guia de uso', apply: () => useStore.setState({ dialog: 'guide' }) },
     { label: 'Tour da interface', apply: () => state.showTour(state.level) },
+    { label: 'Boas-vindas', apply: () => useStore.setState({ welcome: true }) },
     { label: 'Sobre o CircuitMaster', apply: () => useStore.setState({ dialog: 'about' }) }
 ]
 

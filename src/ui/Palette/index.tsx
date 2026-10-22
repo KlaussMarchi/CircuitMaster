@@ -8,7 +8,14 @@ const SHOWN = 12    // COMANDOS NA LISTA
 
 // TERMOS EM INGLÊS DO FRITZING E DO KICAD PARA CADA RÓTULO: QUEM VEM DE LÁ ACHA PELO NOME QUE CONHECE
 const ALIASES: Record<string, string> = {
-    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Salvar todos': 'save all',
+    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Salvar todos': 'save all', 'Copiar como texto': 'copy as text clipboard', 'Apagar com cliques': 'interactive delete tool eraser',
+    'Seleção por laço': 'lasso polygon select', 'Zoom na seleção': 'zoom to selected objects', 'Zoom na área arrastada': 'zoom to selection area window', 'Desfazer o último zoom': 'undo last zoom', 'Refazer o último zoom': 'redo last zoom',
+    'Centralizar na seleção': 'pan to center selected objects', 'Centralizar no cursor': 'center on cursor', 'Grade': 'grid', 'Próxima grade': 'switch to next grid', 'Grade anterior': 'switch to previous grid', 'Alternar grade rápida': 'cycle fast grid',
+    'Editar grades…': 'edit grids', 'Colocar a origem da grade': 'grid origin place', 'Origem da grade no cursor': 'grid origin', 'Restaurar a origem da grade': 'reset grid origin', 'Unidades': 'units', 'Polegadas': 'inches imperial',
+    'Milímetros': 'millimeters metric mm', 'Mils': 'mils thou', 'Alternar unidades': 'switch units', 'Coordenadas polares': 'polar coordinates', 'Cursor': 'crosshair cursor', 'Pequeno': 'small crosshairs',
+    'Na janela toda': 'full window crosshairs', 'A 45°': '45 degree crosshairs', 'Sempre mostrar o cursor em cruz': 'always show crosshairs', 'Painel da esquerda': 'hide library tree parts panel sidebar',
+    'Idioma': 'language english portuguese', 'Guia de uso': 'help documentation manual guide', 'Boas-vindas': 'welcome getting started', 'Ver na protoboard': 'cross probe breadboard', 'Ver no esquemático': 'select on schematic cross probe',
+    'Ver na PCB': 'select on pcb cross probe',
     'PNG…': 'export image png', 'JPG…': 'export image jpg jpeg', 'SVG…': 'export image svg', 'PDF…': 'export image pdf plot', 'Gravável (PDF)…': 'etchable pdf', 'Gravável (SVG)…': 'etchable svg',
     'Tudo para fabricar (zip)…': 'fabrication outputs production gerber drill jobset manufacturing',
     'Gerber estendido (RS-274X)…': 'gerber fabrication outputs plot cam', 'Pick-and-place…': 'pick and place position file centroid', 'Lista de materiais (HTML)…': 'bill of materials bom', 'Lista de materiais (CSV)…': 'bill of materials bom csv',

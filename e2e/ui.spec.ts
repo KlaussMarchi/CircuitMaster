@@ -258,7 +258,7 @@ test('Preferências: roda rola a vista, arrastar curva o fio, atalho trocado val
     await dialog.getByRole('tablist', { name: 'Arrastar o meio de um fio' }).getByRole('tab', { name: 'Curva o fio' }).click()
     await dialog.getByRole('textbox', { name: 'Tecla de Duplicar' }).press('Shift+D')
     await expect(dialog.getByRole('textbox', { name: 'Tecla de Duplicar' })).toHaveValue('Shift+D')
-    await dialog.getByRole('textbox', { name: 'Tecla de Copiar' }).press('Shift+D')
+    await dialog.getByRole('textbox', { name: 'Tecla de Copiar', exact: true }).press('Shift+D')
     await expect(dialog.getByRole('textbox', { name: 'Tecla de Duplicar' })).toHaveValue('—')
     await dialog.getByRole('textbox', { name: 'Tecla de Duplicar' }).press('Control+J')
     await dialog.getByRole('button', { name: 'Fechar' }).click()
@@ -296,7 +296,7 @@ test('Preferências: roda rola a vista, arrastar curva o fio, atalho trocado val
     await expect.poll(() => app.message()).toMatch(/salvo/)
     await app.open()
     await expect(page.getByRole('dialog', { name: 'Recuperar trabalho não salvo' })).toHaveCount(0)
-    expect(await page.evaluate(() => cm.store.getState().preferences)).toEqual({ wheel: 'scroll', curvy: true })
+    expect(await page.evaluate(() => cm.store.getState().preferences)).toMatchObject({ wheel: 'scroll', curvy: true })
     await app.menu('Ajuda', 'Atalhos de teclado')
     await expect(page.getByRole('dialog', { name: 'Atalhos de teclado' }).getByRole('row', { name: /Ctrl\+J\s+Duplicar/ })).toBeVisible()
     await page.keyboard.press('Escape')
@@ -304,7 +304,7 @@ test('Preferências: roda rola a vista, arrastar curva o fio, atalho trocado val
     await page.keyboard.press('Control+,')
     await dialog.getByRole('button', { name: 'Restaurar todos os atalhos' }).click()
     await expect(dialog.getByRole('textbox', { name: 'Tecla de Duplicar' })).toHaveValue('Ctrl+D')
-    await expect(dialog.getByRole('textbox', { name: 'Tecla de Copiar' })).toHaveValue('Ctrl+C')
+    await expect(dialog.getByRole('textbox', { name: 'Tecla de Copiar', exact: true })).toHaveValue('Ctrl+C')
 })
 
 test('Tour: aparece uma vez por modo, avança, pula com Esc e volta pela Ajuda', async ({ app, page }) => {
@@ -478,7 +478,7 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
         await scan(panel)
     }
 
-    for (const item of ['Keyboard shortcuts', 'About CircuitMaster']) {
+    for (const item of ['Keyboard shortcuts', 'About CircuitMaster', 'User guide']) {
         await menus.getByRole('button', { name: 'Help', exact: true }).click()
         await app.choose([item])
         await scan(item)

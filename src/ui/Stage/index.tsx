@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ProbeKind } from '../../core/Document'
 import { formatReading, formatSi } from '../../core/Properties'
 import { Canvas } from '../Canvas'
@@ -8,6 +9,7 @@ import { useStore, type Side } from '../Store'
 import { t } from '../../core/Text'
 
 const ZOOM_STEP = 1.25
+const BOARDS    = ['board', 'resizableBoard']
 const SIDES: [Side, string, string][] = [['both', 'Ambas', 'Mostra as duas faces'], ['top', 'Topo', 'Destaca a face de cima (vermelha); trilhas novas vão nela'], ['bottom', 'Base', 'Destaca a face de baixo (azul); trilhas novas vão nela']]
 const PROBES: [ProbeKind, string, string][] = [['voltage', 'V', 'Ponta de tensão: clique num fio ou terminal'], ['current', 'A', 'Ponta de corrente: clique num fio ou terminal'], ['both', 'V·A', 'Ponta de tensão e corrente']]
 
@@ -70,6 +72,10 @@ const Sheets = () => {
     const { switchSheet, closeSheet } = useStore.getState()
     const status  = <span className={`pill ${changed ? 'warn' : 'neutral'}`}>{changed ? t('Alterações não salvas') : stored ? t('Salvo') : t('Novo')}</span>
 
+    useEffect(() => {
+        void document.querySelector('.sheets [aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })    // A ABA ATIVA FICA À VISTA
+    }, [sheet, sheets.length])
+
     if (sheets.length < 2)
         return <div className="doc"><h1 title={titleOf(name)}>{titleOf(name)}</h1>{status}</div>
 
@@ -83,13 +89,29 @@ const Sheets = () => {
 
                     return (
                         <span key={item.id} className="sheet">
-                            <button className="tab" role="tab" aria-selected={active} title={`${label}${dirty ? ` · ${t('alterações não salvas')}` : ''}`} onClick={() => switchSheet(item.id)}>{label}{dirty && <i className="dirty" aria-hidden />}</button>
+                            <button className="tab" role="tab" aria-selected={active} title={`${label}${dirty ? ` · ${t('alterações não salvas')}` : ''}`} onClick={() => switchSheet(item.id)}><span className="name">{label}</span>{dirty && <i className="dirty" aria-hidden />}</button>
                             <button className="icon-btn" aria-label={t('Fechar {0}', label)} title={t('Fechar {0}', label)} onClick={() => closeSheet(item.id)}><Icon name="close" /></button>
                         </span>
                     )
                 })}
             </div>
             {status}
+        </div>
+    )
+}
+
+// PCB COM PEÇAS E SEM PLACA: A AÇÃO QUE FALTA APARECE NO PRÓPRIO QUADRO (COM A ABA ROTEAMENTO ABERTA, ELA JÁ ESTÁ LÁ)
+const NoBoard = () => {
+    const missing = useStore(state => state.view === 'pcbView' && !state.routing && state.panel !== 'routing' && Object.values(state.doc.instances).some(instance => state.library.getPart(instance.moduleIdRef)?.kind === 'part') && !Object.values(state.doc.instances).some(instance => BOARDS.includes(state.library.getPart(instance.moduleIdRef)?.kind ?? '')))
+    const { makeBoard } = useStore.getState()
+
+    if (!missing)
+        return null
+
+    return (
+        <div className="noboard card" role="note">
+            <p>{t('Ainda não há placa: crie uma em volta das peças e trace as trilhas nas duas faces.')}</p>
+            <button className="btn primary sm" onClick={() => void makeBoard()}><Icon name="route" />{t('Criar placa e rotear')}</button>
         </div>
     )
 }
@@ -128,12 +150,13 @@ export const Stage = () => {
                 )}
                 <Sheets />
             </div>
-            <div className="canvas">
+            <div className="canvas" tabIndex={-1}>
                 <Canvas />
                 <SimChip />
                 <SelectionBar />
                 <Zoom />
                 {view === 'pcbView' && <Layers />}
+                <NoBoard />
                 <Welcome />
             </div>
         </section>

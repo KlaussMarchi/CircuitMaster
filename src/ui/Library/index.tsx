@@ -50,7 +50,10 @@ const usePick = (moduleId: string) => {
         'aria-pressed': placing === moduleId,
         draggable: true,
         onDragStart: (event: DragEvent) => event.dataTransfer.setData(PART_MIME, moduleId),
-        onClick: () => useStore.getState().setPlacing(placing === moduleId ? null : moduleId),
+        onClick: () => {
+            useStore.getState().setPlacing(placing === moduleId ? null : moduleId)
+            document.querySelector<HTMLElement>('.canvas')?.focus()    // O FOCO VAI AO QUADRO: SETAS E Enter POSICIONAM PELO TECLADO
+        },
         onDoubleClick: () => placeCentered(moduleId)
     }
 }

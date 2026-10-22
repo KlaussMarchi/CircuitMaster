@@ -11,9 +11,9 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Fritzing | 251 | 135 | 92 | 24 |
-| KiCad esquemático, comuns e projeto | 404 | 66 | 325 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 26 | 393 | 2 |
+| Fritzing | 251 | 141 | 86 | 24 |
+| KiCad esquemático, comuns e projeto | 404 | 117 | 274 | 13 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 27 | 392 | 2 |
 
 ## Fritzing
 
@@ -21,12 +21,12 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | ID | Função | Origem | Status | Fase | Teste | Nota |
 |---|---|---|---|---|---|---|
-| F-001 | Novo (New) | Fritzing › File › New | feita | 0 | e2e/circuit.spec.ts | Ctrl+N; pede confirmação se há alterações; também na aba Documento |
+| F-001 | Novo (New) | Fritzing › File › New | feita | 0 | e2e/circuit.spec.ts | Ctrl+N; abre numa aba nova e a anterior continua com o circuito (spec 05 §4); também na aba Documento |
 | F-002 | Abrir… (Open...) | Fritzing › File › Open... | feita | 0 | tests/sketch.test.ts · e2e/circuit.spec.ts | Ctrl+O; .fzz e .fz; o mesmo seletor importa .fzpz/.fzb/.fzbz (F-174) |
 | F-003 | Reverter (Revert) | Fritzing › File › Revert | falta | 3 | — | recarregar o arquivo aberto descartando as alterações |
 | F-004 | Abrir recentes ▸ (Open Recent Files) | Fritzing › File › Open Recent Files ▸ | falta | 3 | — | no navegador: lista no IndexedDB com a cópia ou o handle de cada arquivo |
 | F-005 | Abrir exemplo ▸ (Open Example) | Fritzing › File › Open Example ▸ (sketches/index.xml) | feita | 0 | tests/sketch.test.ts · e2e/samples.spec.ts | Arquivo › Exemplos em submenus por pasta; lista com busca na aba Documento |
-| F-006 | Fechar janela (Close Window) | Fritzing › File › Close Window (fritzingwindow.cpp) | falta | 2 | — | Ctrl+W; no navegador vira fechar o sketch, uma aba quando houver vários sketches em abas |
+| F-006 | Fechar janela (Close Window) | Fritzing › File › Close Window (fritzingwindow.cpp) | feita | 2 | e2e/ui.spec.ts | Arquivo › Fechar sketch e o × da aba; com alterações pergunta; o Ctrl+W fica com o navegador |
 | F-007 | Salvar (Save) | Fritzing › File › Save | feita | 0 | tests/sketch.test.ts · e2e/circuit.spec.ts | Ctrl+S; baixa o .fzz com os arquivos das peças de pacote embutidos |
 | F-008 | Salvar como… (Save As...) | Fritzing › File › Save As... | falta | 3 | — | parcial: Salvar baixa com o nome atual; falta pedir o nome (Shift+Ctrl+S) |
 | F-009 | Compartilhar online… (Share online...) | Fritzing › File › Share online... | não se aplica | — | — | serviço online do Fritzing (FRIZING_KICAD §10) |
@@ -60,7 +60,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-037 | Selecionar tudo (Select All) | Fritzing › Edit › Select All | feita | 0 | e2e/edit.spec.ts | Ctrl+A; só o que aparece na vista (`Scene.isShown`): na protoboard não entram placa, vias nem trilhas da PCB (bug da fase 0, corrigido com teste) |
 | F-038 | Desmarcar (Deselect) | Fritzing › Edit › Deselect | feita | 0 | e2e/edit.spec.ts | Esc |
 | F-039 | Adicionar nota (Add Note) | Fritzing › Edit › Add Note | feita | 0 | e2e/edit.spec.ts | nota no centro da vista visível, só nessa vista; duplo clique edita |
-| F-040 | Preferências… (Preferences...) | Fritzing › Edit › Preferences... (Help no macOS) | falta | 2 | — | roda do mouse, fios curvos por padrão, autosave, idioma, cores de realce, limpar ajustes, Gerber com seis casas, estilo do rótulo de net e programas da aba Código; parcial: as propriedades de simulação do projeto já estão na doca (F-239) |
+| F-040 | Preferências… (Preferences...) | Fritzing › Edit › Preferences... (Help no macOS) | falta | 3 | — | parcial (fase 2, e2e/ui.spec.ts · e2e/navigation.spec.ts): roda do mouse, fios curvos, modo, idioma, tema, unidades, cursor em cruz, grades e grade por tipo, teclas e manutenção (spec 05 §7); faltam cores de realce, Gerber com seis casas, estilo do rótulo de net e programas da aba Código |
 | F-041 | Editar (editor de peças) (Edit (new parts editor)) | Fritzing › Part › Edit (new parts editor) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | também no menu de contexto; desabilitado para peça que não abre no editor |
 | F-042 | Exportar peça… (Export...) | Fritzing › Part › Export... | falta | 3 | — | parcial: o editor de peças baixa um .fzpz, mas de uma peça nova (moduleId novo); falta exportar a peça selecionada como está |
 | F-043 | Espelhar horizontal (Flip Horizontal) | Fritzing › Part › Flip Horizontal | feita | 0 | tests/edit.test.ts · e2e/edit.spec.ts | atalho \|; no esquemático; também no menu de contexto do esquemático e na barra do quadro |
@@ -99,21 +99,21 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-076 | Tamanho da grade… (Set Grid Size...) | Fritzing › View › Set Grid Size... | falta | 3 | — | parcial: aba Documento › Grade escolhe entre tamanhos fixos de cada vista; faltam valor livre em in/mm e Restaurar padrão |
 | F-077 | Cor de fundo… (Set Background Color...) | Fritzing › View › Set Background Color... | falta | 3 | — | o desenho já lê backgroundColor do sketch; falta o comando |
 | F-078 | Colorir fios da protoboard pelo comprimento (Color Breadboard Wires By Length) | Fritzing › View › Color Breadboard Wires By Length | falta | 3 | — |  |
-| F-079 | Mostrar boas-vindas (Show Welcome) | Fritzing › View › Show Welcome | falta | 2 | — | parcial: o cartão "Comece um circuito" aparece no quadro vazio; não há vista nem comando para reabri-lo; Ctrl+1 no Fritzing |
+| F-079 | Mostrar boas-vindas (Show Welcome) | Fritzing › View › Show Welcome | feita | 2 | e2e/navigation.spec.ts | Ajuda › Boas-vindas reabre o cartão; ele aparece sozinho no quadro vazio |
 | F-080 | Mostrar protoboard (Show Breadboard) | Fritzing › View › Show Breadboard | feita | 0 | e2e/circuit.spec.ts | Ctrl+1 e tecla 1 (Ctrl+2 no Fritzing, onde Ctrl+1 é Boas-vindas); abas da barra superior |
 | F-081 | Mostrar esquemático (Show Schematic) | Fritzing › View › Show Schematic | feita | 0 | e2e/circuit.spec.ts | Ctrl+2 e tecla 2 (Ctrl+3 no Fritzing); abas da barra superior |
 | F-082 | Mostrar PCB (Show PCB) | Fritzing › View › Show PCB | feita | 0 | e2e/circuit.spec.ts | Ctrl+3 e tecla 3 (Ctrl+4 no Fritzing); abas da barra superior |
 | F-083 | Mostrar código (Show Code) | Fritzing › View › Show Code | falta | 14 | — | Ctrl+5; a aba Código está detalhada na terceira tabela |
 | F-084 | Bin em ícones (Show Parts Bin Icon View) | Fritzing › View › Show Parts Bin Icon View (também Bin › Show Bin in Icon View) | falta | 3 | — | parcial: as seções da biblioteca saem em grade de ícones; não há como alternar |
 | F-085 | Bin em lista (Show Parts Bin List View) | Fritzing › View › Show Parts Bin List View (também Bin › Show Bin in List View) | falta | 3 | — | parcial: só os resultados da busca saem em lista |
-| F-086 | Mostrar todas as camadas (Show All Layers) | Fritzing › View › Show All Layers | falta | 3 | — | também no painel Layers |
-| F-087 | Ocultar todas as camadas (Hide All Layers) | Fritzing › View › Hide All Layers | falta | 3 | — | também no painel Layers |
+| F-086 | Mostrar todas as camadas (Show All Layers) | Fritzing › View › Show All Layers | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): na PCB, Exibir › Camadas da PCB › Mostrar todas as camadas e a legenda do quadro; falta nas outras vistas |
+| F-087 | Ocultar todas as camadas (Hide All Layers) | Fritzing › View › Hide All Layers | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): na PCB, Exibir › Camadas da PCB › Ocultar todas as camadas e a legenda do quadro; falta nas outras vistas |
 | F-088 | Camada ▸ cada camada da vista, marcável (‹nome› Layer) | Fritzing › View › ‹nome› Layer (sketchwidget.cpp) | falta | 3 | — | parcial: na PCB, Ambas/Topo/Base esmaecem uma face, e a serigrafia se oculta peça a peça (F-130) |
 | F-089 | Minimizar (Minimize) | Fritzing › Window › Minimize | não se aplica | — | — | Ctrl+M; janela do sistema, desktop |
 | F-090 | Painel Peças (Parts) | Fritzing › Window › Parts (doca) | não se aplica | — | — | liga e desliga uma doca do Qt; no CircuitMaster os painéis são fixos no layout, o trilho troca o painel esquerdo e no celular eles viram folhas |
 | F-091 | Painel Inspetor (Inspector) | Fritzing › Window › Inspector (doca) | não se aplica | — | — | idem; o inspetor fica sempre à direita |
-| F-092 | Painel Camadas (Layers) | Fritzing › Window › Layers (doca) | falta | 3 | — | mostrar e ocultar cada camada da vista; a fase 2 (FRIZING_KICAD §13) já prevê um painel de camadas |
-| F-093 | Lista dos sketches abertos (uma entrada por janela) | Fritzing › Window › ‹sketch aberto› | falta | 2 | — | vários sketches abertos, em abas no navegador |
+| F-092 | Painel Camadas (Layers) | Fritzing › Window › Layers (doca) | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): legenda "Camadas" no quadro da PCB liga e desliga cada grupo num clique; falta nas outras vistas |
+| F-093 | Lista dos sketches abertos (uma entrada por janela) | Fritzing › Window › ‹sketch aberto› | feita | 2 | e2e/ui.spec.ts | abas de sketches no cabeçalho do quadro, com o ponto de alterações não salvas (spec 05 §4) |
 | F-094 | Abrir janela de programação (Open programming window) | Fritzing › Window › Open programming window | não se aplica | — | — | só aparece quando a aba Código está desligada; a função é a da aba Código (F-083) |
 | F-095 | Autorotear (Autoroute) | Fritzing › Routing (PCB e esquemático) › Autoroute | feita | 0 | tests/router.test.ts · e2e/pcb.spec.ts | Shift+Ctrl+A; progresso e cancelar na aba Roteamento; com várias placas, a selecionada; sem placa, "Criar placa e rotear" |
 | F-096 | Verificar regras (Design Rules Check (DRC)) | Fritzing › Routing (PCB) › Design Rules Check (DRC) | feita | 0 | tests/drc.test.ts · e2e/pcb.spec.ts | Shift+Ctrl+D; violações no painel Problemas; com várias placas, a selecionada |
@@ -147,8 +147,8 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-124 | Relatar um bug… (Report a bug...) | Fritzing › Help › Report a bug... | não se aplica | — | — | link para o rastreador do Fritzing |
 | F-125 | Ligar o log de depuração (Enable debugging log) | Fritzing › Help › Enable debugging log | não se aplica | — | — | o console do navegador cumpre o papel |
 | F-126 | Sobre (About) | Fritzing › Help › About | feita | 0 | e2e/ui.spec.ts | Ajuda › Sobre o CircuitMaster, com os créditos |
-| F-127 | Dicas, truques e atalhos (Tips, Tricks and Shortcuts) | Fritzing › Help › Tips, Tricks and Shortcuts | falta | 2 | — | parcial: Ajuda › Atalhos de teclado (e o trilho) lista os atalhos; faltam as dicas |
-| F-128 | Ajuda inicial (First Time Help) | Fritzing › Help › First Time Help | falta | 2 | — | parcial: o cartão do quadro vazio mostra os quatro passos |
+| F-127 | Dicas, truques e atalhos (Tips, Tricks and Shortcuts) | Fritzing › Help › Tips, Tricks and Shortcuts | feita | 2 | e2e/ui.spec.ts | Ajuda › Guia de uso (o que fazer e como), Tour da interface e Atalhos de teclado |
+| F-128 | Ajuda inicial (First Time Help) | Fritzing › Help › First Time Help | feita | 2 | e2e/ui.spec.ts | tour por modo na primeira abertura (Ajuda › Tour da interface repete) e boas-vindas no quadro vazio |
 | F-129 | Itens só da compilação de depuração (throw test exception, Dump all parts, Tidy Wires, About Qt, Debugger Output) | Fritzing › File, Part, Routing, Help, Window (#ifndef QT_NO_DEBUG) | não se aplica | — | — | não aparecem na versão distribuída do Fritzing |
 
 ### Menus de contexto
@@ -264,11 +264,11 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-231 | Programas guardados no .fzz | Fritzing › aba Código › programwindow.cpp | falta | 14 | — | os arquivos de código vão dentro do sketch e voltam ao abrir |
 | F-232 | Histórico de desfazer (Undo History) | Fritzing › Window › Undo History (doca, mainwindow_dock.cpp) | feita | 1 | tests/history.test.ts · e2e/robust.spec.ts | no painel Projeto (Editar › Histórico de desfazer): cada passo com nome pela diferença dos documentos; um clique volta ou avança até ele (spec 06 §7) |
 | F-233 | Salvamento automático e recuperação (Autosave) | Fritzing › Preferences › Autosave e recuperação ao abrir (mainwindow.cpp) | feita | 1 | e2e/robust.spec.ts · e2e/soak.spec.ts | IndexedDB 1,5 s depois de cada mudança e ao esconder a aba, 20 versões, recuperação das sessões mortas ao abrir, Arquivo › Versões salvas automaticamente (spec 06 §6); o intervalo do Fritzing nas Preferências não se aplica: grava a cada mudança |
-| F-234 | Idiomas (Language) | Fritzing › Preferences › Language (translations) | falta | 2 | — | só pt-BR; i18n com textos próprios (FRIZING_KICAD §10) |
+| F-234 | Idiomas (Language) | Fritzing › Preferences › Language (translations) | feita | 2 | tests/text.test.ts · e2e/ui.spec.ts | português e inglês com textos próprios (spec 05 §8), em Preferências › Idioma e Exibir › Idioma |
 | F-235 | Simular (Start Simulator) | Fritzing › barra inferior › Simulate (mainwindow.cpp, simulation/simulator.cpp) | feita | 0 | tests/spice.test.ts · e2e/circuit.spec.ts | botão Simular da barra superior e Simulação › Simular; leituras no circuito, gráfico e Medidas na doca |
 | F-236 | Parar a simulação (Stop Simulator) | Fritzing › barra inferior › Stop | feita | 0 | e2e/circuit.spec.ts | o mesmo botão vira Parar; Simulação › Parar a simulação |
-| F-237 | Modo normal (Normal Mode) | Fritzing › barra inferior › Simulate ▸ Normal Mode | feita | 0 | tests/spice.test.ts · e2e/simulation.spec.ts | DC (ponto de operação) na barra superior e em Simulação |
-| F-238 | Modo transitório (Transient Mode) | Fritzing › barra inferior › Simulate ▸ Transient Mode | feita | 0 | tests/bench.test.ts · e2e/simulation.spec.ts | Transitório na barra superior e em Simulação; beta no Fritzing |
+| F-237 | Modo normal (Normal Mode) | Fritzing › barra inferior › Simulate ▸ Normal Mode | feita | 0 | tests/spice.test.ts · e2e/simulation.spec.ts | Simular decide sozinho (spec 05 §3, decisão 2): sem variação no tempo, mostra o regime do ponto de operação |
+| F-238 | Modo transitório (Transient Mode) | Fritzing › barra inferior › Simulate ▸ Transient Mode | feita | 0 | tests/bench.test.ts · e2e/simulation.spec.ts | Simular roda o transitório na janela do teste escolhido no painel (Automático, Degrau, Onda quadrada, Senoide, Manual) |
 | F-239 | Propriedades de simulação do projeto (Project properties: passo, número de pontos, animação, opções SPICE) | Fritzing › Preferences › Beta Features › Project properties (prefsdialog.cpp) | feita | 0 | tests/timing.test.ts · e2e/simulation.spec.ts | doca › Ajustes: teste (Automático, Degrau, Onda quadrada, Senoide, Manual), passo ou pontos, animação e opções do SPICE, gravados no sketch |
 | F-240 | Resultados nas peças ao simular (multímetro, fumaça, brilho do LED, osciloscópio) | Fritzing › simulation/simulator.cpp | feita | 0 | tests/spice.test.ts · e2e/simulation.spec.ts |  |
 | F-241 | Trocar a peça pelas propriedades do inspetor (swap) | Fritzing › Inspector (infoview/htmlinfoview.cpp) | feita | 0 | e2e/parts.spec.ts | outro valor de propriedade da família troca a peça mantendo as ligações |
@@ -281,20 +281,20 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-248 | Subpartes do esquemático (relé e chaves com bobina e contatos em símbolos separados) | Fritzing › items/schematicsubpart.cpp | falta | 8 | — | junto com as unidades do KiCad |
 | F-249 | Mover a seleção com as setas | Fritzing › sketchwidget.cpp (moveByArrow) | feita | 0 | e2e/edit.spec.ts | 1 passo de grade com o alinhamento ligado, senão 1 px; Shift multiplica por 10 |
 | F-250 | Mover a vista com Espaço+arrastar ou o botão do meio | Fritzing › sketchwidget.cpp (spaceBarIsPressed) | feita | 0 | e2e/edit.spec.ts | também arrastar o fundo na ferramenta Editar |
-| F-251 | Roda do mouse: zoom ou rolagem | Fritzing › sketchwidget.cpp (wheelEvent) e Preferences › Mouse Wheel Behavior | feita | 0 | e2e/edit.spec.ts | roda dá zoom no cursor e Shift+roda move; escolher o comportamento fica nas preferências (F-040) |
+| F-251 | Roda do mouse: zoom ou rolagem | Fritzing › sketchwidget.cpp (wheelEvent) e Preferences › Mouse Wheel Behavior | feita | 0 | e2e/edit.spec.ts | roda dá zoom no cursor e Shift+roda move; Preferências › Roda do mouse troca para rolar a vista (Ctrl+roda dá zoom) |
 
 ### Resumo
 
 | Tabela | feita | falta | não se aplica | Total |
 |---|---|---|---|---|
-| Menus da barra | 76 | 34 | 19 | 129 |
+| Menus da barra | 81 | 29 | 19 | 129 |
 | Menus de contexto | 25 | 18 | 1 | 44 |
-| Bins, editor de peças, aba Código e outros docks | 34 | 40 | 4 | 78 |
-| **Total** | **135** | **92** | **24** | **251** |
+| Bins, editor de peças, aba Código e outros docks | 35 | 39 | 4 | 78 |
+| **Total** | **141** | **86** | **24** | **251** |
 
-Linhas "falta" por fase: fase 2: 7 · fase 3: 69 · fase 8: 1 · fase 14: 15.
+Linhas "falta" por fase: fase 3: 70 · fase 8: 1 · fase 14: 15.
 
-Cobertura de Vitest nas linhas feitas: 50 de 135; as demais dependem só do E2E.
+Cobertura de Vitest nas linhas feitas: 52 de 141; as demais dependem só do E2E.
 
 ### Cobertura E2E necessária
 
@@ -507,7 +507,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KS-040 | Resgatar símbolos (Rescue Symbols...) | KiCad › Schematic Editor | falta | 16 | — | P3; símbolos de esquemáticos legados com biblioteca cache |
 | KS-041 | Salvar cópia da folha atual como (Save Current Sheet Copy As...) | KiCad › Schematic Editor | falta | 8 | — | P1 |
 | KS-042 | Configuração do esquemático (Schematic Setup...) | KiCad › Schematic Editor | falta | 8 | — | P1 |
-| KS-043 | Selecionar na PCB (seleção cruzada) (Select on PCB) | KiCad › Schematic Editor | falta | 2 | — | P1; as vistas já compartilham o grafo; falta selecionar e realçar junto |
+| KS-043 | Selecionar na PCB (seleção cruzada) (Select on PCB) | KiCad › Schematic Editor | feita | 2 | e2e/navigation.spec.ts | Peça › Ver na PCB: a mesma seleção, centralizada (as três vistas compartilham o documento) |
 | KS-044 | Não montar (DNP) (Do not Populate) | KiCad › Schematic Editor | falta | 15 | — | P2; variantes |
 | KS-045 | Excluir da lista de materiais (Exclude from Bill of Materials) | KiCad › Schematic Editor | falta | 8 | — | P2 |
 | KS-046 | Excluir da placa (Exclude from Board) | KiCad › Schematic Editor | falta | 8 | — | — |
@@ -691,7 +691,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 
 | ID | Função | Origem | Status | Fase | Teste | Nota |
 |---|---|---|---|---|---|---|
-| KC-001 | Fechar documento (Close) | KiCad › Common | falta | 3 | — | com vários sketches em abas (§10); hoje um documento por vez |
+| KC-001 | Fechar documento (Close) | KiCad › Common | feita | 2 | e2e/ui.spec.ts | Arquivo › Fechar sketch e o × da aba; pergunta só com alterações |
 | KC-002 | Sair do KiCad (Quit) | KiCad › Common | não se aplica | — | — | fecha-se a aba do navegador |
 | KC-003 | Recarregar plugins (Refresh Plugins) | KiCad › Common | falta | 16 | — | P3; API de extensões no lugar dos plugins Python |
 | KC-004 | Excluir violação marcada (Exclude Marker) | KiCad › Common | falta | 8 | — | P1; exclusões do ERC (as do DRC na fase 10) |
@@ -699,62 +699,62 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-006 | Marcador anterior (Previous Marker) | KiCad › Common | falta | 8 | — | P1; parcial: Problemas leva até cada item do DRC |
 | KC-007 | Adicionar biblioteca existente (Add Library…) | KiCad › Common | falta | 5 | — | P1; parcial: abrir .fzbz importa um bin |
 | KC-008 | Centralizar texto (Center Justify) | KiCad › Common | falta | 8 | — | — |
-| KC-009 | Centralizar a vista na seleção (Pan to Center Selected Objects) | KiCad › Common | falta | 2 | — | parcial: escolher uma peça no painel Projeto centraliza nela |
+| KC-009 | Centralizar a vista na seleção (Pan to Center Selected Objects) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Centralizar na seleção |
 | KC-010 | Recolher tudo (Collapse All) | KiCad › Common | falta | 5 | — | parcial: as seções do acervo abrem e fecham uma a uma |
-| KC-011 | Cursor em cruz a 45° (45 Degree Crosshairs) | KiCad › Common | falta | 2 | — | — |
-| KC-012 | Clique pelo teclado (Click) | KiCad › Common | falta | 2 | — | — |
-| KC-013 | Duplo clique pelo teclado (Double-click) | KiCad › Common | falta | 2 | — | — |
-| KC-014 | Cursor para baixo (Cursor Down) | KiCad › Common | falta | 2 | — | parcial: as setas movem a seleção, não o cursor |
-| KC-015 | Cursor para baixo rápido (Cursor Down Fast) | KiCad › Common | falta | 2 | — | parcial: Shift+setas movem a seleção 10 passos |
-| KC-016 | Cursor em cruz na janela toda (Full-Window Crosshairs) | KiCad › Common | falta | 2 | — | — |
-| KC-017 | Cursor para a esquerda (Cursor Left) | KiCad › Common | falta | 2 | — | parcial: as setas movem a seleção, não o cursor |
-| KC-018 | Cursor para a esquerda rápido (Cursor Left Fast) | KiCad › Common | falta | 2 | — | parcial: Shift+setas movem a seleção 10 passos |
-| KC-019 | Cursor para a direita (Cursor Right) | KiCad › Common | falta | 2 | — | parcial: as setas movem a seleção, não o cursor |
-| KC-020 | Cursor para a direita rápido (Cursor Right Fast) | KiCad › Common | falta | 2 | — | parcial: Shift+setas movem a seleção 10 passos |
-| KC-021 | Cursor em cruz pequeno (Small crosshairs) | KiCad › Common | falta | 2 | — | — |
-| KC-022 | Cursor para cima (Cursor Up) | KiCad › Common | falta | 2 | — | parcial: as setas movem a seleção, não o cursor |
-| KC-023 | Cursor para cima rápido (Cursor Up Fast) | KiCad › Common | falta | 2 | — | parcial: Shift+setas movem a seleção 10 passos |
-| KC-024 | Definir origem da grade (Grid Origin...) | KiCad › Common | falta | 2 | — | — |
-| KC-025 | Editar grades (Edit Grids...) | KiCad › Common | falta | 2 | — | parcial: tamanho da grade por vista na aba Documento |
+| KC-011 | Cursor em cruz a 45° (45 Degree Crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › A 45° |
+| KC-012 | Clique pelo teclado (Click) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Enter clica no cursor do teclado |
+| KC-013 | Duplo clique pelo teclado (Double-click) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | End dá duplo clique no cursor; durante o fio, termina com a ponta solta |
+| KC-014 | Cursor para baixo (Cursor Down) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | ↓ sem seleção move o cursor um passo de grade (com seleção, move a seleção, como no Fritzing) |
+| KC-015 | Cursor para baixo rápido (Cursor Down Fast) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+↓: 10 passos de grade |
+| KC-016 | Cursor em cruz na janela toda (Full-Window Crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › Na janela toda |
+| KC-017 | Cursor para a esquerda (Cursor Left) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | ← sem seleção move o cursor um passo de grade |
+| KC-018 | Cursor para a esquerda rápido (Cursor Left Fast) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+←: 10 passos de grade |
+| KC-019 | Cursor para a direita (Cursor Right) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | → sem seleção move o cursor um passo de grade |
+| KC-020 | Cursor para a direita rápido (Cursor Right Fast) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+→: 10 passos de grade |
+| KC-021 | Cursor em cruz pequeno (Small crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › Pequeno (padrão) |
+| KC-022 | Cursor para cima (Cursor Up) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | ↑ sem seleção move o cursor um passo de grade |
+| KC-023 | Cursor para cima rápido (Cursor Up Fast) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+↑: 10 passos de grade |
+| KC-024 | Definir origem da grade (Grid Origin...) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | campo "Origem da grade" (x, y na unidade escolhida) na aba Documento |
+| KC-025 | Editar grades (Edit Grids...) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Grade › Editar grades… (lista de cada vista nas Preferências) |
 | KC-026 | Expandir tudo (Expand All) | KiCad › Common | falta | 5 | — | parcial: as seções do acervo abrem e fecham uma a uma |
-| KC-027 | Grade rápida 1 (Switch to Fast Grid 1) | KiCad › Common | falta | 2 | — | — |
-| KC-028 | Grade rápida 2 (Switch to Fast Grid 2) | KiCad › Common | falta | 2 | — | — |
-| KC-029 | Alternar grade rápida (Cycle Fast Grid) | KiCad › Common | falta | 2 | — | — |
-| KC-030 | Próxima grade (Switch to Next Grid) | KiCad › Common | falta | 2 | — | parcial: lista de tamanhos na aba Documento, sem atalho |
-| KC-031 | Grade anterior (Switch to Previous Grid) | KiCad › Common | falta | 2 | — | parcial: lista de tamanhos na aba Documento, sem atalho |
-| KC-032 | Restaurar origem da grade (Reset Grid Origin) | KiCad › Common | falta | 2 | — | — |
-| KC-033 | Colocar origem da grade (Grid Origin) | KiCad › Common | falta | 2 | — | — |
-| KC-034 | Ocultar árvore de bibliotecas (Hide Library Tree) | KiCad › Common | falta | 2 | — | parcial: no celular o trilho › Peças abre e fecha a folha; na tela larga o painel esquerdo não se esconde (fase 2, painéis recolhíveis) |
+| KC-027 | Grade rápida 1 (Switch to Fast Grid 1) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Alt+1: a primeira grade da lista da vista |
+| KC-028 | Grade rápida 2 (Switch to Fast Grid 2) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Alt+2: a segunda grade da lista da vista |
+| KC-029 | Alternar grade rápida (Cycle Fast Grid) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Alt+4 alterna entre as duas grades rápidas |
+| KC-030 | Próxima grade (Switch to Next Grid) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | N e Exibir › Grade › Próxima grade |
+| KC-031 | Grade anterior (Switch to Previous Grid) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+N e Exibir › Grade › Grade anterior |
+| KC-032 | Restaurar origem da grade (Reset Grid Origin) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Grade › Restaurar a origem da grade |
+| KC-033 | Colocar origem da grade (Grid Origin) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Grade › Colocar a origem da grade (clique no quadro) ou Origem da grade no cursor; peças, fios e os pontos da grade partem dela |
+| KC-034 | Ocultar árvore de bibliotecas (Hide Library Tree) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | o botão do painel aberto no trilho o recolhe (tela larga) e Exibir › Painel da esquerda |
 | KC-035 | Camadas inativas normais ou esmaecidas (Inactive Layer View Mode) | KiCad › Common | falta | 10 | — | parcial: Ambas/Topo/Base esmaece a outra face de cobre |
 | KC-036 | Camadas inativas normais, esmaecidas ou ocultas (Inactive Layer View Mode (3-state)) | KiCad › Common | falta | 10 | — | parcial: Ambas/Topo/Base esmaece a outra face de cobre |
-| KC-037 | Unidade polegadas (Inches) | KiCad › Common | falta | 2 | — | — |
+| KC-037 | Unidade polegadas (Inches) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Unidades › Polegadas; coordenadas do cursor na barra de status |
 | KC-038 | Alinhar texto à esquerda (Left Justify) | KiCad › Common | falta | 8 | — | — |
 | KC-039 | Focar a busca da biblioteca (Focus Library Tree Search Field) | KiCad › Common | feita | 0 | e2e/parts.spec.ts | tecla / |
 | KC-040 | Encaixar só em objetos da camada ativa (Snap to Objects on the Active Layer Only) | KiCad › Common | falta | 10 | — | — |
 | KC-041 | Encaixar em objetos de todas as camadas (Snap to Objects on All Layers) | KiCad › Common | falta | 10 | — | parcial: encaixe magnético nos terminais |
 | KC-042 | Alternar encaixe entre camada ativa e todas (Toggle Snapping Between Active and All Layers) | KiCad › Common | falta | 10 | — | — |
-| KC-043 | Unidade milímetros (Millimeters) | KiCad › Common | falta | 2 | — | — |
-| KC-044 | Unidade mils (Mils) | KiCad › Common | falta | 2 | — | parcial: larguras e folgas da PCB já em mil |
+| KC-043 | Unidade milímetros (Millimeters) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Unidades › Milímetros (padrão) |
+| KC-044 | Unidade mils (Mils) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Unidades › Mils |
 | KC-045 | Novo (New...) | KiCad › Common | feita | 0 | e2e/circuit.spec.ts | Arquivo › Novo (Ctrl+N) |
 | KC-046 | Nova biblioteca (New Library…) | KiCad › Common | falta | 5 | — | P1; parcial: Novo bin |
 | KC-047 | Abrir (Open...) | KiCad › Common | feita | 0 | tests/sketch.test.ts, e2e/circuit.spec.ts | .fzz, .fz, .fzpz, .fzb e .fzbz; arquivos KiCad na fase 6 |
 | KC-048 | Abrir no explorador de arquivos (Open in file explorer...) | KiCad › Common | não se aplica | — | — | o navegador não abre o explorador do sistema |
 | KC-049 | Editar num editor de texto (Edit in a Text Editor...) | KiCad › Common | não se aplica | — | — | o navegador não abre programas do sistema |
 | KC-050 | Configurar página (papel e carimbo) (Page Settings...) | KiCad › Common | falta | 15 | — | P3; folha de desenho; o Page Setup de impressão do Fritzing fica na fase 3 |
-| KC-051 | Mover a vista para baixo (Pan Down) | KiCad › Common | falta | 2 | — | parcial: Shift+roda e arrastar o fundo movem a vista |
-| KC-052 | Mover a vista para a esquerda (Pan Left) | KiCad › Common | falta | 2 | — | parcial: Shift+roda e arrastar o fundo movem a vista |
-| KC-053 | Mover a vista para a direita (Pan Right) | KiCad › Common | falta | 2 | — | parcial: Shift+roda e arrastar o fundo movem a vista |
-| KC-054 | Mover a vista para cima (Pan Up) | KiCad › Common | falta | 2 | — | parcial: Shift+roda e arrastar o fundo movem a vista |
+| KC-051 | Mover a vista para baixo (Pan Down) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+↓ sem seleção move a vista um quarto da janela |
+| KC-052 | Mover a vista para a esquerda (Pan Left) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+← sem seleção move a vista |
+| KC-053 | Mover a vista para a direita (Pan Right) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+→ sem seleção move a vista |
+| KC-054 | Mover a vista para cima (Pan Up) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+↑ sem seleção move a vista |
 | KC-055 | Fixar biblioteca no topo (Pin Library) | KiCad › Common | falta | 5 | — | — |
 | KC-056 | Plotar (Plot...) | KiCad › Common | falta | 8 | — | P2; parcial: Exportar › Como imagem (PNG, JPG, SVG, PDF) da vista; faltam DXF, HPGL e as opções de plotagem |
 | KC-057 | Imprimir (Print...) | KiCad › Common | falta | 3 | — | Print do Fritzing (§10) |
 | KC-058 | Fechar o editor (Quit) | KiCad › Common | não se aplica | — | — | fecha-se a aba do navegador |
-| KC-059 | Refazer o último zoom (Redo Last Zoom) | KiCad › Common | falta | 2 | — | — |
-| KC-060 | Zerar coordenadas relativas (Reset Local Coordinates) | KiCad › Common | falta | 2 | — | a barra de status não mostra coordenadas |
+| KC-059 | Refazer o último zoom (Redo Last Zoom) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Refazer o último zoom |
+| KC-060 | Zerar coordenadas relativas (Reset Local Coordinates) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Espaço zera as coordenadas relativas (dX, dY) no cursor; segurado, ainda arrasta a vista |
 | KC-061 | Reverter (Revert) | KiCad › Common | falta | 3 | — | Revert do Fritzing (§10) |
 | KC-062 | Alinhar texto à direita (Right Justify) | KiCad › Common | falta | 8 | — | — |
 | KC-063 | Salvar (Save) | KiCad › Common | feita | 0 | tests/sketch.test.ts, e2e/circuit.spec.ts | baixa o .fzz |
-| KC-064 | Salvar tudo (Save All) | KiCad › Common | falta | 3 | — | parcial: com um documento por vez, Salvar já grava tudo |
+| KC-064 | Salvar tudo (Save All) | KiCad › Common | feita | 2 | e2e/ui.spec.ts | Arquivo › Salvar todos (com mais de uma aba) baixa o .fzz de cada sketch alterado |
 | KC-065 | Salvar como (Save As…) | KiCad › Common | falta | 3 | — | Save As do Fritzing (§10) |
 | KC-066 | Salvar uma cópia (Save a Copy...) | KiCad › Common | falta | 3 | — | — |
 | KC-067 | Escolher colunas (Select Columns...) | KiCad › Common | falta | 5 | — | árvore de bibliotecas |
@@ -770,19 +770,19 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-077 | Navegador de bibliotecas de símbolos (Symbol Library Browser) | KiCad › Common | falta | 5 | — | P1; parcial: o painel Peças navega o acervo do Fritzing |
 | KC-078 | Editor de símbolos (Symbol Editor) | KiCad › Common | falta | 5 | — | P1; parcial: editor de peças do Fritzing (.fzp) |
 | KC-079 | Desenhar caixas delimitadoras (Draw Bounding Boxes) | KiCad › Common | não se aplica | — | — | auxílio de depuração do KiCad |
-| KC-080 | Sempre mostrar o cursor em cruz (Always Show Crosshairs) | KiCad › Common | falta | 2 | — | — |
+| KC-080 | Sempre mostrar o cursor em cruz (Always Show Crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › Sempre mostrar o cursor em cruz (sem isso, aparece com o cursor do teclado) |
 | KC-081 | Mostrar grade (Show Grid) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Exibir › Mostrar grade |
-| KC-082 | Grade por tipo de objeto (Grid Overrides) | KiCad › Common | falta | 2 | — | P2 |
-| KC-083 | Coordenadas polares (Polar Coordinates) | KiCad › Common | falta | 2 | — | — |
-| KC-084 | Alternar unidades (Switch units) | KiCad › Common | falta | 2 | — | — |
-| KC-085 | Desfazer o último zoom (Undo Last Zoom) | KiCad › Common | falta | 2 | — | — |
+| KC-082 | Grade por tipo de objeto (Grid Overrides) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Preferências › Grade das peças e Grade dos fios sobrepõem a grade da vista |
+| KC-083 | Coordenadas polares (Polar Coordinates) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Unidades › Coordenadas polares: r e θ no lugar de dX e dY |
+| KC-084 | Alternar unidades (Switch units) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+U alterna milímetros e polegadas |
+| KC-085 | Desfazer o último zoom (Undo Last Zoom) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Desfazer o último zoom (50 por vista) |
 | KC-086 | Desafixar biblioteca (Unpin Library) | KiCad › Common | falta | 5 | — | — |
 | KC-087 | Atualizar a PCB pelo esquemático (Update PCB from Schematic…) | KiCad › Common | feita | 0 | tests/engine.test.ts | automático: as três vistas compartilham o grafo |
 | KC-088 | Atualizar o esquemático pela PCB (Update Schematic from PCB...) | KiCad › Common | feita | 0 | tests/engine.test.ts | automático: as três vistas compartilham o grafo |
-| KC-089 | Centralizar no cursor (Center on Cursor) | KiCad › Common | falta | 2 | — | — |
+| KC-089 | Centralizar no cursor (Center on Cursor) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | F4 e Exibir › Centralizar no cursor |
 | KC-090 | Zoom em todos os objetos (Zoom to All Objects) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Exibir › Enquadrar (Ctrl+0) |
 | KC-091 | Enquadrar (Zoom to Fit) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Enquadrar; não há folha de desenho |
-| KC-092 | Zoom na seleção (Zoom to Selected Objects) | KiCad › Common | falta | 2 | — | — |
+| KC-092 | Zoom na seleção (Zoom to Selected Objects) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Zoom na seleção |
 | KC-093 | Ampliar no cursor (Zoom In at Cursor) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | roda do mouse amplia em torno do cursor |
 | KC-094 | Ampliar (Zoom In) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl++ |
 | KC-095 | Ampliar o gráfico na horizontal (Zoom In Horizontally) | KiCad › Common | falta | 9 | — | — |
@@ -792,25 +792,25 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-099 | Reduzir o gráfico na horizontal (Zoom Out Horizontally) | KiCad › Common | falta | 9 | — | — |
 | KC-100 | Reduzir o gráfico na vertical (Zoom Out Vertically) | KiCad › Common | falta | 9 | — | — |
 | KC-101 | Redesenhar (Refresh) | KiCad › Common | não se aplica | — | — | o quadro é redesenhado a cada mudança |
-| KC-102 | Zoom na área arrastada (Zoom to Selection Area) | KiCad › Common | falta | 2 | — | — |
+| KC-102 | Zoom na área arrastada (Zoom to Selection Area) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+F5 e Exibir › Zoom na área arrastada |
 | KC-103 | Arquivos embutidos (Embedded Files) | KiCad › Common | falta | 6 | — | P2 |
 | KC-104 | Extrair arquivo embutido (Extract File) | KiCad › Common | falta | 6 | — | P2 |
 | KC-105 | Remover arquivo embutido (Remove File) | KiCad › Common | falta | 6 | — | P2 |
 | KC-106 | Adicionar itens ao grupo (Add Items) | KiCad › Common | falta | 8 | — | P2 |
 | KC-107 | Cancelar a ferramenta (Cancel) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Esc |
 | KC-108 | Copiar (Copy) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+C; área de transferência interna |
-| KC-109 | Copiar como texto (Copy as Text) | KiCad › Common | falta | 2 | — | — |
+| KC-109 | Copiar como texto (Copy as Text) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ctrl+Shift+C e Editar › Copiar como texto: uma linha por peça (rótulo, peça, propriedades) |
 | KC-110 | Recortar (Cut) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+X |
 | KC-111 | Alternar modo de edição de arco (Cycle Arc Editing Mode) | KiCad › Common | falta | 8 | — | P2 |
 | KC-112 | Apagar (Delete) | KiCad › Common | feita | 0 | tests/edit.test.ts, e2e/edit.spec.ts | Delete/Backspace |
-| KC-113 | Ferramenta de apagar por clique (Interactive Delete Tool) | KiCad › Common | falta | 2 | — | — |
+| KC-113 | Ferramenta de apagar por clique (Interactive Delete Tool) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Editar › Apagar com cliques |
 | KC-114 | Duplicar (Duplicate) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+D |
 | KC-115 | Localizar (Find) | KiCad › Common | falta | 8 | — | P1; "Localizar peça" do Fritzing na fase 3 |
 | KC-116 | Localizar e substituir (Find and Replace) | KiCad › Common | falta | 8 | — | P1 |
 | KC-117 | Localizar próximo (Find Next) | KiCad › Common | falta | 8 | — | P1 |
 | KC-118 | Localizar próximo marcador (Find Next Marker) | KiCad › Common | falta | 8 | — | P1 |
 | KC-119 | Localizar anterior (Find Previous) | KiCad › Common | falta | 8 | — | P1 |
-| KC-120 | Concluir a ferramenta (Finish) | KiCad › Common | falta | 2 | — | parcial: botão direito termina o fio com a ponta solta |
+| KC-120 | Concluir a ferramenta (Finish) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | End termina o fio com a ponta solta, como o botão direito |
 | KC-121 | Agrupar (Group Items) | KiCad › Common | falta | 8 | — | P2 |
 | KC-122 | Entrar no grupo (Enter Group) | KiCad › Common | falta | 8 | — | P2 |
 | KC-123 | Sair do grupo (Leave Group) | KiCad › Common | falta | 8 | — | P2 |
@@ -823,7 +823,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-130 | Substituir e localizar próximo (Replace and Find Next) | KiCad › Common | falta | 8 | — | P1 |
 | KC-131 | Painel de busca (Search) | KiCad › Common | falta | 8 | — | P1 |
 | KC-132 | Selecionar tudo (Select All) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+A |
-| KC-133 | Seleção por laço (Lasso) | KiCad › Common | falta | 2 | — | — |
+| KC-133 | Seleção por laço (Lasso) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Editar › Seleção por laço |
 | KC-134 | Seleção por retângulo (Rectangle) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Seletor (V): da esquerda o que fica dentro, da direita o que tocar |
 | KC-135 | Desfazer (Undo) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+Z |
 | KC-136 | Desagrupar (Ungroup Items) | KiCad › Common | falta | 8 | — | P2 |
@@ -836,10 +836,10 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-143 | Configurar caminhos (Configure Paths…) | KiCad › Common | falta | 5 | — | P1; variáveis de caminho |
 | KC-144 | Doar (Donate) | KiCad › Common | não se aplica | — | — | link do site do KiCad |
 | KC-145 | Contribuir (Get Involved) | KiCad › Common | não se aplica | — | — | link do site do KiCad |
-| KC-146 | Primeiros passos (Getting Started with KiCad) | KiCad › Common | falta | 2 | — | tour e cartões didáticos |
-| KC-147 | Ajuda (documentação) (Help) | KiCad › Common | falta | 2 | — | ajuda própria |
+| KC-146 | Primeiros passos (Getting Started with KiCad) | KiCad › Common | feita | 2 | e2e/ui.spec.ts | tour por modo, boas-vindas e Ajuda › Guia de uso |
+| KC-147 | Ajuda (documentação) (Help) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Ajuda › Guia de uso: como fazer cada coisa a partir da tela normal (spec 05 §13) |
 | KC-148 | Lista de atalhos (List Hotkeys...) | KiCad › Common | feita | 0 | e2e/ui.spec.ts | Ajuda › Atalhos de teclado |
-| KC-149 | Preferências (Preferences...) | KiCad › Common | falta | 2 | — | P2; parcial: só o tema claro ou escuro |
+| KC-149 | Preferências (Preferences...) | KiCad › Common | feita | 2 | e2e/ui.spec.ts | P2; Editar › Preferências… (Ctrl+,): roda, fio curvo, modo, idioma, tema, unidades, cursor, grades, teclas e manutenção |
 | KC-150 | Relatar problema (Report Bug) | KiCad › Common | não se aplica | — | — | link do site do KiCad; a ajuda é própria |
 | KC-151 | Gerenciar bibliotecas de blocos de projeto (Manage Design Block Libraries...) | KiCad › Common | falta | 15 | — | P2 |
 | KC-152 | Gerenciar bibliotecas de footprints (Manage Footprint Libraries...) | KiCad › Common | falta | 5 | — | P1 |
@@ -1055,16 +1055,16 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de esquemático (KS) | 221 | 32 | 187 | 2 |
-| Ações comuns (KC) | 161 | 30 | 122 | 9 |
+| Editor de esquemático (KS) | 221 | 33 | 186 | 2 |
+| Ações comuns (KC) | 161 | 80 | 72 | 9 |
 | Gerenciador de projeto (KM) | 22 | 4 | 16 | 2 |
-| Total | 404 | 66 | 325 | 13 |
+| Total | 404 | 117 | 274 | 13 |
 
 | Fase | Linhas de ações |
 |---|---|
 | 0 | 66 |
-| 2 | 49 |
-| 3 | 6 |
+| 2 | 51 |
+| 3 | 4 |
 | 5 | 62 |
 | 6 | 8 |
 | 8 | 139 |
@@ -1370,7 +1370,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-266 | Pegar o footprint desligado mais próximo (Grab Nearest Unconnected Footprints) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-267 | Selecionar e expandir a conexão (Select/Expand Connection) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-268 | Selecionar as trilhas da net (Select All Tracks in Net) | KiCad › PCB Editor | falta | 10 | — | parcial: Selecionar todas as trilhas da placa, não por net |
-| KP-269 | Selecionar no esquemático (Select on Schematic) | KiCad › PCB Editor | falta | 2 | — | P1 |
+| KP-269 | Selecionar no esquemático (Select on Schematic) | KiCad › PCB Editor | feita | 2 | e2e/navigation.spec.ts | Peça › Ver no esquemático: a mesma seleção, centralizada |
 | KP-270 | Selecionar a folha do esquemático (Sheet) | KiCad › PCB Editor | falta | 10 | — | depende das folhas hierárquicas (fase 8) |
 | KP-271 | Selecionar os itens da mesma folha (Items in Same Hierarchical Sheet) | KiCad › PCB Editor | falta | 10 | — | depende das folhas hierárquicas (fase 8) |
 | KP-272 | Selecionar os footprints desligados (Select All Unconnected Footprints) | KiCad › PCB Editor | falta | 10 | — |  |
@@ -1670,12 +1670,12 @@ Fase = fase do que falta na seção (0 quando todas as linhas estão feitas). "C
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de PCB | 335 | 26 | 307 | 2 |
+| Editor de PCB | 335 | 27 | 306 | 2 |
 | Visualizador 3D | 40 | 0 | 40 | 0 |
 | Comuns só da PCB | 0 | 0 | 0 | 0 |
 | GerbView | 37 | 0 | 37 | 0 |
 | Calculadora | 9 | 0 | 9 | 0 |
-| **Total** | **421** | **26** | **393** | **2** |
+| **Total** | **421** | **27** | **392** | **2** |
 
 | Fase | 0 | 1 | 2 | 3 | 5 | 6 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | — | Total |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

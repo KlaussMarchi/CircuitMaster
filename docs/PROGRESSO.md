@@ -3,7 +3,7 @@
 Memória do trabalho do plano `FRIZING_KICAD.md` (pasta acima do repositório). Ler ao começar; atualizar ao fim de
 cada item.
 
-**Fase atual: 2 — interface direta** (a fase 1 terminou; seções no fim do arquivo).
+**Fase atual: 3 — restante do Fritzing** (a fase 2 terminou em 2026-10-22; seções no fim do arquivo).
 
 ## Fase 0 — base de testes e auditoria (fechada em 2026-10-21)
 
@@ -217,9 +217,9 @@ ngspice nativo, 152 E2E nos dois navegadores, desempenho dentro dos orçamentos)
 - O aviso do React "Cannot update a component (`Rail`) while rendering…" (fase 0) não voltou nas rodadas da fase 1.
 - O JavaScript inicial está em 702 de 710 KB: a fase 2 carrega sob demanda o editor de peças e o que vier de novo.
 
-## Fase 2 — interface direta
+## Fase 2 — interface direta (fechada em 2026-10-22)
 
-Spec `docs/specs/05-INTERFACE-SPEC.md` (a escrever ao fechar a fase).
+Spec `docs/specs/05-INTERFACE-SPEC.md`.
 
 ### Auditoria de cliques (antes → depois)
 
@@ -357,11 +357,24 @@ números). Na tomada, o mesmo teste deu 0 ms de tarefa longa no pan.
   texto em português na tela).
 - Spec `docs/specs/05-INTERFACE-SPEC.md` com o teste de clareza; README, spec 02 §10.4 e spec 06 §6 atualizados.
 
+- **Funções comuns do KiCad da fase 2** (`ui/Navigation`, `ui/Keys`, `e2e/navigation.spec.ts`; spec 05 §11): coordenadas
+  do cursor na barra de status (mm, polegadas, mils; `Ctrl+U`; `Espaço` zera as relativas; polares), cursor do teclado
+  (setas sem seleção, `Ctrl`+setas, `Enter` clica, `End` dá duplo clique ou termina o fio), cursor em cruz pequeno, na
+  janela toda e a 45°, `Shift`+setas e `F4` movendo a vista, zoom na seleção e na área (`Ctrl+F5`), desfazer e refazer
+  o último zoom, lista de grades por vista com `N`/`Shift+N` e grades rápidas (`Alt+1`, `Alt+2`, `Alt+4`), origem da
+  grade (clique, cursor, digitada na aba Documento, restaurar) seguida por peças, fios e pontos da grade, grade por
+  tipo (peças, fios), seleção por laço, apagar com cliques, copiar como texto, Peça › Ver na protoboard/esquemático/PCB
+  (seleção cruzada), painel da esquerda recolhível pelo trilho, Ajuda › Guia de uso e Boas-vindas, e nas Preferências
+  as grades e a manutenção (restaurar todos os ajustes, refazer o índice do acervo). A PCB com peças e sem placa
+  mostra "Criar placa e rotear" no próprio quadro (o teste de clareza pedia mais de dois passos). Matriz: nenhuma
+  linha da fase 2 em "falta"; F-040, F-086, F-087 e F-092 ficaram parciais para a fase 3 (o que falta é das outras
+  vistas ou de outras fases).
+
 ### Bugs achados e corrigidos (continuação)
 
 11. **"Carregar SVG…" do editor quebrava em duas linhas**: a classe `.btn.block` era também o utilitário `block` do
     Tailwind, que na camada `utilities` passa por cima de `components` (`display: block`). Virou `.btn.full`; regra
-    na spec 05 §11.
+    na spec 05 §12.
 12. **Esquemático do editor de peças ilegível no escuro**: o filtro de inversão ia no fundo junto; agora só no SVG.
 13. **Chip do quadro dizia "Transitório" com o circuito em regime** e o eixo do gráfico em regime virava pV com o ruído
     do solver em volta de zero (escala mínima de 1 unidade abaixo de 10⁻¹²).
@@ -373,8 +386,29 @@ números). Na tomada, o mesmo teste deu 0 ms de tarefa longa no pan.
   simulação reproduzindo, depois do último ponto em que o fixture ouve o console; durante os testes não aparece.
   Só no modo de desenvolvimento.
 
-### A seguir (fase 2)
+14. **`ui/Keys` deixou de carregar no Node** (`tests/keys.test.ts`): a tabela passou a importar a navegação, que
+    importava o Store em tempo de execução (e o Store lê `document`). A navegação recebe o estado como parâmetro e
+    importa do Store só tipos (regra no `CLAUDE.md`).
+15. **Botão "Criar placa e rotear" duplicado** com a aba Roteamento aberta (o do quadro some quando o painel já o
+    mostra) e **Preferências estourando a 390 px** (os controles segmentados quebram linha).
+16. **Aba ativa escondida a 1280 px**: as abas de sketches encolhem com reticências e a ativa rola para a vista; o
+    efeito que rola usa corpo em bloco porque o `scrollIntoView` do Chromium 156 devolve uma Promise (que virava a
+    "limpeza" do efeito e quebrava o quadro).
 
-1. Idioma nas preferências (junto com o i18n do item 3).
-2. Abas de sketches; i18n pt-BR e en.
-3. Spec 05 com o teste de clareza de cada função existente; README e spec 02 §10.4 com a interface nova; matriz.
+### Fechamento da fase 2
+
+`npm run verify` verde na pasta de trabalho (Vitest 138, E2E 182 nos dois navegadores, desempenho dentro dos
+orçamentos: pan e zoom com 1.000 footprints a 59–60 fps sem tarefa longa, JS inicial 700 KB de 710) e no clone limpo
+em `build/clean/`. Revisão visual nas fotos de `build/ui/` (dois temas, 1920, 1280 e 390 px). Matriz: Fritzing 141
+feitas de 251; KiCad esquemático, comuns e projeto 117 de 404; PCB 27 de 421; nenhuma linha da fase 2 em "falta".
+
+Ficou para depois: o aviso de desenvolvimento do React no fechamento da página (acima); o JS inicial está a 10 KB do
+orçamento, então a fase 3 começa tirando do pacote inicial o que só abre sob demanda (diálogos, tour); os menus
+Simulação e Ajuda somem a 1280 px (decisão da fase 0, spec 02 §10.4) e as ações seguem pela paleta e pelo trilho.
+
+## Fase 3 — restante do Fritzing
+
+Escopo: as 77 linhas "falta" da fase 3 na matriz (arquivo: reverter, recentes, salvar como, imprimir, PDF vetorial;
+seleções e atualização de peças; grade livre, cor de fundo, fios por comprimento, camadas em todas as vistas, ver de
+baixo, face clicável, não roteadas; menu do rótulo; bins; editor de peças; peças paramétricas, logo de imagem e placa
+livre; largura da trilha no inspetor).

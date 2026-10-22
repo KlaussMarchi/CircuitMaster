@@ -110,9 +110,18 @@ ou `error` (spec 06 §2).
 
 ## Interface
 
-Estilo "data terminal": tokens dos dois temas em `src/ui/Theme/style.css` (cor nova vira token nos dois), cor só
-em dados, seleção como linha de 1px em `--accent`, vão de 8px, monoespaçada só em números, sem gradiente nem sombra
-decorativa, interface em pt-BR. O guia de origem, `circuit-master-ui/DESIGN.md`, não está mais no disco. Botão,
-menu ou painel sem funcionalidade real por trás sai da interface em vez de ficar desabilitado. Atalho de teclado
-novo entra só na tabela `ui/Keys` (o teclado, os menus, a paleta, Ajuda › Atalhos e as Preferências leem dela);
-item de menu avançado entra em `ui/Modes` com o modo a partir do qual aparece.
+Estilo "data terminal": tokens dos dois temas em `src/ui/Theme/style.css` (cor nova vira token nos dois), cor só em
+dados, seleção como linha de 1px em `--accent`, vão de 8px, monoespaçada só em números, sem gradiente nem sombra
+decorativa, interface em pt-BR e em inglês. O guia de origem, `circuit-master-ui/DESIGN.md`, não está mais no disco.
+Botão, menu ou painel sem funcionalidade real por trás sai da interface em vez de ficar desabilitado. Atalho de
+teclado novo entra só na tabela `ui/Keys` (o teclado, os menus, a paleta, Ajuda › Atalhos e as Preferências leem
+dela); item de menu avançado entra em `ui/Modes` com o modo a partir do qual aparece; ação nova do menu ganha os
+termos em inglês do Fritzing e do KiCad no `ALIASES` de `ui/Palette`. Nome de classe CSS nosso não pode coincidir
+com utilitário do Tailwind (a camada `utilities` passa por cima de `components`).
+
+Todo texto visível passa por `t` de `core/Text`: a chave é o próprio texto em português (`t('{0} peças', n)`, nunca
+template literal na chave), os rótulos de tabelas de módulo ficam em português e são mostrados por `t` no desenho, e
+a tradução entra em `core/Text/en.ts` (só carregado quando o inglês é escolhido). `tests/text.test.ts` reprova chave
+sem tradução e tradução sobrando; o E2E "Inglês" (`e2e/ui.spec.ts`) reprova texto em português na tela em inglês.
+Cursor, coordenadas, enquadramento e o clique pelo teclado ficam em `ui/Navigation`, que recebe o estado como
+parâmetro (importa do `ui/Store` só tipos, para `ui/Keys` seguir carregando no Node dos testes).
