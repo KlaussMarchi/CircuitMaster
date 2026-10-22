@@ -5,6 +5,7 @@ import type { Rule, Violation } from '../../core/Drc'
 import { VIEW_LABELS } from '../../core/Layer'
 import { focusPart } from '../Outline'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 type State   = Pick<ReturnType<typeof useStore.getState>, 'simulation' | 'doc' | 'library' | 'netlist' | 'view' | 'drc'>
 type Problem = { level: 'bad' | 'warn' | 'info' | 'ok', title: string, text: string, select?: string[], show?: () => void }
@@ -34,13 +35,13 @@ export const getProblems = (state: State): Problem[] => {
     const silent   = result ? doc.probes.filter(probe => { const reading = result.getProbe(probe.id); return !reading.voltage && !reading.current }) : []
 
     return [
-        ...simulation.enabled && simulation.error ? [{ level: 'bad' as const, title: 'Simulação', text: simulation.error }] : [],
-        ...effects.map((modelIndex): Problem => ({ level: 'warn', title: title(modelIndex), text: 'passou do limite da peça neste instante (potência, corrente ou tensão).', select: [modelIndex] })),
-        ...skipped.length ? [{ level: 'info' as const, title: 'Fora da simulação', text: `${skipped.map(instance => instance.title).join(', ')} não ${skipped.length > 1 ? 'têm' : 'tem'} modelo SPICE e ${skipped.length > 1 ? 'ficam' : 'fica'} de fora.` }] : [],
-        ...silent.map((probe): Problem => ({ level: 'warn', title: probe.id, text: 'não mede nada: o ponto não está ligado ao circuito simulado.' })),
-        ...status && status.left ? [{ level: 'info' as const, title: VIEW_LABELS[view], text: `${status.left} ${status.left > 1 ? 'conexões ainda sem fio' : 'conexão ainda sem fio'} (linhas tracejadas).` }] : [],
-        ...drc ? drc.violations.map((violation): Problem => ({ level: 'bad', title: 'DRC', text: `${RULES[violation.rule]} · ${violation.face ? FACES[violation.face] : 'placa'} · ${violation.owners.map(title).join(' × ') || '—'}`, show: () => showViolation(violation) })) : [],
-        ...drc && !drc.violations.length ? [{ level: 'ok' as const, title: 'DRC', text: `nenhuma violação com folga mínima de ${drc.keepout.toFixed(1)} mil.` }] : []
+        ...simulation.enabled && simulation.error ? [{ level: 'bad' as const, title: t('Simulação'), text: simulation.error }] : [],
+        ...effects.map((modelIndex): Problem => ({ level: 'warn', title: title(modelIndex), text: t('passou do limite da peça neste instante (potência, corrente ou tensão).'), select: [modelIndex] })),
+        ...skipped.length ? [{ level: 'info' as const, title: t('Fora da simulação'), text: t(skipped.length > 1 ? '{0} não têm modelo SPICE e ficam de fora.' : '{0} não tem modelo SPICE e fica de fora.', skipped.map(instance => instance.title).join(', ')) }] : [],
+        ...silent.map((probe): Problem => ({ level: 'warn', title: probe.id, text: t('não mede nada: o ponto não está ligado ao circuito simulado.') })),
+        ...status && status.left ? [{ level: 'info' as const, title: t(VIEW_LABELS[view]), text: t(status.left > 1 ? '{0} conexões ainda sem fio (linhas tracejadas).' : '{0} conexão ainda sem fio (linhas tracejadas).', status.left) }] : [],
+        ...drc ? drc.violations.map((violation): Problem => ({ level: 'bad', title: 'DRC', text: `${t(RULES[violation.rule])} · ${t(violation.face ? FACES[violation.face] : 'placa')} · ${violation.owners.map(title).join(' × ') || '—'}`, show: () => showViolation(violation) })) : [],
+        ...drc && !drc.violations.length ? [{ level: 'ok' as const, title: 'DRC', text: t('nenhuma violação com folga mínima de {0} mil.', drc.keepout.toFixed(1)) }] : []
     ]
 }
 
@@ -55,23 +56,23 @@ export const Problems = () => {
     const count    = countProblems(problems)
 
     return (
-        <section className="lp" aria-label="Problemas">
-            <div className="lp-head"><h2>Problemas</h2><p className="sub">{count ? `${count} ${count > 1 ? 'alertas' : 'alerta'} no projeto` : 'Nenhum alerta'}</p></div>
+        <section className="lp" aria-label={t('Problemas')}>
+            <div className="lp-head"><h2>{t('Problemas')}</h2><p className="sub">{count ? t(count > 1 ? '{0} alertas no projeto' : '{0} alerta no projeto', count) : t('Nenhum alerta')}</p></div>
             <div className="lp-body">
-                {!problems.length && <div className="note"><span className="dot ok" /><p>Nada a corrigir. Rode a simulação ou o DRC (Roteamento) para verificar mais.</p></div>}
+                {!problems.length && <div className="note"><span className="dot ok" /><p>{t('Nada a corrigir. Rode a simulação ou o DRC (Roteamento) para verificar mais.')}</p></div>}
                 {problems.map((problem, i) => (
                     <div key={i} className="note">
                         <span className={`dot ${problem.level}`} />
                         <div>
                             <p><b>{problem.title}</b> {problem.text}</p>
                             <div className="acts">
-                                {problem.select && <button className="link" onClick={() => focusPart(problem.select?.[0] ?? '')}>Selecionar {problem.title}</button>}
-                                {problem.show && <button className="link" onClick={problem.show}>Mostrar na placa</button>}
+                                {problem.select && <button className="link" onClick={() => focusPart(problem.select?.[0] ?? '')}>{t('Selecionar {0}', problem.title)}</button>}
+                                {problem.show && <button className="link" onClick={problem.show}>{t('Mostrar na placa')}</button>}
                             </div>
                         </div>
                     </div>
                 ))}
-                {state.drc && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => useStore.setState({ drc: null })}>Limpar resultado do DRC</button>}
+                {state.drc && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => useStore.setState({ drc: null })}>{t('Limpar resultado do DRC')}</button>}
             </div>
         </section>
     )

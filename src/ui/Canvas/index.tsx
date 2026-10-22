@@ -22,6 +22,7 @@ import { ProbeShape, getProbeOffset, getProbeSize, probeColor } from '../Probe'
 import { FEATURED } from '../../core/Featured'
 import { getSwitching, isPressedAt, switchOf } from '../../core/Spice'
 import { switchText } from '../Inspector'
+import { t } from '../../core/Text'
 
 type Drag =
     { type: 'pan', client: Point, viewport: Viewport, moved: boolean, clear: boolean } |
@@ -75,7 +76,8 @@ const PCB_DOTS    = '#4a4a4a'
 const BOTTOM_SIDE = ['copper0', 'copper0trace', 'silkscreen0', 'groundplane']
 const TOP_SIDE    = ['copper1', 'copper1trace', 'silkscreen', 'groundplane1']
 const DIMMED      = 0.18          // FACE INATIVA (DESIGN.md §3)
-const INVERTED    = 'invert(1) hue-rotate(180deg)'    // ESQUEMÁTICO NO TEMA ESCURO: TRAÇOS PRETOS DO FRITZING VIRAM CLAROS, AS CORES MANTÊM O MATIZ
+
+export const INVERTED = 'invert(1) hue-rotate(180deg)'    // ESQUEMÁTICO NO TEMA ESCURO: TRAÇOS PRETOS DO FRITZING VIRAM CLAROS, AS CORES MANTÊM O MATIZ
 
 const BACKGROUND: Record<View, string> = { breadboardView: '#ffffff', schematicView: '#ffffff', pcbView: '#333333' }    // FUNDO DO FRITZING, USADO NA EXPORTAÇÃO DA VISTA
 const DOT_PX = 1.1     // RAIO DO PONTO DA GRADE NA TELA
@@ -150,7 +152,7 @@ const SwitchChip = ({ modelIndex, at, pressed, spdt, timed, zoom }: { modelIndex
     const width = 30 + text.length * 6.4 + (timed ? 16 : 0)
     return (
         <g data-switch={modelIndex} data-overlay className="switch-chip" transform={`translate(${at[0]} ${at[1]}) scale(${1 / zoom})`}>
-            <title>{spdt ? 'Clique para trocar a posição' : pressed ? 'Clique para abrir' : 'Clique para fechar'}{timed ? ' · tem comutação programada no transitório' : ''}</title>
+            <title>{spdt ? t('Clique para trocar a posição') : pressed ? t('Clique para abrir') : t('Clique para fechar')}{timed ? ` · ${t('tem comutação programada no transitório')}` : ''}</title>
             <rect x={-width / 2} y={-28} width={width} height={20} rx={10} fill="var(--surface)" stroke={pressed ? SELECTED : 'var(--control)'} />
             <path d={pressed ? `M${-width / 2 + 9} -18h10` : `M${-width / 2 + 9} -18l9 -5`} stroke={pressed ? SELECTED : 'var(--muted)'} strokeWidth={1.6} strokeLinecap="round" />
             <circle cx={-width / 2 + 9} cy={-18} r={1.6} fill={pressed ? SELECTED : 'var(--muted)'} />
@@ -527,16 +529,16 @@ export const Canvas = () => {
         const index = target.closest('[data-index]')?.getAttribute('data-index') ?? ''
         const ends  = scene.isWire(index) ? scene.getWireEnds(index) : null
         const curve = scene.getWireCurve(index)
-        const t     = ends ? curve ? nearestOnCubic(ends[0], curve[0], curve[1], ends[1], point) : nearestOnSegment(ends[0], ends[1], point) : 0
+        const along = ends ? curve ? nearestOnCubic(ends[0], curve[0], curve[1], ends[1], point) : nearestOnSegment(ends[0], ends[1], point) : 0
         const near  = index && !ends ? scene.getKeys(index).map(key => [key, distance(scene.getTerminal(key) ?? [Infinity, Infinity], point)] as const).filter(([, d]) => d * vp.zoom <= PIN_PX).sort((a, b) => a[1] - b[1])[0]?.[0] : null
         const key   = ends ? keyOf(index, 'connector0') : index ? scene.getConnectorAt(point, modelIndex => modelIndex === index) ?? near : scene.getConnectorNear(point, PIN_PX / vp.zoom, modelIndex => !scene.isWire(modelIndex))
 
         if (!key || tool === 'select' || tool === 'area')
-            return useStore.setState({ message: 'clique num fio ou no terminal de uma peça para medir' })
+            return useStore.setState({ message: t('clique num fio ou no terminal de uma peça para medir') })
 
-        const spot   = ends ? scene.getPointOn(index, Math.min(0.9, Math.max(0.1, t))) : scene.getTerminal(key)
+        const spot   = ends ? scene.getPointOn(index, Math.min(0.9, Math.max(0.1, along))) : scene.getTerminal(key)
         const taken  = [...obstacles.boxes, ...drawing.labels.flatMap(label => label.box ? [label.box] : []), ...doc.probes.filter(probe => probe.view === view).map(probeBox).filter((box): box is Box => box !== null)]
-        addProbe({ kind: tool, view, key, t: Math.min(0.9, Math.max(0.1, t)), offset: spot ? getProbeOffset(spot, `P${doc.probes.length + 1}`, tool === 'both' ? 2 : 1, taken) : [8, -14], flip: false })
+        addProbe({ kind: tool, view, key, t: Math.min(0.9, Math.max(0.1, along)), offset: spot ? getProbeOffset(spot, `P${doc.probes.length + 1}`, tool === 'both' ? 2 : 1, taken) : [8, -14], flip: false })
 
         if (!keep)
             setTool('select')
@@ -1053,7 +1055,7 @@ export const Canvas = () => {
     const below    = single && (single[3] - vp.y) * vp.zoom + 90 < size[1]
     const quick    = single ? { index: selection[0], at: [Math.min(size[0] - 150, Math.max(150, ((single[0] + single[2]) / 2 - vp.x) * vp.zoom)), below ? (single[3] - vp.y) * vp.zoom + 14 : Math.max(8, (single[1] - vp.y) * vp.zoom - 78)] as Point } : null
     const aimed    = wiring?.aim ?? null
-    const aimText  = aimed ? aimed.end.keys[0] ? pinName(scene.isWire(owner(aimed.end.keys[0])) ? scene.getPartners(aimed.end.keys[0]).find(partner => !scene.isWire(owner(partner))) ?? aimed.end.keys[0] : aimed.end.keys[0]) : 'junção no fio' : ''
+    const aimText  = aimed ? aimed.end.keys[0] ? pinName(scene.isWire(owner(aimed.end.keys[0])) ? scene.getPartners(aimed.end.keys[0]).find(partner => !scene.isWire(owner(partner))) ?? aimed.end.keys[0] : aimed.end.keys[0]) : t('junção no fio') : ''
     const handlers = { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onDoubleClick, onContextMenu, onDragOver, onDrop }
     const dash     = `${4 / vp.zoom} ${3 / vp.zoom}`
     const ends     = pointed && wireItems.has(pointed.index) ? scene.getWireEnds(pointed.index) : null
@@ -1061,17 +1063,17 @@ export const Canvas = () => {
     const cursor   = drag?.type === 'pan' || drag?.type === 'move' ? 'grabbing' : wiring || placing || probing || hover || pointed?.end ? 'crosshair' : pointed && wireItems.has(pointed.index) ? flat : pointed ? 'move' : tool === 'area' ? 'default' : 'grab'
     const inverted = theme === 'dark' && view === 'schematicView'
     const ink      = (color: string) => view === 'pcbView' ? color === '#000000' ? ALTIUM.silkscreen : ALTIUM.silkscreen0 : /^#0{3,6}$/.test(color) ? 'var(--text)' : color
-    const hint     = wiring ? 'Clique para dobrar · clique num terminal termina · botão direito deixa a ponta solta · Backspace desfaz · Esc cancela' :
-                     placing ? `Clique no quadro para posicionar ${FEATURED.find(item => item.moduleId === placing)?.name ?? library.getPart(placing)?.title ?? 'a peça'} · Shift mantém · Esc cancela` :
-                     probing ? 'Clique num fio ou terminal para medir · Shift mantém a ferramenta · Esc sai' :
-                     drag?.type === 'marquee' ? (drag.crossing ? 'Da direita para a esquerda: seleciona tudo que o retângulo tocar' : 'Da esquerda para a direita: seleciona o que ficar inteiro dentro do retângulo') :
+    const hint     = wiring ? t('Clique para dobrar · clique num terminal termina · botão direito deixa a ponta solta · Backspace desfaz · Esc cancela') :
+                     placing ? t('Clique no quadro para posicionar {0} · Shift mantém · Esc cancela', t(FEATURED.find(item => item.moduleId === placing)?.name ?? library.getPart(placing)?.title ?? 'a peça')) :
+                     probing ? t('Clique num fio ou terminal para medir · Shift mantém a ferramenta · Esc sai') :
+                     drag?.type === 'marquee' ? (drag.crossing ? t('Da direita para a esquerda: seleciona tudo que o retângulo tocar') : t('Da esquerda para a direita: seleciona o que ficar inteiro dentro do retângulo')) :
                      drag ? '' :
-                     hover ? `Terminal ${pinName(hover)} · clique ou arraste até outro terminal para ligar` :
-                     pointed?.end ? 'Ponta do fio · arraste para mover · clique para continuar o fio' :
-                     pointed && wireItems.has(pointed.index) ? (flat === 'move' ? 'Fio · arraste para dobrar · duplo clique cria uma dobra' : 'Fio · arraste para deslocar o trecho · duplo clique cria uma dobra · Ctrl+arrastar faz curva') :
-                     pointed && switchOf(library.getPart(doc.instances[pointed.index]?.moduleIdRef ?? '')) ? 'Chave · clique no selo acima dela para abrir ou fechar' :
-                     pointed && !selection.includes(pointed.index) ? 'Clique para selecionar e editar o valor · arraste para mover' :
-                     tool === 'area' ? 'Seletor · arraste no quadro para selecionar várias peças · Esc volta' : ''
+                     hover ? t('Terminal {0} · clique ou arraste até outro terminal para ligar', pinName(hover)) :
+                     pointed?.end ? t('Ponta do fio · arraste para mover · clique para continuar o fio') :
+                     pointed && wireItems.has(pointed.index) ? (flat === 'move' ? t('Fio · arraste para dobrar · duplo clique cria uma dobra') : t('Fio · arraste para deslocar o trecho · duplo clique cria uma dobra · Ctrl+arrastar faz curva')) :
+                     pointed && switchOf(library.getPart(doc.instances[pointed.index]?.moduleIdRef ?? '')) ? t('Chave · clique no selo acima dela para abrir ou fechar') :
+                     pointed && !selection.includes(pointed.index) ? t('Clique para selecionar e editar o valor · arraste para mover') :
+                     tool === 'area' ? t('Seletor · arraste no quadro para selecionar várias peças · Esc volta') : ''
     const marquee  = drag?.type === 'marquee' ? [Math.min(drag.start[0], drag.end[0]), Math.min(drag.start[1], drag.end[1]), Math.abs(drag.end[0] - drag.start[0]), Math.abs(drag.end[1] - drag.start[1])] : null
     const probes   = doc.probes.flatMap((probe, i) => {
         const anchor = probe.view === view ? probeAnchor(probe) : null
@@ -1116,8 +1118,8 @@ export const Canvas = () => {
                     <g pointerEvents="none">
                         <rect x={marquee[0]} y={marquee[1]} width={marquee[2]} height={marquee[3]} rx={zoomed(2)} fill={SELECTED} fillOpacity={drag.crossing ? 0.05 : 0.1} stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={drag.crossing ? dash : undefined} />
                         <g transform={`translate(${drag.end[0]} ${drag.end[1]}) scale(${1 / vp.zoom})`}>
-                            <rect x={12} y={12} width={`${drag.count} ${drag.count === 1 ? 'item' : 'itens'}`.length * 6.6 + 18} height={22} rx={11} fill="var(--surface)" stroke="var(--border)" />
-                            <text x={21} y={27} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{drag.count} {drag.count === 1 ? 'item' : 'itens'}</text>
+                            <rect x={12} y={12} width={t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count).length * 6.6 + 18} height={22} rx={11} fill="var(--surface)" stroke="var(--border)" />
+                            <text x={21} y={27} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count)}</text>
                         </g>
                     </g>
                 )}

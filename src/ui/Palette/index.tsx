@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { normalize } from '../../core/Featured'
 import { getCommands, type Command } from '../MenuBar'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const SHOWN = 12    // COMANDOS NA LISTA
 
 // TERMOS EM INGLÊS DO FRITZING E DO KICAD PARA CADA RÓTULO: QUEM VEM DE LÁ ACHA PELO NOME QUE CONHECE
 const ALIASES: Record<string, string> = {
-    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue',
+    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Salvar todos': 'save all',
     'PNG…': 'export image png', 'JPG…': 'export image jpg jpeg', 'SVG…': 'export image svg', 'PDF…': 'export image pdf plot', 'Gravável (PDF)…': 'etchable pdf', 'Gravável (SVG)…': 'etchable svg',
     'Tudo para fabricar (zip)…': 'fabrication outputs production gerber drill jobset manufacturing',
     'Gerber estendido (RS-274X)…': 'gerber fabrication outputs plot cam', 'Pick-and-place…': 'pick and place position file centroid', 'Lista de materiais (HTML)…': 'bill of materials bom', 'Lista de materiais (CSV)…': 'bill of materials bom csv',
@@ -30,10 +31,10 @@ const ALIASES: Record<string, string> = {
     'Editar (editor de peças)': 'edit part parts editor symbol editor footprint editor', 'Adicionar ao bin': 'add to bin', 'Trazer para frente': 'bring to front', 'Enviar para trás': 'send to back', 'Avançar': 'bring forward raise', 'Recuar': 'send backward lower'
 }
 
-// NOTA DE UM COMANDO: TODO TERMO TEM DE APARECER NO RÓTULO, NO CAMINHO OU NOS TERMOS EM INGLÊS; NO RÓTULO VALE MAIS, COMEÇO DE PALAVRA MAIS AINDA
+// NOTA DE UM COMANDO: TODO TERMO TEM DE APARECER NO RÓTULO (NAS DUAS LÍNGUAS), NO CAMINHO OU NOS TERMOS EM INGLÊS; NO RÓTULO VALE MAIS, COMEÇO DE PALAVRA MAIS AINDA
 const score = (command: Command, terms: string[]) => {
-    const label = normalize(command.entry.label)
-    const rest  = normalize(`${command.path.join(' ')} ${ALIASES[command.entry.label] ?? ''}`)
+    const label = normalize(`${command.entry.label} ${t(command.entry.label)}`)
+    const rest  = normalize(`${command.path.join(' ')} ${command.path.map(item => t(item)).join(' ')} ${ALIASES[command.entry.label] ?? ''}`)
     const words = label.split(/[^a-z0-9%]+/)
     const each  = terms.map(term => words.some(word => word.startsWith(term)) ? 4 : label.includes(term) ? 3 : rest.split(/[^a-z0-9%]+/).some(word => word.startsWith(term)) ? 2 : rest.includes(term) ? 1 : 0)
     return each.every(value => value > 0) ? each.reduce<number>((sum, value) => sum + value, 0) - (command.entry.disabled ? 0.5 : 0) : 0
@@ -80,17 +81,17 @@ export const Palette = () => {
 
     return (
         <div className="modal palette" onPointerDown={event => event.target === event.currentTarget && close()}>
-            <section className="card" role="dialog" aria-modal="true" aria-label="Paleta de comandos">
-                <input autoFocus className="palette-in" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-label="Buscar comando" placeholder="O que você quer fazer? (português ou inglês: copiar, autoroute, gerber…)" value={text} onChange={event => { setText(event.target.value); setIndex(0) }} onKeyDown={onKey} />
-                <ul id="palette-list" role="listbox" aria-label="Comandos">
+            <section className="card" role="dialog" aria-modal="true" aria-label={t('Paleta de comandos')}>
+                <input autoFocus className="palette-in" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-label={t('Buscar comando')} placeholder={t('O que você quer fazer? (português ou inglês: copiar, autoroute, gerber…)')} value={text} onChange={event => { setText(event.target.value); setIndex(0) }} onKeyDown={onKey} />
+                <ul id="palette-list" role="listbox" aria-label={t('Comandos')}>
                     {found.map((command, i) => (
                         <li key={`${command.path.join('/')}/${command.entry.label}`} role="option" aria-selected={i === index} aria-disabled={command.entry.disabled} className={i === index ? 'current' : ''} onPointerEnter={() => setIndex(i)} onClick={() => choose(command)}>
-                            <span className="label">{command.entry.label}</span>
-                            <span className="muted path">{command.path.join(' › ')}</span>
+                            <span className="label">{t(command.entry.label)}</span>
+                            <span className="muted path">{command.path.map(item => t(item)).join(' › ')}</span>
                             {command.entry.shortcut && <kbd>{command.entry.shortcut}</kbd>}
                         </li>
                     ))}
-                    {!found.length && <li className="muted">Nenhum comando para “{text}”. Tente outra palavra, em português ou em inglês.</li>}
+                    {!found.length && <li className="muted">{t('Nenhum comando para “{0}”. Tente outra palavra, em português ou em inglês.', text)}</li>}
                 </ul>
             </section>
         </div>

@@ -1,6 +1,7 @@
 import { BENCHES } from '../../engine/Bench'
 import { Icon } from '../Icon'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const STEPS: [string, string][] = [['Peças', 'escolha à esquerda e clique no quadro (ou arraste)'], ['Fios', 'clique num terminal, clique para dobrar e clique no terminal de destino'], ['Vista', 'arraste o fundo para mover; a roda dá zoom'], ['Medir', 'escolha V, A ou V·A na barra, clique num fio e aperte Simular'], ['Qualquer ação', 'Ctrl+K e o nome dela, em português ou em inglês']]
 
@@ -16,15 +17,15 @@ export const Welcome = () => {
     return (
         <div className="welcome">
             <section className="card">
-                <h2>Comece um circuito</h2>
-                <p className="sub">Protoboard, esquemático e PCB sempre sincronizados</p>
-                <ol>{STEPS.map(([title, text], i) => <li key={title}><span className="step">{i + 1}</span><span><b>{title}:</b> {text}</span></li>)}</ol>
+                <h2>{t('Comece um circuito')}</h2>
+                <p className="sub">{t('Protoboard, esquemático e PCB sempre sincronizados')}</p>
+                <ol>{STEPS.map(([title, text], i) => <li key={title}><span className="step">{i + 1}</span><span><b>{t(title)}:</b> {t(text)}</span></li>)}</ol>
                 <div className="acts">
-                    <button className="btn primary sm" onClick={() => document.getElementById('open-file')?.click()}><Icon name="open" />Abrir arquivo</button>
-                    <button className="btn sm" onClick={() => setPanel('document')}><Icon name="project" />Ver exemplos</button>
+                    <button className="btn primary sm" onClick={() => document.getElementById('open-file')?.click()}><Icon name="open" />{t('Abrir arquivo')}</button>
+                    <button className="btn sm" onClick={() => setPanel('document')}><Icon name="project" />{t('Ver exemplos')}</button>
                 </div>
-                <h3 className="h3">Ou experimente um circuito de teste</h3>
-                <div className="benches">{BENCHES.map(bench => <button key={bench.id} className="chipb" title={bench.summary} onClick={() => void openBench(bench.id)}>{bench.title}</button>)}</div>
+                <h3 className="h3">{t('Ou experimente um circuito de teste')}</h3>
+                <div className="benches">{BENCHES.map(bench => <button key={bench.id} className="chipb" title={t(bench.summary)} onClick={() => void openBench(bench.id)}>{t(bench.title)}</button>)}</div>
             </section>
         </div>
     )

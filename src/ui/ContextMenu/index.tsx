@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { t } from '../../core/Text'
 import { Icon } from '../Icon'
 import { shownIn } from '../Modes'
 import { useStore } from '../Store'
 
+// O RÓTULO FICA EM PORTUGUÊS (É A CHAVE DOS MODOS E DA PALETA) E A LISTA O MOSTRA NA LÍNGUA ESCOLHIDA
 export type MenuEntry = { label: string, shortcut?: string, disabled?: boolean, checked?: boolean, apply?: () => void, items?: MenuEntry[] } | null
 
 const EDGE    = 4      // PX DE FOLGA ATÉ A BORDA DA JANELA
@@ -28,7 +30,7 @@ export const MenuList = ({ items: all, close, left }: { items: MenuEntry[], clos
                 <li key={i} onMouseEnter={() => setOpen(i)}>
                     <button className={`menu-item ${entry.items && open === i ? 'open' : ''}`} role="menuitem" disabled={entry.disabled} onClick={() => choose(entry)}>
                         <span className="check">{entry.checked && <Icon name="check" />}</span>
-                        <span className="label">{entry.label}</span>
+                        <span className="label">{t(entry.label)}</span>
                         {entry.shortcut && <kbd>{entry.shortcut}</kbd>}
                         {entry.items && <Icon name="chevronRight" className="ic arrow" />}
                     </button>

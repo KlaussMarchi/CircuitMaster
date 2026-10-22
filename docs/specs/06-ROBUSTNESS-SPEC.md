@@ -98,37 +98,43 @@ também **Fechar**, que tira a janela do estado do app. As outras regiões conti
 
 ### 6.1 Sessões
 
-Cada aba é uma sessão com um id aleatório que segura o Web Lock `circuitmaster-session-‹id›` enquanto vive. Ao
-abrir, as sessões cujo lock ninguém segura estão mortas (aba fechada ou travada); as vivas, mesmo em outra aba, não
-são oferecidas para recuperar.
+Cada aba do navegador é uma sessão com um id aleatório que segura o Web Lock `circuitmaster-session-‹id›` enquanto
+vive. Ao abrir, as sessões cujo lock ninguém segura estão mortas (aba fechada ou travada); as vivas, mesmo em outra
+aba, não são oferecidas para recuperar. Dentro da sessão, cada sketch aberto (spec 05 §4, abas de sketches) tem a sua
+sequência de versões, identificada por `session` e `sheet`.
 
 ### 6.2 Versões
 
 | Campo | Conteúdo |
 |---|---|
-| `id` | tempo com 15 dígitos e o id da sessão |
-| `session`, `time` | sessão e instante da gravação |
+| `id` | tempo com 15 dígitos, o id da sessão e o do sketch |
+| `session`, `sheet`, `time` | sessão, sketch (aba) e instante da gravação; versões gravadas antes das abas não têm `sheet` |
 | `name`, `count` | nome do sketch e número de itens |
 | `dirty` | o documento tinha alterações não salvas |
 | `bytes` | o `.fzz` como o Salvar gravaria, com as peças de pacote, montado no worker `workers/Saver` (o texto de 1.000 peças leva centenas de milissegundos) |
 
-Mudança do documento, do nome ou do estado salvo agenda a gravação **1,5 s** depois da última mudança; esconder ou
-fechar a aba grava na hora. Uma versão nova entra no histórico a cada **minuto** de edição; entre elas, a mais nova
-da sessão é regravada. Ficam as **20** mais recentes de cada sessão, e o que passa das 20 mais novas no total é
-apagado quando sessões mortas são resolvidas. A mesma falha de gravação é avisada uma vez: "salvamento automático
+Mudança do documento, do nome ou do estado salvo agenda a gravação daquele sketch **1,5 s** depois da última mudança,
+com a foto tirada na hora da mudança (trocar de aba não mistura os sketches); esconder ou fechar a aba grava na hora
+tudo o que está agendado. Uma versão nova entra no histórico a cada **minuto** de edição de cada sketch; entre elas,
+a mais nova é regravada. Ficam as **20** mais recentes de cada sessão, e o que passa das 20 mais novas no total é
+apagado quando sessões mortas são resolvidas. Fechar a aba de um sketch de propósito deixa a última versão dele no
+histórico como não oferecida (`dirty: false`). A mesma falha de gravação é avisada uma vez: "salvamento automático
 parado: causa; salve o arquivo para não perder o trabalho".
 
 ### 6.3 Recuperação
 
-- Ao abrir, se a última versão de alguma sessão morta tem `dirty`, o diálogo **Recuperar trabalho não salvo** lista
-  as versões dessas sessões (nome, data e hora, itens, salvo ou não) com **Abrir** em cada uma e **Descartar**.
-- **Abrir** abre a versão como documento **não salvo** ("Alterações não salvas"): salvar grava o arquivo. As sessões
-  oferecidas são resolvidas: a versão mais nova de cada uma passa a `dirty: false` e não é mais oferecida.
+- Ao abrir, se a última versão de algum sketch de uma sessão morta tem `dirty`, o diálogo **Recuperar trabalho não
+  salvo** lista as versões desses sketches (nome, data e hora, itens, salvo ou não) com **Abrir** em cada uma e
+  **Descartar**.
+- **Abrir** abre a versão numa aba como documento **não salvo** ("Alterações não salvas"): salvar grava o arquivo.
+  Aquele sketch é resolvido (a versão mais nova passa a `dirty: false`) e sai da lista; os outros sketches da sessão
+  morta continuam oferecidos, e o diálogo fecha quando não sobra nenhum.
 - **Descartar** resolve as sessões sem abrir nada; o diálogo fecha só depois de gravar.
 - **Arquivo › Versões salvas automaticamente…** lista todas as versões guardadas a qualquer momento.
-- **Abrir**, **Novo** e **Circuito de teste** com o documento diferente do salvo perguntam antes de descartar ("elas
-  ficam nas versões salvas automaticamente"); abrir um pacote de peças (`.fzpz`, `.fzbz`) não troca o documento e
-  não pergunta.
+- **Abrir**, **Novo**, **Exemplos** e **Circuito de teste** nunca descartam: abrem numa aba nova, ou na ativa quando
+  ela está vazia e sem mudança ou é o mesmo arquivo sem mudança. Só **fechar uma aba** com alterações pergunta ("as
+  alterações ficam nas versões salvas automaticamente"). Abrir um pacote de peças (`.fzpz`, `.fzbz`) não troca o
+  documento.
 
 ## 7. HISTÓRICO DE DESFAZER
 
@@ -165,7 +171,8 @@ do próprio app, sem depender do Google Fonts.
 | Duas abas: cada uma guarda a sua versão e a viva não é oferecida | `e2e/robust.spec.ts` |
 | Armazenamento cheio avisa uma vez e a edição continua | `e2e/robust.spec.ts` |
 | Migração das peças do localStorage para o IndexedDB | `e2e/robust.spec.ts` |
-| Abrir com alterações pergunta; recusar mantém o circuito | `e2e/robust.spec.ts`, `e2e/ui.spec.ts` |
+| Dois sketches na mesma aba do navegador: recarregar oferece os dois; abrir um mantém o outro na lista; cada um volta na sua aba | `e2e/robust.spec.ts` |
+| Abrir um exemplo com alterações abre outra aba sem perguntar; fechar uma aba com alterações pergunta | `e2e/robust.spec.ts`, `e2e/ui.spec.ts` |
 | Toda ação dos menus com a seleção vazia nas três vistas | `e2e/robust.spec.ts` |
 | 500 desfazer e refazer seguidos voltam aos mesmos documentos | `e2e/robust.spec.ts` |
 | Maior exemplo do Fritzing e projeto vazio: três vistas e todas as exportações | `e2e/robust.spec.ts` |

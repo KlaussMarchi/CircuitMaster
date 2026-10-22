@@ -1,3 +1,5 @@
+import { t } from '../../core/Text'
+
 const DB_NAME    = 'circuitmaster-user'
 const DB_VERSION = 1
 
@@ -11,7 +13,7 @@ const settle = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) 
     request.onerror   = () => reject(request.error)
 })
 
-const reason = (error: unknown) => error instanceof DOMException ? (error.name === 'QuotaExceededError' ? 'o armazenamento do navegador está cheio' : `${error.name}: ${error.message}`) : String(error)
+const reason = (error: unknown) => error instanceof DOMException ? (error.name === 'QuotaExceededError' ? t('o armazenamento do navegador está cheio') : `${error.name}: ${error.message}`) : String(error)
 
 // DADOS DO USUÁRIO NO INDEXEDDB, QUE CABE MUITO MAIS QUE OS 5 MB DO localStorage; FALHA DE ARMAZENAMENTO (COTA, BLOQUEIO, ABA PRIVADA) VOLTA COMO MOTIVO, NUNCA COMO EXCEÇÃO
 export class Vault {
@@ -27,7 +29,7 @@ export class Vault {
             request.onupgradeneeded = () => STORES.filter(store => !request.result.objectStoreNames.contains(store)).forEach(store => request.result.createObjectStore(store))
             request.onsuccess       = () => resolve(request.result)
             request.onerror         = () => reject(request.error)
-            request.onblocked       = () => reject(new DOMException('outra aba segura uma versão antiga do banco', 'BlockedError'))
+            request.onblocked       = () => reject(new DOMException(t('outra aba segura uma versão antiga do banco'), 'BlockedError'))
         })
 
         this.db = opening.catch(error => {
@@ -54,7 +56,7 @@ export class Vault {
         const db = await this.connect()
 
         if (!db)
-            return this.failure || 'o armazenamento do navegador está indisponível'
+            return this.failure || t('o armazenamento do navegador está indisponível')
 
         try {
             const transaction = db.transaction(store, 'readwrite')

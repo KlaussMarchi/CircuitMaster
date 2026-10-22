@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 // PCB COM AS CORES DO ALTIUM, SÓ NA TELA (O ARQUIVO E AS EXPORTAÇÕES GUARDAM AS DO FRITZING): COBRE DE CIMA VERMELHO, DE BAIXO AZUL, PAD PASSANTE PRATA, SERIGRAFIA AMARELA, PLACA PRETA
 export const ALTIUM: Record<string, string> = { copper1: '#ff3030', copper0: '#3d5cff', silkscreen: '#ffff00', silkscreen0: '#9a9a00', groundplane1: '#a81c1c', groundplane: '#25349e', board: '#000000' }
@@ -26,11 +27,11 @@ export const Layers = () => {
     const { toggleLayer } = useStore.getState()
 
     return (
-        <div className="layers-legend" role="group" aria-label="Camadas da PCB">
-            <button className="layers-head" aria-expanded={open} title={open ? 'Recolher a legenda' : 'Mostrar a legenda das camadas'} onClick={() => setOpen(!open)}><Icon name="layers" /><span>Camadas</span>{hidden.length > 0 && <span className="muted num">{LAYER_GROUPS.length - hidden.length}/{LAYER_GROUPS.length}</span>}</button>
+        <div className="layers-legend" role="group" aria-label={t('Camadas da PCB')}>
+            <button className="layers-head" aria-expanded={open} title={open ? t('Recolher a legenda') : t('Mostrar a legenda das camadas')} onClick={() => setOpen(!open)}><Icon name="layers" /><span>{t('Camadas')}</span>{hidden.length > 0 && <span className="muted num">{LAYER_GROUPS.length - hidden.length}/{LAYER_GROUPS.length}</span>}</button>
             {open && LAYER_GROUPS.map(([id, label, , color]) => (
-                <button key={id} className="layer" aria-pressed={!hidden.includes(id)} title={`${hidden.includes(id) ? 'Mostrar' : 'Ocultar'} ${label.toLowerCase()}`} onClick={() => toggleLayer(id)}>
-                    <span className="dot-s" style={{ background: hidden.includes(id) ? 'transparent' : color, borderColor: color }} />{label}
+                <button key={id} className="layer" aria-pressed={!hidden.includes(id)} title={t(hidden.includes(id) ? 'Mostrar {0}' : 'Ocultar {0}', t(label).toLowerCase())} onClick={() => toggleLayer(id)}>
+                    <span className="dot-s" style={{ background: hidden.includes(id) ? 'transparent' : color, borderColor: color }} />{t(label)}
                 </button>
             ))}
         </div>

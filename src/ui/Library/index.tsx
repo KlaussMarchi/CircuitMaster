@@ -5,6 +5,7 @@ import type { Found } from '../../workers/Indexer'
 import { Icon } from '../Icon'
 import { promptBin } from '../Menus'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 export const PART_MIME = 'application/x-circuitmaster-part'
 
@@ -57,8 +58,8 @@ const usePick = (moduleId: string) => {
 const FeaturedTile = ({ item }: { item: Featured }) => {
     const pick = usePick(item.moduleId)
     return (
-        <button className="part" title={`${item.name}${item.nosim ? ' (sem modelo de simulação)' : ''}: clique e depois clique no quadro, arraste ou dê duplo clique`} {...pick}>
-            <Glyph item={item} /><span>{item.name}</span>{item.nosim && <i className="nosim" />}
+        <button className="part" title={`${t(item.name)}${item.nosim ? ` (${t('sem modelo de simulação')})` : ''}: ${t('clique e depois clique no quadro, arraste ou dê duplo clique')}`} {...pick}>
+            <Glyph item={item} /><span>{t(item.name)}</span>{item.nosim && <i className="nosim" />}
         </button>
     )
 }
@@ -96,14 +97,14 @@ const Section = ({ title, count, open, flip, children }: { title: string, count:
 )
 
 const renameBin = (index: number) => {
-    const title = window.prompt('Novo nome do bin', useStore.getState().userBins[index]?.title)
+    const title = window.prompt(t('Novo nome do bin'), useStore.getState().userBins[index]?.title)
 
     if (title !== null)
         useStore.getState().renameBin(index, title)
 }
 
 const removeBin = (index: number) => {
-    if (window.confirm(`Apagar o bin ${useStore.getState().userBins[index]?.title}? As peças continuam no acervo.`))
+    if (window.confirm(t('Apagar o bin {0}? As peças continuam no acervo.', useStore.getState().userBins[index]?.title ?? '')))
         useStore.getState().deleteBin(index)
 }
 
@@ -169,28 +170,28 @@ export const Library = () => {
     const results    = query ? found : []
 
     return (
-        <section className="lp" aria-label="Peças">
+        <section className="lp" aria-label={t('Peças')}>
             <div className="lp-head">
                 <label className="search">
                     <Icon name="search" />
-                    <input ref={input} type="search" placeholder="Buscar peça" aria-label="Buscar peça" autoComplete="off" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => event.key === 'Escape' && setText('')} />
-                    {query ? <button className="icon-btn" style={{ width: 22, height: 22 }} aria-label="Limpar busca" onClick={() => setText('')}><Icon name="close" /></button> : <kbd>/</kbd>}
+                    <input ref={input} type="search" placeholder={t('Buscar peça')} aria-label={t('Buscar peça')} autoComplete="off" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => event.key === 'Escape' && setText('')} />
+                    {query ? <button className="icon-btn" style={{ width: 22, height: 22 }} aria-label={t('Limpar busca')} onClick={() => setText('')}><Icon name="close" /></button> : <kbd>/</kbd>}
                 </label>
                 <div className="tabs" role="tablist">
-                    {TABS.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={!query && tab === id} onClick={() => { setTab(id); setText('') }}>{label}</button>)}
+                    {TABS.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={!query && tab === id} onClick={() => { setTab(id); setText('') }}>{t(label)}</button>)}
                 </div>
                 <p className="count">
-                    {query ? `${results.length} ${results.length === 1 ? 'resultado' : 'resultados'}` : `${total} peças`}
-                    {!indexed.ready && <span className="num">· indexando {indexed.done}/{indexed.total || '…'}</span>}
+                    {query ? t(results.length === 1 ? '{0} resultado' : '{0} resultados', results.length) : t('{0} peças', total)}
+                    {!indexed.ready && <span className="num">· {t('indexando')} {indexed.done}/{indexed.total || '…'}</span>}
                 </p>
             </div>
             <div className="lp-body">
-                {query && (results.length ? <ul className="results">{results.map(entry => <ResultRow key={`${entry.root}/${entry.path}/${entry.moduleId}`} entry={entry} />)}</ul> : <div className="empty">Nenhuma peça para “{query}”. Tente “resistor”, “fonte”, “LED” ou “555”.</div>)}
+                {query && (results.length ? <ul className="results">{results.map(entry => <ResultRow key={`${entry.root}/${entry.path}/${entry.moduleId}`} entry={entry} />)}</ul> : <div className="empty">{t('Nenhuma peça para “{0}”. Tente “resistor”, “fonte”, “LED” ou “555”.', query)}</div>)}
                 {!query && tab !== 'mine' && FEATURED_GROUPS.map(group => {
                     const items = featured.filter(item => item.group === group)
-                    return items.length > 0 && <div key={group} className="parts-group"><h3>{group}</h3><div className="parts-grid">{items.map(item => <FeaturedTile key={item.moduleId} item={item} />)}</div></div>
+                    return items.length > 0 && <div key={group} className="parts-group"><h3>{t(group)}</h3><div className="parts-grid">{items.map(item => <FeaturedTile key={item.moduleId} item={item} />)}</div></div>
                 })}
-                {!query && tab !== 'mine' && sections.length > 0 && <h3 className="h3">Biblioteca {tab === 'core' ? 'completa' : 'do simulador'}</h3>}
+                {!query && tab !== 'mine' && sections.length > 0 && <h3 className="h3">{tab === 'core' ? t('Biblioteca completa') : t('Biblioteca do simulador')}</h3>}
                 {!query && tab !== 'mine' && sections.map(section => (
                     <Section key={section.title} title={section.title} count={section.entries.length} open={opened.includes(section.title)} flip={() => flip(section.title)}>
                         <div className="parts-grid">{section.entries.map(entry => <PartTile key={`${entry.root}/${entry.path}`} entry={entry} />)}</div>
@@ -198,16 +199,16 @@ export const Library = () => {
                 ))}
                 {!query && tab === 'mine' && mineGroups.map(([title, ids, index]) => (
                     <div key={`${title}-${index}`} className="parts-group">
-                        <h3>{title}<span className="n muted">{ids.length}</span></h3>
+                        <h3>{index < 0 ? t(title) : title}<span className="n muted">{ids.length}</span></h3>
                         <div className="bin-actions">
-                            <button className="btn sm" disabled={!ids.length} onClick={() => index < 0 ? useStore.getState().exportMine() : useStore.getState().exportBin(index)}>Exportar .fzbz</button>
-                            {index >= 0 && <button className="btn sm" onClick={() => renameBin(index)}>Renomear</button>}
-                            {index >= 0 && <button className="btn sm" onClick={() => removeBin(index)}>Apagar</button>}
+                            <button className="btn sm" disabled={!ids.length} onClick={() => index < 0 ? useStore.getState().exportMine() : useStore.getState().exportBin(index)}>{t('Exportar .fzbz')}</button>
+                            {index >= 0 && <button className="btn sm" onClick={() => renameBin(index)}>{t('Renomear')}</button>}
+                            {index >= 0 && <button className="btn sm" onClick={() => removeBin(index)}>{t('Apagar')}</button>}
                         </div>
-                        {ids.length ? <div className="parts-grid">{members(ids).map(entry => <PartTile key={entry.moduleId} entry={entry} />)}</div> : <div className="empty">Vazio. Use “Adicionar ao bin” no menu de uma peça ou abra um .fzpz/.fzbz.</div>}
+                        {ids.length ? <div className="parts-grid">{members(ids).map(entry => <PartTile key={entry.moduleId} entry={entry} />)}</div> : <div className="empty">{t('Vazio. Use “Adicionar ao bin” no menu de uma peça ou abra um .fzpz/.fzbz.')}</div>}
                     </div>
                 ))}
-                {!query && tab === 'mine' && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => promptBin([])}><Icon name="plus" />Novo bin</button>}
+                {!query && tab === 'mine' && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => promptBin([])}><Icon name="plus" />{t('Novo bin')}</button>}
             </div>
         </section>
     )

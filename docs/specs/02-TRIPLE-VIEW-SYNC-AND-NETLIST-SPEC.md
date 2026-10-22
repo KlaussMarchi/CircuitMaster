@@ -652,22 +652,23 @@ Mesma organização da referência, com os rótulos do CircuitMaster em portugu�
 
 | Menu | Itens (atalho) |
 |---|---|
-| Arquivo | Novo (`Ctrl+N`) · Abrir… (`Ctrl+O`) · Exemplos ▸ · Salvar (`Ctrl+S`) · Exportar ▸ |
-| Exportar ▸ | Como imagem ▸ PNG · JPG · SVG · PDF; Para produção ▸ Gravável PDF · Gravável SVG · Gerber estendido (RS-274X) · Pick-and-place; Lista de materiais (HTML) · Lista de materiais (CSV) · Lista de materiais (PDF); Netlist IPC-D-356A; Netlist XML; Netlist SPICE |
-| Editar | Desfazer · Refazer · Recortar · Copiar · Colar · Colar no lugar · Duplicar · Apagar · Apagar sem fios · Selecionar tudo · Desmarcar · Adicionar nota |
+| Arquivo | Novo (`Ctrl+N`) · Abrir… (`Ctrl+O`) · Exemplos ▸ · Salvar (`Ctrl+S`) · Salvar todos (com mais de uma aba) · Versões salvas automaticamente… · Fechar sketch · Exportar ▸. Novo, Abrir e Exemplos abrem numa aba (doc 05 §4) |
+| Exportar ▸ | Como imagem ▸ PNG · JPG · SVG · PDF; Para produção ▸ Tudo para fabricar (zip) · Gravável PDF · Gravável SVG · Gerber estendido (RS-274X) · Pick-and-place; Lista de materiais (HTML) · Lista de materiais (CSV) · Lista de materiais (PDF); Netlist IPC-D-356A; Netlist XML; Netlist SPICE |
+| Editar | Desfazer · Refazer · Histórico de desfazer · Recortar · Copiar · Colar · Colar no lugar · Duplicar · Apagar · Apagar sem fios · Selecionar tudo · Desmarcar · Adicionar nota · Preferências… (`Ctrl+,`) |
 | Peça | Editar (editor de peças) · Girar ▸ · Espelhar · Elevar e rebaixar ▸ · Alinhar ▸ (esquerda, centro horizontal, direita, topo, centro vertical, base) · Travar peça · Sticky · Mostrar rótulo |
-| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real · 100% (`Shift+Ctrl+0`, como no Fritzing) · Alinhar à grade · Mostrar grade · Fios ortogonais (90°) · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) · Tema claro/escuro |
+| Exibir | Ampliar (`Ctrl++`/`Ctrl+=`) · Reduzir (`Ctrl+-`) · Enquadrar (`Ctrl+0`) · Tamanho real · 100% (`Shift+Ctrl+0`, como no Fritzing) · Alinhar à grade · Mostrar grade · Fios ortogonais (90°) · Protoboard/Esquemático/PCB (`Ctrl+1/2/3`) · Camadas da PCB ▸ (na PCB: cada grupo, mostrar e ocultar todas) · Modo da interface ▸ · Idioma ▸ · Tema claro/escuro |
 | Roteamento (PCB) | Autorotear (`Shift+Ctrl+A`) · DRC (`Shift+Ctrl+D`) · Regras do autorouter e DRC (aba Roteamento do inspetor) · Preenchimento de cobre ▸ Preencher com terra · Preencher com cobre · Remover preenchimento · Limpar sementes de terra; Mover trilha para a outra face · Não rotear automaticamente; Selecionar todas as trilhas · trilhas autoroteáveis · vias · preenchimentos; Apagar trilhas autoroteadas. As sementes de terra se marcam no menu de contexto do conector e a folga do preenchimento é a "Folga do cobre" da aba Roteamento do inspetor |
 | Roteamento (esquemático) | Autorotear · Não rotear automaticamente · Selecionar todas as trilhas · Apagar fios autoroteados |
 | Roteamento (breadboard) | Selecionar todos os fios |
-| Simulação (extensão) | Simular/Parar · Ponto de operação (DC) · Transitório · Ponta de tensão · Ponta de corrente · Ponta de tensão e corrente · Remover todas as pontas de prova · Tempo, amostragem e testes… · Resposta · Circuitos de teste ▸ (doc 04 §5.5, §8.7–§8.9, §9) |
+| Simulação (extensão) | Simular/Parar · Teste ▸ (Automático, Degrau, Onda quadrada, Senoide, Manual) · Painel de simulação · Ponta de tensão · Ponta de corrente · Ponta de tensão e corrente · Remover todas as pontas de prova · Circuitos de teste ▸ (doc 04 §5.1, §5.5, §8.7–§8.9, §9) |
+| Ajuda | Paleta de comandos (`Ctrl+K`) · Atalhos de teclado · Tour da interface · Sobre o CircuitMaster |
 
-Exportações sem placa na PCB (Gerber, gravável, pick-and-place, IPC) ficam desabilitadas e explicam o motivo.
+Exportações sem placa na PCB (Gerber, gravável, pick-and-place, IPC) ficam desabilitadas e explicam o motivo. Os
+itens avançados só aparecem a partir do modo Maker ou Profissional (doc 05 §6); a paleta de comandos acha todos.
 
-Janela (guia `circuit-master-ui/DESIGN.md`): barra superior com marca, menus, abas de vista, DC/Transitório e
-Simular; abaixo, trilho de 52 px (Peças, Projeto, Problemas, tema, atalhos), painel esquerdo de 256 px (biblioteca
-de peças, lista de peças e nós, ou problemas), centro com o quadro e a doca de simulação (Medidas, Resposta,
-Ajustes e o gráfico, recolhível e com altura ajustável) e o inspetor de 296 px (Propriedades, Roteamento,
+Janela (doc 05 §2): barra superior com marca, menus, abas de vista e Simular; abaixo, trilho de 52 px (Peças, Projeto, Problemas, tema, atalhos), painel esquerdo de 256 px (biblioteca
+de peças, lista de peças e nós, ou problemas), centro com o quadro (com as abas de sketches no cabeçalho quando há mais de um) e o painel de simulação
+(curvas, gráfico e medidas, recolhível e com altura ajustável) e o inspetor de 296 px (Propriedades, Roteamento,
 Documento); barra de status embaixo. Vão de 8 px entre os cartões; até 1280 px os painéis estreitam (232 e 272 px)
 e os menus do 6º em diante saem (as ações seguem na barra e no trilho); até 860 px o trilho vai para baixo e os
 painéis viram folhas sobre o quadro. Tema escuro ou claro pelo atributo `data-theme` da raiz, gravado em

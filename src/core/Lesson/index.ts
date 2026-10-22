@@ -1,5 +1,6 @@
 import { formatReading, formatSi } from '../Properties'
 import type { Part } from '../Part'
+import { t } from '../Text'
 
 export type Values = { V: number | null, I: number | null, get: (key: string, symbol: string) => number | null }
 
@@ -11,7 +12,7 @@ const w = (value: number) => formatReading(value, 'W')
 
 const power = ({ V, I }: Values) => [V !== null && I !== null && I !== 0 && `P = V · I = ${v(V)} × ${a(I)} = ${w(Math.abs(V * I))}`]
 
-const forward = ({ V, I }: Values) => [V !== null && `V_f = ${v(V)} no circuito`, V !== null && I !== null && `I = ${a(I)}    P = ${w(Math.abs(V * I))}`]
+const forward = ({ V, I }: Values) => [V !== null && t('V_f = {0} no circuito', v(V)), V !== null && I !== null && `I = ${a(I)}    P = ${w(Math.abs(V * I))}`]
 
 const ohm = (values: Values) => {
     const R = values.get('resistance', 'Ω')
@@ -37,7 +38,7 @@ const divider = ({ get }: Values) => {
 const LESSONS: [RegExp, Lesson][] = [
     [/regulator/, { what: 'Regulador de tensão: mantém a saída fixa (5 V, 3,3 V…) mesmo que a entrada ou a carga mudem.', how: 'Um transistor interno absorve a diferença entre a entrada e a saída; essa queda vira calor no corpo do regulador.', formula: 'P = (V_entrada − V_saída) · I', live: () => [] }],
     [/display|segment|lcd|oled|matrix/, { what: 'Mostrador de números, texto ou imagens.', how: 'Cada segmento ou pixel é um LED ou um cristal líquido acionado pelo microcontrolador, direto ou por um driver.', formula: 'corrente por segmento: I = (V − V_f) / R', live: () => [] }],
-    [/microcontroller|mikrocontroller|arduino|cpu board|raspberry|\bpic\b|picaxe|basic stamp|wemos|esp|feather|qt py|trinkey|chipkit|\bavr\b|\barm\b|spresense|calliope|fpga/, { what: 'Microcontrolador: um computador num chip que lê entradas, roda o programa e aciona saídas.', how: 'Os pinos digitais valem 0 ou V_cc; as entradas analógicas convertem tensão em número (ADC). O programa vai na aba Código.', formula: 'leitura do ADC = V · (2ⁿ − 1) / V_ref', live: () => [] }],
+    [/microcontroller|mikrocontroller|arduino|cpu board|raspberry|\bpic\b|picaxe|basic stamp|wemos|esp|feather|qt py|trinkey|chipkit|\bavr\b|\barm\b|spresense|calliope|fpga/, { what: 'Microcontrolador: um computador num chip que lê entradas, roda o programa e aciona saídas.', how: 'Os pinos digitais valem 0 ou V_cc; as entradas analógicas convertem tensão em número (ADC); o programa decide o que cada pino faz.', formula: 'leitura do ADC = V · (2ⁿ − 1) / V_ref', live: () => [] }],
     [/op-?amp|operational|amplifier|comparator/, { what: 'Amplificador operacional: ganho altíssimo entre as entradas + e −.', how: 'Com realimentação negativa ele ajusta a saída até V+ = V−; daí saem os ganhos dos amplificadores.', formula: 'não inversor: G = 1 + R_f / R_g    inversor: G = −R_f / R_in', live: () => [] }],
     [/555/, { what: 'Timer 555: gera pulsos, atrasos e ondas quadradas com um resistor e um capacitor.', how: 'Dois comparadores internos carregam e descarregam o capacitor externo entre 1/3 e 2/3 de V_cc; ligado como astável oscila sozinho, como monoestável dá um pulso de largura fixa a cada disparo.', formula: 'astável: f = 1,44 / ((R₁ + 2·R₂) · C)    monoestável: t = 1,1 · R · C', live: () => [] }],
     [/\bic\b|driver|eeprom|memory|mux|logic|timer|555|shift register|counter|decoder|\b74|\b40\d\d|\bgate\b|converter|reference|\badc\b|\bdac\b|rtc|real time clock|pcf8574/, { what: 'Circuito integrado: muitos transistores num chip, com uma função pronta.', how: 'A folha de dados diz o que cada pino faz; ligue V_cc e GND antes de tudo e um capacitor de 100 nF perto da alimentação.', formula: '', live: () => [] }],

@@ -77,7 +77,7 @@ export class App {
         this.navigating = true
         await this.page.goto('/')
         this.navigating = false
-        await expect(this.page.getByRole('button', { name: 'Simular' })).toBeEnabled()
+        await expect(this.page.getByRole('button', { name: /^(Simular|Simulate)$/ })).toBeEnabled()    // A LÍNGUA ESCOLHIDA FICA NA RECARGA
         await this.page.evaluate(async () => {
             const [{ useStore }, { Scene }] = await Promise.all([import('/src/ui/Store/index.ts' as string), import('/src/engine/Scene/index.ts' as string)])
             window.cm = { store: useStore, Scene }

@@ -52,12 +52,11 @@ test('Painéis: Peças, Projeto e Problemas no trilho; inspetor e exemplos pelo 
     await panel.getByRole('tab', { name: 'Documento' }).click()
     await panel.getByRole('searchbox', { name: 'Buscar exemplo' }).fill('Button')
     await panel.getByRole('button', { name: 'Button', exact: true }).first().click()
-    await expect.poll(() => app.asked).toEqual([expect.stringMatching(/^Descartar as alterações/)])
-    expect(await app.count()).toBe(count)
-
-    app.answers.push(true)
-    await panel.getByRole('button', { name: 'Button', exact: true }).first().click()
     await expect.poll(() => app.message()).toBe('Button.fzz aberto')
+    await expect(page.getByRole('tablist', { name: 'Sketches abertos' }).getByRole('tab')).toHaveCount(2)
+    expect(app.asked).toEqual([])
+    await page.getByRole('tablist', { name: 'Sketches abertos' }).getByRole('tab').first().click()
+    expect(await app.count()).toBe(count)
 })
 
 test('Inspetor e cartão de valor: nome, resistência digitada e passo da série E12', async ({ app, page }) => {
@@ -164,6 +163,23 @@ for (const width of WIDTHS)
             await app.shoot(`tour-${theme}-${width}`)
         }
         await page.keyboard.press('Escape')
+
+        await page.evaluate(() => {
+            const { doc, editPart } = cm.store.getState()
+            editPart(Object.values(doc.instances).find(instance => instance.moduleIdRef === 'ResistorModuleID')?.modelIndex ?? null)
+        })
+        const editor = page.getByRole('dialog', { name: 'Editor de peças' })
+
+        for (const [tab, shot] of [['Metadados', 'editor-pecas'], ['Conectores', 'editor-conectores'], ['Esquemático', 'editor-vista']]) {
+            await editor.getByRole('tab', { name: tab, exact: true }).click()
+
+            for (const theme of THEMES) {
+                await page.evaluate(theme => cm.store.getState().theme !== theme && cm.store.getState().toggleTheme(), theme)
+                await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+                await app.shoot(`${shot}-${theme}-${width}`)
+            }
+        }
+        await editor.getByRole('button', { name: 'Cancelar' }).click()
     })
 
 test('Paleta de comandos: Ctrl+K acha ações em português e em inglês, mostra caminho e atalho e executa com Enter', async ({ app, page }) => {
@@ -320,4 +336,179 @@ test('Tour: aparece uma vez por modo, avança, pula com Esc e volta pela Ajuda',
     await expect(card).toHaveAccessibleName('Tour: Placa')
     await card.getByRole('button', { name: 'Pular' }).click()
     await expect(card).toHaveCount(0)
+})
+
+test('Abas de sketches: Novo e exemplo abrem abas, cada uma com o seu circuito e desfazer; reabrir sem mudança reusa; fechar com alterações pergunta; Salvar todos', async ({ app, page }) => {
+    const panel  = page.getByRole('complementary', { name: 'Inspetor' })
+    const tabs   = page.getByRole('region', { name: 'Área de desenho' }).getByRole('tablist', { name: 'Sketches abertos' })
+    const titles = () => page.evaluate(() => Object.values(cm.store.getState().doc.instances).filter(instance => instance.moduleIdRef !== 'WireModuleID').map(instance => instance.title))
+    const sample = async () => {
+        await panel.getByRole('tab', { name: 'Documento' }).click()
+        await panel.getByRole('searchbox', { name: 'Buscar exemplo' }).fill('Button')
+        await panel.getByRole('button', { name: 'Button', exact: true }).first().click()
+        await expect.poll(() => app.message()).toBe('Button.fzz aberto')
+    }
+
+    await app.place('Resistor', [-350, -150])
+    await expect(tabs).toHaveCount(0)
+    await app.menu('Arquivo', 'Novo')
+    await expect(tabs.getByRole('tab')).toHaveCount(2)
+    expect(await app.count()).toBe(0)
+    await app.place('Capacitor', [350, 150])
+    expect(await titles()).toEqual(['C1'])
+
+    await tabs.getByRole('tab', { name: /sem título/ }).first().click()
+    expect(await titles()).toEqual(['R1'])
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => app.count()).toBe(0)
+    await page.keyboard.press('Control+Shift+Z')
+    await expect.poll(() => titles()).toEqual(['R1'])
+    await tabs.getByRole('tab').nth(1).click()
+    expect(await titles()).toEqual(['C1'])
+
+    await sample()
+    await expect(tabs.getByRole('tab')).toHaveCount(3)
+    await expect(tabs.getByRole('tab', { name: 'Button' })).toHaveAttribute('aria-selected', 'true')
+    const count = await app.count()
+    await sample()
+    await expect(tabs.getByRole('tab')).toHaveCount(3)
+    expect(await app.count()).toBe(count)
+    await app.shoot('abas')
+
+    await tabs.getByRole('button', { name: 'Fechar Button' }).click()
+    await expect(tabs.getByRole('tab')).toHaveCount(2)
+    expect(app.asked).toEqual([])
+    expect(await titles()).toEqual(['C1'])
+
+    await tabs.getByRole('button', { name: 'Fechar sem título' }).last().click()
+    await expect.poll(() => app.asked).toEqual([expect.stringMatching(/^Fechar sem título sem salvar\?/)])
+    await expect(tabs.getByRole('tab')).toHaveCount(2)
+
+    const files: string[] = []
+    page.on('download', download => files.push(download.suggestedFilename()))
+    await app.menu('Arquivo', 'Salvar todos')
+    await expect.poll(() => files).toEqual(['sem título.fzz', 'sem título.fzz'])
+    await expect(tabs.locator('.dirty')).toHaveCount(0)
+    await tabs.getByRole('button', { name: 'Fechar sem título' }).last().click()
+    await expect(tabs).toHaveCount(0)
+    expect(app.asked).toHaveLength(1)
+    expect(await titles()).toEqual(['R1'])
+})
+
+// PALAVRAS QUE SÓ O PORTUGUÊS TEM: SOBRANDO NA TELA EM INGLÊS, ALGUM TEXTO FICOU SEM t(…)
+const PORTUGUESE = /[ãõçéêáíóúâà]|\b(para|não|peça|peças|fio|fios|clique|aperte|nenhum|nenhuma|você|vista|grade|trilha|trilhas|placa|simular|salvar|abrir|arquivo|exibir|ajuda|projeto|apagar|girar)\b/i
+const NATIVE     = ['Português (Brasil)']    // NOME DA LÍNGUA NA PRÓPRIA LÍNGUA
+
+// TEXTOS VISÍVEIS, RÓTULOS, DICAS E PLACEHOLDERS DA TELA QUE AINDA ESTÃO EM PORTUGUÊS
+const leftovers = (page: App['page']) => page.evaluate(({ source, native }) => {
+    const pattern = new RegExp(source, 'i')
+    const shown   = (element: Element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden'
+    const walker  = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    const texts: string[] = []
+
+    while (walker.nextNode())
+        walker.currentNode.parentElement && shown(walker.currentNode.parentElement) && texts.push(walker.currentNode.textContent?.trim() ?? '')
+
+    document.querySelectorAll('[aria-label], [title], [placeholder]').forEach(element => shown(element) && texts.push(...['aria-label', 'title', 'placeholder'].map(name => element.getAttribute(name) ?? '')))
+    return [...new Set(texts)].filter(text => text && !native.includes(text) && pattern.test(text))
+}, { source: PORTUGUESE.source, native: NATIVE })
+
+test('Inglês: a interface inteira troca de língua nas Preferências, fica na recarga e volta ao português', async ({ app, page }) => {
+    const found: string[] = []
+    const scan  = async (screen: string) => found.push(...(await leftovers(page)).map(text => `${screen}: ${text}`))
+    const menus = page.getByRole('navigation', { name: 'Main menu' })
+
+    await page.keyboard.press('Control+,')
+    await page.getByRole('dialog', { name: 'Preferências' }).getByRole('tablist', { name: 'Idioma' }).getByRole('tab', { name: 'English' }).click()
+    await expect(page.getByRole('dialog', { name: 'Preferences' })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+    await scan('Preferences')
+    await page.keyboard.press('Escape')
+    await scan('Start')
+
+    for (const title of ['File', 'Edit', 'Part', 'View', 'Routing', 'Simulation', 'Help']) {
+        await menus.getByRole('button', { name: title, exact: true }).click()
+        await scan(title)
+        const parents = page.locator('.menu-pop').first().locator(':scope > li > button:has(.arrow):not([disabled])')
+
+        for (let i = 0; i < await parents.count(); i++) {
+            await parents.nth(i).hover()
+            await scan(`${title} ›`)
+        }
+
+        await page.keyboard.press('Escape')
+    }
+
+    await page.keyboard.press('Control+k')
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await palette.getByRole('combobox', { name: 'Search command' }).fill('copy')
+    await expect(palette.getByRole('option').first()).toContainText('Copy')
+    await scan('Palette')
+    await page.keyboard.press('Escape')
+
+    await page.evaluate(() => cm.store.getState().openBench('rc'))
+    await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
+    await page.evaluate(() => cm.store.getState().pause())
+    await scan('Simulation')
+    await page.getByRole('button', { name: 'More simulation options' }).click()
+    await scan('Simulation options')
+    await page.keyboard.press('Escape')
+
+    await page.evaluate(() => {
+        const { doc, select } = cm.store.getState()
+        select([Object.values(doc.instances).find(instance => instance.moduleIdRef === 'ResistorModuleID')?.modelIndex ?? ''])
+    })
+    const inspector = page.getByRole('complementary', { name: 'Inspector' })
+    await inspector.getByText('How it works').click()
+    await scan('Inspector')
+
+    await page.evaluate(() => cm.store.getState().openSample('core/Button.fzz'))
+    await expect.poll(() => app.message()).toBe('Button.fzz opened')
+    await page.evaluate(() => cm.store.getState().setView('pcbView'))
+    await expect(page.locator('[data-drc]').first().or(page.getByRole('group', { name: 'PCB layers' }))).toBeVisible()
+    await scan('PCB')
+
+    for (const panel of ['Routing', 'Document']) {
+        await inspector.getByRole('tab', { name: panel }).click()
+        await scan(panel)
+    }
+
+    for (const panel of ['Project', 'Problems', 'Parts']) {
+        await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: panel }).click()
+        await scan(panel)
+    }
+
+    for (const item of ['Keyboard shortcuts', 'About CircuitMaster']) {
+        await menus.getByRole('button', { name: 'Help', exact: true }).click()
+        await app.choose([item])
+        await scan(item)
+        await page.keyboard.press('Escape')
+    }
+
+    await page.evaluate(() => cm.store.getState().showTour(1))
+    await expect(page.getByRole('dialog', { name: /^Tour:/ })).toBeVisible()
+    await scan('Tour')
+    await page.keyboard.press('Escape')
+
+    await page.evaluate(() => {
+        const { doc, editPart } = cm.store.getState()
+        editPart(Object.values(doc.instances).find(instance => instance.moduleIdRef === 'ResistorModuleID')?.modelIndex ?? null)
+    })
+    const editor = page.getByRole('dialog', { name: 'Parts editor' })
+
+    for (const tab of ['Metadata', 'Connectors', 'Schematic']) {
+        await editor.getByRole('tab', { name: tab, exact: true }).click()
+        await scan(`Parts editor › ${tab}`)
+    }
+
+    await editor.getByRole('button', { name: 'Cancel' }).click()
+    await app.shoot('ingles')
+    expect(found).toEqual([])
+
+    await app.open()
+    await expect(menus.getByRole('button', { name: 'File', exact: true })).toBeVisible()
+    await page.keyboard.press('Control+,')
+    await page.getByRole('dialog', { name: 'Preferences' }).getByRole('tablist', { name: 'Language' }).getByRole('tab', { name: 'Português (Brasil)' }).click()
+    await expect(page.getByRole('navigation', { name: 'Menu principal' }).getByRole('button', { name: 'Arquivo', exact: true })).toBeVisible()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pt-BR')
 })

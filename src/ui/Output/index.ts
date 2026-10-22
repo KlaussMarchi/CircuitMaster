@@ -10,6 +10,7 @@ import { exportSpice } from '../../core/Spice'
 import { Pdf } from '../../core/Pdf'
 import { Scene } from '../../engine/Scene'
 import { boardProblem, download, getClipper, needsBoard, type BoardKind, type Context, type ExportKind } from '../Export'
+import { t } from '../../core/Text'
 
 type Output = [string, string | Uint8Array, string]
 
@@ -128,12 +129,12 @@ export const exportAs = async (kind: ExportKind, context: Context) => {
     const plain = SKETCH[kind]
 
     if (image && (!context.svg || !context.bounds))
-        return 'a vista está vazia'
+        return t('a vista está vazia')
 
     if (image && context.svg && context.bounds) {
         const [name, data, type] = await image(context.svg, context.bounds, `${base}_${context.view.replace('View', '')}`)
         download(name, data, type)
-        return `${name} exportado`
+        return t('{0} exportado', name)
     }
 
     const problem = board ? boardProblem(context.doc, context.library, context.selection) : null
@@ -146,18 +147,18 @@ export const exportAs = async (kind: ExportKind, context: Context) => {
         const artwork = getArtwork(context.doc, context.library, tools, new Scene(context.doc, context.library, 'pcbView'), context.selection)
 
         if (!artwork)
-            return 'a exportação para produção precisa de uma placa na vista PCB'
+            return t('a exportação para produção precisa de uma placa na vista PCB')
 
         const [name, data, type] = board(artwork, tools, context, base)
         download(name, data, type)
-        return `${name} exportado${artwork.skipped ? ` (${artwork.skipped} elementos sem suporte ignorados)` : ''}`
+        return artwork.skipped ? t('{0} exportado ({1} elementos sem suporte ignorados)', name, artwork.skipped) : t('{0} exportado', name)
     }
 
     const output = plain?.(context, base)
 
     if (!output)
-        return 'nada para exportar'
+        return t('nada para exportar')
 
     download(...output)
-    return `${output[0]} exportado`
+    return t('{0} exportado', output[0])
 }

@@ -26,6 +26,7 @@ import { Simulator } from '../Simulator'
 import { createPcbTools, getConfig, type Progress } from '../Pcb'
 import { createSaver } from '../Saver'
 import { LEVELS, type Level } from '../Modes'
+import { getTag, setWords, t, type Language } from '../../core/Text'
 import { boardProblem, download, getClipper, type ExportKind } from '../Export'
 import { PARTS, Vault } from '../Vault'
 import { Autosave, type Snapshot, type Version } from '../Autosave'
@@ -43,6 +44,7 @@ export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'pale
 export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean }
 export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
 export type Show       = { values: boolean, chart: boolean }
+export type Sheet      = { id: number, name: string, doc: Doc, saved: Doc, stored: boolean, past: Doc[], future: Doc[], viewports: Partial<Record<View, Viewport>>, view: View, selection: string[], probe: string | null, drc: Checked | null }
 export type Simulating = { enabled: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[], focus: string | null }
 
 type State = {
@@ -89,8 +91,11 @@ type State = {
     autosave: Autosave
     recovery: Version[]
     drc: Checked | null
+    sheets: Sheet[]
+    sheet: number
     hiddenLayers: string[]
     level: Level
+    language: Language
     preferences: Preferences
     tour: Level | null
     toured: Level[]
@@ -99,6 +104,7 @@ type State = {
     setup: () => Promise<void>
     open: (name: string, bytes: Uint8Array) => Promise<void>
     save: () => Promise<void>
+    saveAll: () => Promise<void>
     openSample: (file: string) => Promise<void>
     openBench: (id: string) => Promise<void>
     recover: (version: Version) => Promise<void>
@@ -133,6 +139,7 @@ type State = {
     toggleSimulation: () => void
     toggleLayer: (id: string) => void
     setLevel: (level: Level) => void
+    setLanguage: (language: Language) => Promise<void>
     setPreferences: (patch: Partial<Preferences>) => void
     setKeys: (keys: Record<string, string[]>) => void
     setDialog: (dialog: Dialog) => void
@@ -169,6 +176,8 @@ type State = {
     toggleSwitch: (modelIndex: string) => Promise<boolean>
     setSwitching: (modelIndex: string, events: Event[]) => Promise<void>
     newSketch: () => void
+    switchSheet: (id: number) => void
+    closeSheet: (id: number) => void
     addNote: () => Promise<void>
     zoom: (factor: number) => void
     setZoom: (zoom: number) => void
@@ -207,6 +216,7 @@ const MINE_KEY  = 'circuitmaster.mine'
 const BINS_KEY  = 'circuitmaster.bins'
 const SHOW_KEY  = 'circuitmaster.show'     // VALORES NAS PONTAS E PAINEL DE TABELA E GRÁFICO DA SIMULAÇÃO
 const LEVEL_KEY = 'circuitmaster.level'    // MODO DA INTERFACE: INICIANTE, MAKER OU PROFISSIONAL
+const LANG_KEY  = 'circuitmaster.language'
 const PREFS_KEY = 'circuitmaster.preferences'
 const TOUR_KEY  = 'circuitmaster.toured'    // MODOS CUJO TOUR JÁ FOI VISTO OU PULADO: CADA UM APARECE UMA VEZ SÓ
 const KEYS_KEY  = 'circuitmaster.keys'      // TECLAS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
@@ -219,6 +229,11 @@ const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SP
 const DRC_DELAY = 600    // MS ENTRE A ÚLTIMA MUDANÇA NA PCB E O DRC AUTOMÁTICO
 
 const IDLE: Simulating = { enabled: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [], focus: null }
+
+const blankSheet = (): Omit<Sheet, 'id'> => {
+    const doc = emptyDoc()
+    return { name: 'sem título', doc, saved: doc, stored: false, past: [], future: [], viewports: {}, view: START_VIEW, selection: [], probe: null, drc: null }
+}
 
 const entryOf = (part: Part): Found => ({ moduleId: part.moduleId, root: 'bundle', path: '', title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? part.views.breadboardView?.image ?? '', obsolete: false, properties: part.properties })
 
@@ -278,7 +293,7 @@ const bundleOf = async ({ doc, name, library, saver }: { doc: Doc, name: string,
     const base  = name.replace(/\.(fzz|fz)$/i, '') || 'sem-titulo'
     const files = library.getBundleFiles(Object.values(doc.instances).map(instance => instance.moduleIdRef))
     const bytes = await saver.request<Uint8Array>({ doc, name: base, files })
-    return bytes ? { base, files, bytes } : `o .fzz não foi montado (${saver.failure || 'cancelado'})`
+    return bytes ? { base, files, bytes } : t('o .fzz não foi montado ({0})', saver.failure || t('cancelado'))
 }
 
 // O QUE O SALVAMENTO AUTOMÁTICO GRAVA: O .fzz COMO O SALVAR GRAVARIA
@@ -310,7 +325,7 @@ export const useStore = create<State>((set, get) => {
             return set({ indexed: { done: status.done, total: status.total, ready: false } })
 
         if (status.type === 'ready')
-            return set({ indexed: { done: status.total, total: status.total, ready: true }, message: `${status.count} peças indexadas` })
+            return set({ indexed: { done: status.total, total: status.total, ready: true }, message: t('{0} peças indexadas', status.count) })
 
         set({ bins: status.bins })
     }
@@ -318,6 +333,25 @@ export const useStore = create<State>((set, get) => {
     const carriedOf = (selection: string[]) => {
         const { doc, library, view } = get()
         return [...new Set(selection.filter(modelIndex => doc.instances[modelIndex]?.moduleIdRef !== WIRE && !doc.instances[modelIndex]?.views[view]?.locked).flatMap(modelIndex => getCarried(doc, library, view, modelIndex)))]
+    }
+
+    // O SKETCH ATIVO GUARDADO NA SUA ABA
+    const stash = (): Sheet => {
+        const { sheet: id, name, doc, saved, stored, past, future, viewports, view, selection, probe, drc } = get()
+        return { id, name, doc, saved, stored, past, future, viewports, view, selection, probe, drc }
+    }
+
+    // ABA QUE VIRA A ATIVA: O NETLIST É REFEITO E A SIMULAÇÃO, SE LIGADA, RECOMEÇA NO SKETCH DELA
+    const activate = ({ id, ...sheet }: Sheet, sheets: Sheet[], message: string) => {
+        set({ ...sheet, ...withNetlist(sheet.doc, null), sheet: id, sheets: sheets.map(item => item.id === id ? { id, ...sheet } : item), hover: null, pasted: 0, placing: null, simulation: { ...get().simulation, result: null, error: null, playing: false, step: 0 }, message })
+    }
+
+    // SKETCH ABERTO OU NOVO NUMA ABA NOVA; A ATIVA É REUSADA SE ESTÁ VAZIA SEM MUDANÇA OU É O MESMO ARQUIVO SEM MUDANÇA
+    const place = (sheet: Omit<Sheet, 'id'>, message: string) => {
+        const { doc, saved, stored, name, sheets, sheet: active } = get()
+        const reuse = doc === saved && (stored ? name === sheet.name : !Object.keys(doc.instances).length)
+        const id    = reuse ? active : Math.max(...sheets.map(item => item.id)) + 1
+        activate({ id, ...sheet }, reuse ? sheets : [...sheets.map(item => item.id === active ? stash() : item), { id, ...sheet }], message)
     }
 
     const catalog = new Catalog(listen)
@@ -368,8 +402,11 @@ export const useStore = create<State>((set, get) => {
         autosave: new Autosave(vault, message => set({ message })),
         recovery: [],
         drc: null,
+        sheets: [{ id: 1, ...blankSheet() }],
+        sheet: 1,
         hiddenLayers: [],
         level: readStored<Level>(LEVEL_KEY, 1),
+        language: readStored<Language>(LANG_KEY, 'pt'),
         preferences: { ...PREFERENCES, ...readStored<Partial<Preferences>>(PREFS_KEY, {}) },
         keys: readStored<Record<string, string[]>>(KEYS_KEY, {}),
         tour: null,
@@ -420,22 +457,19 @@ export const useStore = create<State>((set, get) => {
                     return get().createBin(title, [...new Set([...listed, ...added])])
 
                 get().addToMine(added)
-                return set({ message: `${added.length} peças de ${name} em Meus itens` })
+                return set({ message: t('{0} peças de {1} em Meus itens', added.length, name) })
             }
 
             if (!bundle?.sketch)
-                return set({ message: `${name}: arquivo sem sketch legível` })
-
-            if (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)'))
-                return
+                return set({ message: t('{0}: arquivo sem sketch legível', name) })
 
             library.addBundle(bundle)
             const doc = fromSketch(bundle.sketch)
-            set({ message: `abrindo ${name}…` })
+            set({ message: t('abrindo {0}…', name) })
             await library.load([WIRE, ...Object.values(doc.instances).map(instance => instance.moduleIdRef)])
 
             const missing = Object.values(doc.instances).filter(instance => !library.getPart(instance.moduleIdRef)).length
-            set({ ...withNetlist(doc, null), name, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: START_VIEW, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
+            place({ name, doc, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: START_VIEW }, missing ? t('{0} peças não encontradas no acervo', missing) : t('{0} aberto', name))
         },
 
         save: async () => {
@@ -443,22 +477,44 @@ export const useStore = create<State>((set, get) => {
             const bundle   = await bundleOf(get())
 
             if (typeof bundle === 'string')
-                return set({ message: `não salvou: ${bundle}` })
+                return set({ message: t('não salvou: {0}', bundle) })
 
             download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
             set({ saved: doc, stored: true })
 
             // A VERSÃO AUTOMÁTICA VIRA "SALVA" JÁ, COM OS MESMOS BYTES: FECHAR A ABA LOGO DEPOIS DE SALVAR NÃO OFERECE RECUPERAR O QUE FOI SALVO
-            get().autosave.schedule(async () => ({ name: get().name, dirty: false, count: Object.keys(doc.instances).length, bytes: bundle.bytes }))
+            get().autosave.schedule(String(get().sheet), async () => ({ name: get().name, dirty: false, count: Object.keys(doc.instances).length, bytes: bundle.bytes }))
             await get().autosave.flush()
-            set({ message: `${bundle.base}.fzz salvo (${Object.keys(doc.instances).length} itens${bundle.files.length ? `, ${bundle.files.length} arquivos de peça embutidos` : ''})` })
+            set({ message: bundle.files.length ? t('{0}.fzz salvo ({1} itens, {2} arquivos de peça embutidos)', bundle.base, Object.keys(doc.instances).length, bundle.files.length) : t('{0}.fzz salvo ({1} itens)', bundle.base, Object.keys(doc.instances).length) })
+        },
+
+        // SALVAR TODOS: CADA SKETCH DAS OUTRAS ABAS COM ALTERAÇÕES BAIXA O SEU .fzz; O DA ABA ATIVA, POR ÚLTIMO
+        saveAll: async () => {
+            const { sheets, sheet, library, saver, autosave } = get()
+            const changed                                     = sheets.filter(item => item.id !== sheet && item.doc !== item.saved)
+
+            for (const item of changed) {
+                const bundle = await bundleOf({ doc: item.doc, name: item.name, library, saver })
+
+                if (typeof bundle === 'string')
+                    return set({ message: t('{0} não salvou: {1}', t(item.name), bundle) })
+
+                download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
+                autosave.schedule(String(item.id), async () => ({ name: item.name, dirty: false, count: Object.keys(item.doc.instances).length, bytes: bundle.bytes }))
+                set({ sheets: get().sheets.map(other => other.id === item.id ? { ...other, saved: item.doc, stored: true } : other) })
+            }
+
+            if (get().doc !== get().saved)
+                return get().save()
+
+            set({ message: changed.length ? t('{0} sketches salvos', changed.length) : t('nenhum sketch com alterações') })
         },
 
         openSample: async file => {
             const bytes = await fetchBytes(`/fritzing/sketches/${file}`)
 
             if (!bytes)
-                return set({ message: `${file}: não encontrado ou sem rede` })
+                return set({ message: t('{0}: não encontrado ou sem rede', file) })
 
             await get().open(file.split('/').pop() ?? file, bytes)
         },
@@ -467,30 +523,33 @@ export const useStore = create<State>((set, get) => {
         openBench: async id => {
             const bench = BENCHES.find(item => item.id === id)
 
-            if (!bench || (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)')))
+            if (!bench)
                 return
 
             await get().library.load([...BENCH_PARTS, WIRE])
             const doc = buildBench(get().library, bench)
-            set({ ...withNetlist(doc, null), name: bench.title, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: 'schematicView', message: bench.summary, simulation: { ...IDLE, enabled: true } })
+            place({ name: bench.title, doc, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: 'schematicView' }, t(bench.summary))
+            set({ simulation: { ...IDLE, enabled: true } })
             get().setShow({ chart: true })
         },
 
-        // VERSÃO SALVA SOZINHA ABERTA COMO DOCUMENTO NÃO SALVO; AS SESSÕES MORTAS OFERECIDAS DEIXAM DE SER OFERECIDAS
+        // VERSÃO SALVA SOZINHA ABERTA NUMA ABA COMO DOCUMENTO NÃO SALVO; AQUELE SKETCH DEIXA DE SER OFERECIDO E OS OUTROS DA SESSÃO MORTA SEGUEM NA LISTA
         recover: async version => {
             const { recovery, autosave, dialog } = get()
-            set({ dialog: null })
+            const same                           = (other: Version) => other.session === version.session && other.sheet === version.sheet
+            const rest                           = dialog === 'recovery' ? recovery.filter(other => !same(other)) : []
+            set({ dialog: rest.length ? dialog : null })
             await get().open(version.name, version.bytes)
-            set({ saved: emptyDoc(), stored: false, recovery: [], message: `${version.name} recuperado da versão de ${new Date(version.time).toLocaleString('pt-BR')}; salve para guardar o arquivo` })
+            set({ saved: emptyDoc(), stored: false, recovery: rest, message: t('{0} recuperado da versão de {1}; salve para guardar o arquivo', t(version.name), new Date(version.time).toLocaleString(getTag())) })
 
             if (dialog === 'recovery')
-                await autosave.dismiss(recovery)
+                await autosave.dismiss(recovery.filter(same))
         },
 
         dismissRecovery: async () => {
             const { recovery, autosave } = get()
             const failed                 = await autosave.dismiss(recovery)
-            set({ recovery: [], dialog: null, message: failed ? `versões não descartadas: ${failed}` : 'versões não salvas descartadas' })
+            set({ recovery: [], dialog: null, message: failed ? t('versões não descartadas: {0}', failed) : t('versões não salvas descartadas') })
         },
 
         showVersions: async () => set({ recovery: await get().autosave.getVersions(), dialog: 'versions' }),
@@ -588,7 +647,7 @@ export const useStore = create<State>((set, get) => {
             const next    = values.reduce((current, [name, value]) => setProperty(current, index, name, value), made)
 
             if (made === doc)
-                return set({ message: `${moduleId}: peça não encontrada` })
+                return set({ message: t('{0}: peça não encontrada', moduleId) })
 
             get().commit(VIEWS.filter(isAligned).reduce((current, other) => alignToGrid(current, library, other, [index], gridOf(other)), next))
             set({ selection: [index] })
@@ -611,16 +670,16 @@ export const useStore = create<State>((set, get) => {
                 return
 
             get().commit(view === 'pcbView' && get().side === 'bottom' ? made.indexes.reduce(setTraceSide, made.doc) : made.doc)
-            set({ selection: made.indexes, message: `fio com ${made.indexes.length} ${made.indexes.length > 1 ? 'trechos' : 'trecho'}${end ? '' : ', ponta solta'}` })
+            set({ selection: made.indexes, message: t(made.indexes.length > 1 ? (end ? 'fio com {0} trechos' : 'fio com {0} trechos, ponta solta') : (end ? 'fio com {0} trecho' : 'fio com {0} trecho, ponta solta'), made.indexes.length) })
         },
 
-        setTool: tool => set({ tool, message: tool === 'select' ? '' : tool === 'area' ? 'Seletor: arraste no quadro para selecionar várias peças (Esc volta)' : `${TOOL_NAMES[tool]}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)` }),
+        setTool: tool => set({ tool, message: tool === 'select' ? '' : tool === 'area' ? t('Seletor: arraste no quadro para selecionar várias peças (Esc volta)') : t('{0}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)', t(TOOL_NAMES[tool])) }),
 
         setPanel: panel => set({ panel }),
 
         setLeft: left => set({ left }),
 
-        setSide: side => set({ side, message: side === 'both' ? '' : `trilhas novas na face ${side === 'top' ? 'de cima (vermelha)' : 'de baixo (azul)'}; a outra face fica esmaecida` }),
+        setSide: side => set({ side, message: side === 'both' ? '' : t(side === 'top' ? 'trilhas novas na face de cima (vermelha); a outra face fica esmaecida' : 'trilhas novas na face de baixo (azul); a outra face fica esmaecida') }),
 
         // PLACA RETANGULAR DE DUAS FACES EM VOLTA DAS PEÇAS COM COBRE; INSTRUMENTOS DE BANCADA (FONTES, MULTÍMETRO, OSCILOSCÓPIO) VÃO PARA UMA COLUNA À ESQUERDA DELA; DEPOIS O AUTOROUTER (SPEC 03 §8.3.1)
         makeBoard: async () => {
@@ -632,7 +691,7 @@ export const useStore = create<State>((set, get) => {
             const bounds  = unionBoxes(shown.filter(instance => !bench(instance)).map(instance => scene.getBounds(instance.modelIndex)))
 
             if (!bounds)
-                return set({ message: 'coloque peças antes de criar a placa' })
+                return set({ message: t('coloque peças antes de criar a placa') })
 
             const index   = String(doc.nextIndex)
             const size    = [bounds[2] - bounds[0] + 2 * BOARD_MARGIN, bounds[3] - bounds[1] + 2 * BOARD_MARGIN].map(px => (px / PX_PER_INCH * 25.4).toFixed(2))
@@ -646,7 +705,7 @@ export const useStore = create<State>((set, get) => {
                 return box ? { doc: moveInstances(current.doc, library, 'pcbView', [instance.modelIndex], bounds[0] - 2 * BOARD_MARGIN - (box[2] - box[0]) - box[0], top - box[1], false), y: top + box[3] - box[1] + BOARD_MARGIN } : current
             }, { doc: placed, y: bounds[1] }).doc
             get().commit(aside)
-            set({ selection: [], view: 'pcbView', viewports: { ...get().viewports, pcbView: undefined }, message: 'placa criada em volta das peças; roteando…' })
+            set({ selection: [], view: 'pcbView', viewports: { ...get().viewports, pcbView: undefined }, message: t('placa criada em volta das peças; roteando…') })
             await get().autoroute()
         },
 
@@ -657,7 +716,7 @@ export const useStore = create<State>((set, get) => {
             set({ theme })
         },
 
-        setPlacing: placing => set({ placing, tool: 'select', message: placing ? 'clique no quadro para posicionar a peça (Shift mantém, Esc cancela)' : '' }),
+        setPlacing: placing => set({ placing, tool: 'select', message: placing ? t('clique no quadro para posicionar a peça (Shift mantém, Esc cancela)') : '' }),
 
         toggleLayer: id => set({ hiddenLayers: get().hiddenLayers.includes(id) ? get().hiddenLayers.filter(other => other !== id) : [...get().hiddenLayers, id] }),
 
@@ -665,10 +724,10 @@ export const useStore = create<State>((set, get) => {
 
         setPreferences: patch => {
             const preferences = { ...get().preferences, ...patch }
-            set({ preferences, message: writeStored(PREFS_KEY, preferences) ?? 'preferências gravadas neste navegador' })
+            set({ preferences, message: writeStored(PREFS_KEY, preferences) ?? t('preferências gravadas neste navegador') })
         },
 
-        setKeys: keys => set({ keys, message: writeStored(KEYS_KEY, keys) ?? 'atalhos gravados neste navegador' }),
+        setKeys: keys => set({ keys, message: writeStored(KEYS_KEY, keys) ?? t('atalhos gravados neste navegador') }),
 
         setDialog: dialog => set({ dialog }),
 
@@ -681,9 +740,17 @@ export const useStore = create<State>((set, get) => {
             set({ tour: null, toured: seen })
         },
 
+        // O DICIONÁRIO DO INGLÊS SÓ CARREGA QUANDO ESCOLHIDO; TROCAR A LÍNGUA REMONTA A INTERFACE (ui/App) COM OS TEXTOS NOVOS
+        setLanguage: async language => {
+            setWords(language, language === 'en' ? (await import('../../core/Text/en')).EN : {})
+            document.documentElement.lang = getTag()
+            writeStored(LANG_KEY, JSON.stringify(language))
+            set({ language })
+        },
+
         setLevel: level => {
             writeStored(LEVEL_KEY, level)
-            set({ level, tour: get().toured.includes(level) ? get().tour : level, message: `modo ${LEVELS.find(([id]) => id === level)?.[1]}: ${LEVELS.find(([id]) => id === level)?.[2]}; a paleta (Ctrl+K) acha tudo em qualquer modo` })
+            set({ level, tour: get().toured.includes(level) ? get().tour : level, message: t('modo {0}: {1}; a paleta (Ctrl+K) acha tudo em qualquer modo', t(LEVELS.find(([id]) => id === level)?.[1] ?? ''), t(LEVELS.find(([id]) => id === level)?.[2] ?? '')) })
         },
 
         // TESTE DO TRANSITÓRIO NO PROJETO; O MANUAL COMEÇA DA JANELA QUE ESTAVA VALENDO (SPEC 04 §5.5)
@@ -840,7 +907,7 @@ export const useStore = create<State>((set, get) => {
             const other  = pickSwap(family, part.properties, 'switch status', status === 'Pressed' ? 'Released' : 'Pressed')
 
             if (!other)
-                return set({ message: `${instance.title}: o acervo não tem a outra posição desta chave` })
+                return set({ message: t('{0}: o acervo não tem a outra posição desta chave', instance.title) })
 
             await library.load([other.moduleId])
             const plans = getSwitching(get().doc)
@@ -851,11 +918,37 @@ export const useStore = create<State>((set, get) => {
         },
 
         newSketch: () => {
-            if (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)'))
+            place(blankSheet(), t('sketch novo'))
+        },
+
+        switchSheet: id => {
+            const { sheets, sheet } = get()
+            const target            = sheets.find(item => item.id === id)
+
+            if (target && id !== sheet)
+                activate(target, sheets.map(item => item.id === sheet ? stash() : item), t(target.name))
+        },
+
+        // FECHAR A ABA: COM ALTERAÇÕES, PERGUNTA ANTES; A ÚLTIMA ABA FECHADA DÁ LUGAR A UM SKETCH NOVO
+        closeSheet: id => {
+            const { sheets, sheet, autosave } = get()
+            const index                       = sheets.findIndex(item => item.id === id)
+            const target                      = id === sheet ? stash() : sheets[index]
+            const rest                        = sheets.filter(item => item.id !== id)
+            const fresh                       = { id: id + 1, ...blankSheet() }
+
+            if (!target || (target.doc !== target.saved && !window.confirm(t('Fechar {0} sem salvar? (as alterações ficam nas versões salvas automaticamente)', t(target.name)))))
                 return
 
-            const doc = emptyDoc()
-            set({ ...withNetlist(doc, null), name: 'sem título', saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: START_VIEW, message: 'sketch novo' })
+            void autosave.close(String(id))
+
+            if (!rest.length)
+                return activate(fresh, [fresh], t('{0} fechado', t(target.name)))
+
+            if (id === sheet)
+                return activate(rest[Math.max(0, index - 1)], rest, t('{0} fechado', t(target.name)))
+
+            set({ sheets: rest, message: t('{0} fechado', t(target.name)) })
         },
 
         addNote: async () => {
@@ -891,7 +984,7 @@ export const useStore = create<State>((set, get) => {
 
         setPcbSettings: values => {
             const { doc } = get()
-            set({ doc: { ...doc, settings: { ...doc.settings, pcbView: { ...doc.settings.pcbView, ...values } } }, message: 'ajustes de roteamento gravados no sketch' })
+            set({ doc: { ...doc, settings: { ...doc.settings, pcbView: { ...doc.settings.pcbView, ...values } } }, message: t('ajustes de roteamento gravados no sketch') })
         },
 
         align: mode => {
@@ -908,7 +1001,7 @@ export const useStore = create<State>((set, get) => {
         exportFile: async kind => {
             const { doc, library, netlist, view, name, selection } = get()
             const svg = document.getElementById('canvas') as SVGSVGElement | null
-            set({ message: 'exportando…' })
+            set({ message: t('exportando…') })
 
             try {
                 set({ message: await (await import('../Output')).exportAs(kind, { doc, library, netlist, view, name, svg, bounds: getDrawing(new Scene(doc, library, view), null).bounds, selection }) })
@@ -916,7 +1009,7 @@ export const useStore = create<State>((set, get) => {
                 if (!(error instanceof Error))
                     throw error
 
-                set({ message: `falha ao exportar: ${error.message}` })
+                set({ message: t('falha ao exportar: {0}', error.message) })
             }
         },
 
@@ -932,10 +1025,10 @@ export const useStore = create<State>((set, get) => {
             const groups              = artwork.conductors.map(getGroupOf(doc, board.netlist))
 
             if (!quiet)
-                set({ message: 'verificando regras de projeto…' })
+                set({ message: t('verificando regras de projeto…') })
 
             const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, keepout: config.keepout })
-            const message    = !violations ? stopped('DRC', get().pcb.failure) : violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil`
+            const message    = !violations ? stopped('DRC', get().pcb.failure) : violations.length ? t('DRC: {0} problemas com folga de {1} mil', violations.length, config.keepout.toFixed(1)) : t('DRC: nenhum problema com folga de {0} mil', config.keepout.toFixed(1))
 
             if (get().doc !== doc)
                 return
@@ -958,7 +1051,7 @@ export const useStore = create<State>((set, get) => {
 
             const grounded  = artwork.conductors.map(conductor => conductor.key !== null && netlist.index.has(conductor.key) && ground.has(netlist.nets.pcbView?.[netlist.index.get(conductor.key) ?? 0] ?? -1))
             const faces     = artwork.board.layers > 1 ? ['bottom', 'top'] as const : ['bottom'] as const
-            set({ message: mode === 'ground' ? 'preenchendo com terra…' : 'preenchendo com cobre…' })
+            set({ message: mode === 'ground' ? t('preenchendo com terra…') : t('preenchendo com cobre…') })
 
             const fragments = await get().pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded, faces: [...faces], mode, keepout: config.fillKeepout })
 
@@ -967,7 +1060,7 @@ export const useStore = create<State>((set, get) => {
 
             await get().library.load([FILL])
             get().commit(createFills(cleared, fragments, artwork.board.frame, mode))
-            set({ message: `${fragments.length} áreas de cobre criadas` })
+            set({ message: t('{0} áreas de cobre criadas', fragments.length) })
         },
 
         // PEÇA "COPPER FILL" SOLTA NA PLACA: SÓ O FRAGMENTO DO PREENCHIMENTO DA FACE DE CIMA (DE BAIXO EM PLACA DE UMA FACE) QUE CONTÉM O PONTO, fillType individual (SPEC 03 §6.1)
@@ -987,11 +1080,11 @@ export const useStore = create<State>((set, get) => {
                 return set({ message: stopped('preenchimento', get().pcb.failure) })
 
             if (!hit)
-                return set({ message: 'solte o preenchimento numa área livre da placa' })
+                return set({ message: t('solte o preenchimento numa área livre da placa') })
 
             const { doc } = get()
             get().commit(createFills(doc, [hit], artwork.board.frame, 'individual'))
-            set({ selection: [String(doc.nextIndex)], message: 'preenchimento criado na área do ponto' })
+            set({ selection: [String(doc.nextIndex)], message: t('preenchimento criado na área do ponto') })
         },
 
         removeFills: () => {
@@ -999,17 +1092,17 @@ export const useStore = create<State>((set, get) => {
             const problem                     = boardProblem(doc, library, selection)
 
             if (problem)
-                return set({ message: problem })
+                return set({ message: t(problem) })
 
             get().commit(removeFills(doc, library, selection))
-            set({ message: 'preenchimentos removidos' })
+            set({ message: t('preenchimentos removidos') })
         },
 
         autoroute: async () => {
             const { doc, library, view } = get()
 
             if (view === 'breadboardView')
-                return set({ message: 'o autorouter roteia o esquemático e a PCB' })
+                return set({ message: t('o autorouter roteia o esquemático e a PCB') })
 
             if (view === 'schematicView')
                 return get().autorouteSheet()
@@ -1029,7 +1122,7 @@ export const useStore = create<State>((set, get) => {
                 const point = scene.getTerminal(key)
                 return point ? [[key, point]] : []
             }))
-            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: 'autoroteando…' })
+            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: t('autoroteando…') })
 
             const routed = await get().pcb.request<{ plan: Plan, connected: number, requested: number, vias: number }>({ type: 'route', artwork, keys, terminals, config }, progress => set({ routing: progress }))
             set({ routing: null })
@@ -1038,7 +1131,7 @@ export const useStore = create<State>((set, get) => {
                 return set({ message: stopped('autorouter', get().pcb.failure) })
 
             get().commit(applyPlan(cleared, library, 'pcbView', routed.plan, config.traceWidth, config.holeSize), doc)
-            set({ message: `autorouter: ${routed.connected} de ${routed.requested} ligações, ${routed.vias} vias` })
+            set({ message: t('autorouter: {0} de {1} ligações, {2} vias', routed.connected, routed.requested, routed.vias) })
         },
 
         autorouteSheet: async () => {
@@ -1050,12 +1143,12 @@ export const useStore = create<State>((set, get) => {
             const netlist = wasm ? new Netlist(cleared, library, wasm) : null
 
             if (!netlist || !sheet.pins.length)
-                return set({ message: 'nada para rotear no esquemático' })
+                return set({ message: t('nada para rotear no esquemático') })
 
             netlist.update()
             const label  = (labels: Uint32Array | undefined, key: string) => netlist.index.has(key) ? labels?.[netlist.index.get(key) ?? 0] ?? null : null
             const config = getConfig(doc.settings.pcbView)
-            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: 'autoroteando o esquemático…' })
+            set({ routing: { cycle: 0, cycles: config.cycles, connected: 0, requested: 0 }, message: t('autoroteando o esquemático…') })
 
             const attempt = (step: number) => {
                 const { grid, frame } = buildSheetGrid(sheet, key => label(netlist.nets.schematicView, key), key => label(netlist.routed.schematicView, key), step)
@@ -1071,7 +1164,7 @@ export const useStore = create<State>((set, get) => {
                 return set({ message: stopped('autorouter do esquemático', get().pcb.failure) })
 
             get().commit(applyPlan(cleared, library, 'schematicView', routed.plan, WIRE_STYLE.schematicView.mils, config.holeSize), doc)
-            set({ message: `autorouter do esquemático: ${routed.connected} de ${routed.requested} ligações` })
+            set({ message: t('autorouter do esquemático: {0} de {1} ligações', routed.connected, routed.requested) })
         },
 
         cancelRouting: () => {
@@ -1111,7 +1204,7 @@ export const useStore = create<State>((set, get) => {
             const keep     = same && previous && simulation.step > 0 && simulation.step < previous.steps - 1 ? simulation.step : 0
 
             if (!circuit.simulated.length)
-                return get().setSimulation({ result: new Simulation(doc, library, circuit, {}), error: 'nenhuma peça simulável ligada ao circuito', busy: false, playing: false })
+                return get().setSimulation({ result: new Simulation(doc, library, circuit, {}), error: t('nenhuma peça simulável ligada ao circuito'), busy: false, playing: false })
 
             get().setSimulation({ busy: true })
             const deck    = keep && previous ? resumeCircuit(circuit, getInitial(previous, circuit, keep), keep).deck : circuit.deck
@@ -1142,19 +1235,19 @@ export const useStore = create<State>((set, get) => {
             const { mine, library } = get()
             const title             = 'Meus itens'
             download(`${title}.fzbz`, exportBinBundle(title, mine, library.getBundleFiles(mine)), 'application/zip')
-            set({ message: `${title}.fzbz exportado com ${mine.length} peças` })
+            set({ message: t('{0}.fzbz exportado com {1} peças', title, mine.length) })
         },
 
         addToMine: moduleIds => {
             const mine   = [...new Set([...get().mine, ...moduleIds])]
             const failed = writeStored(MINE_KEY, mine)
-            set({ mine, ...failed ? { message: `bin não gravado: ${failed}` } : {} })
+            set({ mine, ...failed ? { message: t('bin não gravado: {0}', failed) } : {} })
         },
 
         createBin: (title, moduleIds) => {
             const userBins = [...get().userBins, { title: title.trim() || `Bin ${get().userBins.length + 1}`, moduleIds: [...new Set(moduleIds)] }]
             const failed   = writeStored(BINS_KEY, userBins)
-            set({ userBins, message: failed ? `bin não gravado: ${failed}` : `bin ${userBins[userBins.length - 1].title} com ${moduleIds.length} peças` })
+            set({ userBins, message: failed ? t('bin não gravado: {0}', failed) : t('bin {0} com {1} peças', userBins[userBins.length - 1].title, moduleIds.length) })
         },
 
         renameBin: (index, title) => {
@@ -1172,7 +1265,7 @@ export const useStore = create<State>((set, get) => {
         addToBin: (index, moduleIds) => {
             const userBins = get().userBins.map((bin, i) => i === index ? { ...bin, moduleIds: [...new Set([...bin.moduleIds, ...moduleIds])] } : bin)
             const failed   = writeStored(BINS_KEY, userBins)
-            set({ userBins, message: failed ? `bin não gravado: ${failed}` : `${moduleIds.length} peça(s) em ${userBins[index]?.title}` })
+            set({ userBins, message: failed ? t('bin não gravado: {0}', failed) : t('{0} peça(s) em {1}', moduleIds.length, userBins[index]?.title ?? '') })
         },
 
         exportBin: index => {
@@ -1183,7 +1276,7 @@ export const useStore = create<State>((set, get) => {
                 return
 
             download(`${bin.title}.fzbz`, exportBinBundle(bin.title, bin.moduleIds, library.getBundleFiles(bin.moduleIds)), 'application/zip')
-            set({ message: `${bin.title}.fzbz exportado com ${bin.moduleIds.length} peças` })
+            set({ message: t('{0}.fzbz exportado com {1} peças', bin.title, bin.moduleIds.length) })
         },
 
         // GUARDA NO NAVEGADOR OS ARQUIVOS DE PEÇAS DE PACOTE, PARA MEUS ITENS E OS BINS VOLTAREM NA PRÓXIMA SESSÃO (SPEC 01 §8A.6)
@@ -1191,7 +1284,7 @@ export const useStore = create<State>((set, get) => {
             const failed = await get().vault.save(PARTS, files.map(file => [file.name, file]))
 
             if (failed)
-                set({ message: `peças não guardadas no navegador (${failed}); continuam nesta sessão` })
+                set({ message: t('peças não guardadas no navegador ({0}); continuam nesta sessão', failed) })
         },
 
         editPart: modelIndex => {
@@ -1199,7 +1292,7 @@ export const useStore = create<State>((set, get) => {
             const part             = library.getPart(doc.instances[modelIndex ?? '']?.moduleIdRef ?? '')
 
             if (modelIndex && !isEditable(part))
-                return set({ message: 'esta peça não abre no editor de peças' })
+                return set({ message: t('esta peça não abre no editor de peças') })
 
             set({ editing: modelIndex })
         },
@@ -1212,7 +1305,7 @@ export const useStore = create<State>((set, get) => {
             const part        = library.getPart(moduleId ?? '')
 
             if (!part)
-                return set({ message: 'a peça gravada não carregou' })
+                return set({ message: t('a peça gravada não carregou') })
 
             get().keepParts(files)
             get().addToMine([part.moduleId])
@@ -1221,13 +1314,13 @@ export const useStore = create<State>((set, get) => {
             if (replace)
                 await get().swap(replace, part.moduleId)
 
-            set({ message: `${part.title} gravada em Meus itens${replace ? ' e trocada no sketch' : ''}` })
+            set({ message: t(replace ? '{0} gravada em Meus itens e trocada no sketch' : '{0} gravada em Meus itens', part.title) })
         }
     }
 })
 
 // PEDIDO AO WORKER QUE VOLTOU SEM RESULTADO: CANCELADO PELO USUÁRIO OU A CAUSA DA FALHA, COM A SAÍDA
-const stopped = (task: string, failure: string) => failure ? `${task}: ${failure}; tente de novo` : `${task} cancelado`
+const stopped = (task: string, failure: string) => failure ? t('{0}: {1}; tente de novo', t(task), failure) : t('{0} cancelado', t(task))
 
 const GROUNDED = new Set(['gnd', 'vss', 'ground'])
 
@@ -1260,7 +1353,7 @@ const pcbBoard = async ({ doc, library, wasm, selection }: { doc: Doc, library: 
     const artwork = wasm && !problem ? getArtwork(doc, library, await getClipper(), new Scene(doc, library, 'pcbView'), selection) : null
 
     if (!wasm || !artwork)
-        return problem ?? 'é preciso uma placa na vista PCB'
+        return problem ?? t('é preciso uma placa na vista PCB')
 
     const netlist = new Netlist(doc, library, wasm)
     netlist.update()
@@ -1275,20 +1368,20 @@ const getGroundNets = (doc: Doc, library: Library, netlist: Netlist) => {
     const nets      = new Set((seeds.length ? seeds : named).filter(key => netlist.index.has(key)).map(netOf))
 
     if (!nets.size)
-        return 'nenhum conector de terra: marque uma semente no menu de um conector'
+        return t('nenhum conector de terra: marque uma semente no menu de um conector')
 
     if (!seeds.length && nets.size > 1)
-        return 'há mais de uma net de terra: marque as sementes no menu de um conector'
+        return t('há mais de uma net de terra: marque as sementes no menu de um conector')
 
     return nets
 }
 
 const signature = (doc: Doc) => [...Object.values(doc.instances).filter(instance => instance.moduleIdRef !== WIRE).map(instance => `${instance.modelIndex}:${instance.moduleIdRef}:${instance.title}:${JSON.stringify(instance.properties)}`), ...doc.probes.map(probe => `${probe.id}:${probe.kind}:${probe.key}:${probe.flip}`), JSON.stringify(doc.projectProperties)].join('|')
 
-// MUDANÇA DO DOCUMENTO, DO NOME OU DO ESTADO SALVO AGENDA O SALVAMENTO AUTOMÁTICO; A FOTO É TIRADA NA HORA DE GRAVAR
+// MUDANÇA DO DOCUMENTO, DO NOME OU DO ESTADO SALVO AGENDA O SALVAMENTO AUTOMÁTICO DO SKETCH DAQUELA ABA; O .fzz É MONTADO NA HORA DE GRAVAR
 useStore.subscribe((state, previous) => {
     if (state.ready && (state.doc !== previous.doc || state.saved !== previous.saved || state.name !== previous.name))
-        state.autosave.schedule(() => snapshotOf(useStore.getState()))
+        state.autosave.schedule(String(state.sheet), () => snapshotOf(state))
 })
 
 let pending: ReturnType<typeof setTimeout> | undefined

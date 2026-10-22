@@ -5,13 +5,14 @@ import { Icon } from '../Icon'
 import { Kv } from '../Inspector'
 import { needsBoard, type ExportKind } from '../Export'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const GRID_SIZES: Record<string, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }
 const EXPORTS: [string, ExportKind][] = [['PNG', 'png'], ['SVG', 'svg'], ['PDF', 'pdf'], ['Netlist SPICE', 'spice'], ['Lista de materiais', 'bomHtml'], ['Para produção', 'production']]
 const BOARDS  = ['board', 'resizableBoard']
 
 const Check = ({ label, checked, change, hint }: { label: string, checked: boolean, change: (checked: boolean) => void, hint?: string }) => (
-    <label className="checkrow" title={hint}><input type="checkbox" checked={checked} onChange={event => change(event.target.checked)} />{label}</label>
+    <label className="checkrow" title={hint && t(hint)}><input type="checkbox" checked={checked} onChange={event => change(event.target.checked)} />{t(label)}</label>
 )
 
 // ABA DE DOCUMENTO: RESUMO DO SKETCH, AJUSTES DA VISTA CORRENTE, ARQUIVO, EXPORTAÇÃO E OS EXEMPLOS DO FRITZING
@@ -36,10 +37,10 @@ export const ProjectPanel = () => {
     return (
         <>
             <div className="ph">
-                <h2>Documento</h2>
-                <span className={`pill ${changed ? 'warn' : 'neutral'}`}>{changed ? 'Não salvo' : stored ? 'Salvo' : 'Novo'}</span>
+                <h2>{t('Documento')}</h2>
+                <span className={`pill ${changed ? 'warn' : 'neutral'}`}>{changed ? t('Não salvo') : stored ? t('Salvo') : t('Novo')}</span>
             </div>
-            <p className="sub" style={{ overflowWrap: 'anywhere' }}>{name}</p>
+            <p className="sub" style={{ overflowWrap: 'anywhere' }}>{t(name)}</p>
             <div className="sec">
                 <Kv label="Peças" value={String(instances.length - wires)} />
                 <Kv label="Fios e trilhas" value={String(wires)} />
@@ -48,25 +49,25 @@ export const ProjectPanel = () => {
                 <Kv label="Formato" value={`Fritzing ${doc.fritzingVersion || '1.0.8'}`} />
             </div>
             <div className="sec">
-                <h3>Arquivo</h3>
+                <h3>{t('Arquivo')}</h3>
                 <div className="bin-actions">
-                    <button className="btn sm" onClick={newSketch}><Icon name="file" />Novo</button>
-                    <button className="btn sm" onClick={() => document.getElementById('open-file')?.click()}><Icon name="open" />Abrir</button>
-                    <button className="btn sm" onClick={save}><Icon name="save" />Salvar .fzz</button>
+                    <button className="btn sm" onClick={newSketch}><Icon name="file" />{t('Novo')}</button>
+                    <button className="btn sm" onClick={() => document.getElementById('open-file')?.click()}><Icon name="open" />{t('Abrir')}</button>
+                    <button className="btn sm" onClick={save}><Icon name="save" />{t('Salvar .fzz')}</button>
                 </div>
             </div>
             <div className="sec">
-                <h3>Exportar</h3>
-                <div className="bin-actions">{EXPORTS.map(([label, kind]) => <button key={kind} className="btn sm" disabled={needsBoard(kind) && !board} title={needsBoard(kind) && !board ? 'precisa de uma placa na PCB' : undefined} onClick={() => void exportFile(kind)}>{label}</button>)}</div>
-                <p className="sub" style={{ marginTop: 6 }}>Mais formatos em Arquivo › Exportar.</p>
+                <h3>{t('Exportar')}</h3>
+                <div className="bin-actions">{EXPORTS.map(([label, kind]) => <button key={kind} className="btn sm" disabled={needsBoard(kind) && !board} title={needsBoard(kind) && !board ? t('precisa de uma placa na PCB') : undefined} onClick={() => void exportFile(kind)}>{t(label)}</button>)}</div>
+                <p className="sub" style={{ marginTop: 6 }}>{t('Mais formatos em Arquivo › Exportar.')}</p>
             </div>
             <div className="sec">
-                <h3>Vista: {VIEW_LABELS[view]}</h3>
+                <h3>{t('Vista: {0}', t(VIEW_LABELS[view]))}</h3>
                 <Check label="Mostrar grade" checked={settings.showGrid !== '0'} change={checked => setViewSetting('showGrid', checked ? '1' : '0')} />
                 <Check label="Alinhar à grade" checked={settings.alignToGrid !== '0'} change={checked => setViewSetting('alignToGrid', checked ? '1' : '0')} hint="peças com o primeiro terminal na grade; dobras e pontas de fio na grade" />
                 {view !== 'pcbView' && <Check label="Fios ortogonais (90°)" checked={settings.orthogonalWires !== '0'} change={checked => setViewSetting('orthogonalWires', checked ? '1' : '0')} hint="fios novos em trechos horizontais e verticais, que continuam retos ao mover peças" />}
                 <div className="field">
-                    <label>Grade</label>
+                    <label>{t('Grade')}</label>
                     <div className="in">
                         <select value={settings.gridSize ?? GRID_SIZES[view][0]} onChange={event => setViewSetting('gridSize', event.target.value)}>
                             {[...new Set([settings.gridSize ?? GRID_SIZES[view][0], ...GRID_SIZES[view]])].map(size => <option key={size} value={size}>{size}</option>)}
@@ -76,17 +77,17 @@ export const ProjectPanel = () => {
                 </div>
             </div>
             <div className="sec">
-                <h3>Exemplos <span className="num">{samples.length}</span></h3>
-                <label className="search"><Icon name="search" /><input type="search" placeholder="Buscar exemplo" aria-label="Buscar exemplo" value={text} onChange={event => setText(event.target.value)} /></label>
+                <h3>{t('Exemplos')} <span className="num">{samples.length}</span></h3>
+                <label className="search"><Icon name="search" /><input type="search" placeholder={t('Buscar exemplo')} aria-label={t('Buscar exemplo')} value={text} onChange={event => setText(event.target.value)} /></label>
                 {folders.map(folder => (
                     <div key={folder}>
-                        <p className="h3">{folder || 'Geral'}</p>
+                        <p className="h3">{folder || t('Geral')}</p>
                         <ul className="list">
                             {found.filter(file => file.split('/').slice(0, -1).join(' / ') === folder).map(file => <li key={file}><button className="row-btn" title={file} onClick={() => void openSample(file)}><span className="name grow">{file.split('/').pop()?.replace(/\.fzz$/, '')}</span></button></li>)}
                         </ul>
                     </div>
                 ))}
-                {text && !found.length && <div className="empty">Nenhum exemplo com “{text}”.</div>}
+                {text && !found.length && <div className="empty">{t('Nenhum exemplo com “{0}”.', text)}</div>}
             </div>
         </>
     )

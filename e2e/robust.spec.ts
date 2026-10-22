@@ -135,6 +135,24 @@ test('Duas abas no mesmo projeto: cada uma guarda a sua versão e a viva não é
     await second.page.close()
 })
 
+test('Dois sketches abertos na mesma aba: recarregar oferece os dois, abrir um mantém o outro na lista e cada um volta na sua aba', async ({ app, page }) => {
+    await app.place('Resistor', [-350, -150])
+    await app.menu('Arquivo', 'Novo')
+    await app.place('Capacitor', [350, 150])
+    await expect.poll(async () => (await saved(app)).filter(version => version.dirty).length, { timeout: 10000 }).toBe(2)
+
+    await app.open()
+    const dialog = page.getByRole('dialog', { name: 'Recuperar trabalho não salvo' })
+    await expect(dialog.locator('tbody tr')).toHaveCount(2)
+    await dialog.getByRole('button', { name: 'Abrir' }).first().click()
+    await expect(dialog.locator('tbody tr')).toHaveCount(1)
+    await dialog.getByRole('button', { name: 'Abrir' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByRole('tablist', { name: 'Sketches abertos' }).getByRole('tab')).toHaveCount(2)
+    const titles = await page.evaluate(() => [cm.store.getState().doc, ...cm.store.getState().sheets.filter(sheet => sheet.id !== cm.store.getState().sheet).map(sheet => sheet.doc)].map(doc => Object.values(doc.instances).map(instance => instance.title).join()))
+    expect(titles.sort()).toEqual(['C1', 'R1'])
+})
+
 test('Armazenamento cheio: o salvamento automático avisa uma vez e a edição continua', async ({ app, page }) => {
     await page.evaluate(() => {
         IDBObjectStore.prototype.put = () => { throw new DOMException('cheio de propósito', 'QuotaExceededError') }
@@ -165,14 +183,14 @@ test('Peças do usuário guardadas no localStorage por versões antigas passam p
     await expect(page.getByRole('region', { name: 'Peças' })).toContainText('Peça antiga')
 })
 
-test('Abrir um exemplo com alterações pergunta antes; recusar mantém o circuito', async ({ app }) => {
+test('Abrir um exemplo com alterações abre outra aba sem perguntar; o circuito fica intacto na dele', async ({ app, page }) => {
     await app.place('Resistor', [-350, -150])
     await app.menu('Arquivo', 'Exemplos', 'core', 'Button')
-    await expect.poll(() => app.asked.length).toBe(1)
-    expect(await app.count()).toBe(1)
-    app.answers.push(true)
-    await app.menu('Arquivo', 'Exemplos', 'core', 'Button')
     await expect.poll(() => app.message()).toBe('Button.fzz aberto')
+    expect(app.asked).toEqual([])
+    await page.getByRole('tablist', { name: 'Sketches abertos' }).getByRole('tab', { name: 'sem título' }).click()
+    expect(await app.count()).toBe(1)
+    await expect(page.getByRole('region', { name: 'Área de desenho' })).toContainText('Alterações não salvas')
 })
 
 const VIEW_TABS = ['Protoboard', 'Esquemático', 'PCB']

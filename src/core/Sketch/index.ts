@@ -3,6 +3,7 @@ import { childNamed, childrenNamed, childrenOf, parseXml, tagOf, textOf, type Xm
 import { VIEWS, type ViewName } from '../Layer'
 import type { Matrix, Point } from '../Geometry'
 import { PROBES_KEY, type Doc } from '../Document'
+import { t } from '../Text'
 
 export type Connect        = { modelIndex: string, connectorId: string, layer: string }
 export type Leg            = { points: Point[], beziers: (number[] | null)[] }
@@ -150,7 +151,7 @@ export const readBundle = (bytes: Uint8Array): Bundle => {
         sizes.bytes += file.originalSize
 
         if (sizes.files > MAX_FILES || sizes.bytes > MAX_BYTES)
-            throw new OversizedBundle(`o pacote passa de ${MAX_FILES} arquivos ou de ${MAX_BYTES / 1024 ** 2} MB descompactados e foi recusado`)
+            throw new OversizedBundle(t('o pacote passa de {0} arquivos ou de {1} MB descompactados e foi recusado', MAX_FILES, MAX_BYTES / 1024 ** 2))
 
         return true
     }

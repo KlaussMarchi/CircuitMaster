@@ -7,6 +7,7 @@ import { Clipper } from '../../core/Clipper'
 import { pickBoard } from '../../core/Cam'
 import { Scene } from '../../engine/Scene'
 import createClipper from '../../core/Clipper/clipper2.js'
+import { t } from '../../core/Text'
 
 // EXPORTAÇÕES QUE PRECISAM DE UMA PLACA NA VISTA PCB; A GERAÇÃO DOS ARQUIVOS (ui/Output) SÓ CARREGA QUANDO SE EXPORTA
 const BOARD_EXPORTS = ['production', 'gerber', 'etchableSvg', 'etchablePdf', 'pnp', 'ipc'] as const
@@ -33,5 +34,5 @@ export const download = (name: string, data: string | Uint8Array, type: string) 
 export const boardProblem = (doc: Doc, library: Library, selection: string[]) => {
     const { host, boards } = pickBoard(doc, library, new Scene(doc, library, 'pcbView'), selection)
     return host          ? null :
-           boards.length ? 'há mais de uma placa: selecione a placa desejada (as operações de PCB trabalham com uma placa por vez)' : 'é preciso uma placa na vista PCB'
+           boards.length ? t('há mais de uma placa: selecione a placa desejada (as operações de PCB trabalham com uma placa por vez)') : t('é preciso uma placa na vista PCB')
 }

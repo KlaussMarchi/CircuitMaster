@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Level } from '../Modes'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 type Step = [string, string, string]
 
@@ -25,7 +26,7 @@ const STEPS: Record<Level, Step[]> = {
     ],
     3: [
         ['.menubar', 'Menus completos', 'Sementes de terra, trilhas fixas, netlists e IPC aparecem nos menus; Ctrl+K acha tudo de qualquer modo.'],
-        ['.menubar', 'Preferências', 'Editar › Preferências (Ctrl+,): roda do mouse, fio curvo e a tecla de cada ação.']
+        ['.menubar', 'Preferências', 'Editar › Preferências (Ctrl+,): roda do mouse, fio curvo, idioma e a tecla de cada ação.']
     ]
 }
 
@@ -70,13 +71,13 @@ export const Tour = () => {
     return (
         <>
             <div className="tour-target" style={{ left: box.left, top: box.top, width: box.width, height: box.height }} />
-            <section className="card tour" role="dialog" aria-label={`Tour: ${step[1]}`} style={{ left, top, width: WIDTH }}>
-                <p className="num muted">{index + 1} de {steps.length}</p>
-                <h3>{step[1]}</h3>
-                <p>{step[2]}</p>
+            <section className="card tour" role="dialog" aria-label={`${t('Tour')}: ${t(step[1])}`} style={{ left, top, width: WIDTH }}>
+                <p className="num muted">{t('{0} de {1}', index + 1, steps.length)}</p>
+                <h3>{t(step[1])}</h3>
+                <p>{t(step[2])}</p>
                 <div className="acts">
-                    <button className="btn sm" onClick={finish}>Pular</button>
-                    <button className="btn primary sm" autoFocus onClick={() => index + 1 < steps.length ? setIndex(index + 1) : finish()}>{index + 1 < steps.length ? 'Próximo' : 'Começar'}</button>
+                    <button className="btn sm" onClick={finish}>{t('Pular')}</button>
+                    <button className="btn primary sm" autoFocus onClick={() => index + 1 < steps.length ? setIndex(index + 1) : finish()}>{index + 1 < steps.length ? t('Próximo') : t('Começar')}</button>
                 </div>
             </section>
         </>

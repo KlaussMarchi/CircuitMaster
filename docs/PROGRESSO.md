@@ -336,6 +336,43 @@ números). Na tomada, o mesmo teste deu 0 ms de tarefa longa no pan.
 - `npm run verify` na tomada: Vitest 135, E2E 164, desempenho todo dentro do orçamento (pan e zoom com 1.000
   footprints a 59–60 fps, 0 ms de tarefa longa; JS inicial 674 KB).
 
+### Feito (2026-10-22, continuação)
+
+- **Abas de sketches** (`ui/Stage`, `ui/Store`): Novo, Abrir, Exemplos, circuitos de teste e Recuperar abrem numa aba
+  nova (a ativa vazia e sem mudança, ou o mesmo arquivo sem mudança, é reusada); cada aba guarda documento,
+  histórico, vista, enquadramentos, seleção, ponta e DRC. Com um sketch só, o palco mostra o nome e o selo como antes.
+  Fechar (× e Arquivo › Fechar sketch) pergunta só com alterações; Arquivo › Salvar todos (com mais de uma aba).
+  Abrir nunca mais descarta: saiu a pergunta "Descartar as alterações…". Salvamento automático com uma sequência de
+  versões por aba (`ui/Autosave`, spec 06 §6); recuperar um sketch mantém os outros da sessão morta na lista.
+  Testes: `e2e/ui.spec.ts` "Abas de sketches", `e2e/robust.spec.ts` "Dois sketches abertos na mesma aba".
+- **Editor de peças no estilo da interface**: saíram as 86 classes Tailwind próprias, o `<style>` embutido com cores
+  fixas e o fundo em `conic-gradient`; usa `.modal`, `.card`, `.field`, `.in`, `.tab` (abas e ponto terminal com
+  `role="tab"`), `.pill`, `.tbl`, `.dot`; o desenho fica sobre `--well`, com o esquemático invertido no tema escuro
+  como no quadro, e as marcas em `--accent`, `--positive` e `--negative`. Fotos `build/ui/editor-*`.
+- **Inglês** (`core/Text`, `core/Text/en.ts`, 966 textos): Preferências › Idioma; a interface, as mensagens, o
+  histórico de desfazer, os cartões didáticos e a BOM exportada mudam na hora (a interface remonta com o documento
+  intacto) e a escolha fica no navegador. O dicionário só carrega quando escolhido (JS inicial 674 → 680 KB). Testes:
+  `tests/text.test.ts` (toda chave traduzida, mesmos `{0}`, nenhuma sobrando) e `e2e/ui.spec.ts` "Inglês" (percorre
+  menus e submenus, paleta, simulação, inspetor, PCB, painéis, diálogos, tour e editor de peças e reprova qualquer
+  texto em português na tela).
+- Spec `docs/specs/05-INTERFACE-SPEC.md` com o teste de clareza; README, spec 02 §10.4 e spec 06 §6 atualizados.
+
+### Bugs achados e corrigidos (continuação)
+
+11. **"Carregar SVG…" do editor quebrava em duas linhas**: a classe `.btn.block` era também o utilitário `block` do
+    Tailwind, que na camada `utilities` passa por cima de `components` (`display: block`). Virou `.btn.full`; regra
+    na spec 05 §11.
+12. **Esquemático do editor de peças ilegível no escuro**: o filtro de inversão ia no fundo junto; agora só no SVG.
+13. **Chip do quadro dizia "Transitório" com o circuito em regime** e o eixo do gráfico em regime virava pV com o ruído
+    do solver em volta de zero (escala mínima de 1 unidade abaixo de 10⁻¹²).
+
+### Pendências abertas
+
+- O aviso do React "Cannot update a component (`Rail`) while rendering…" foi reproduzido fora dos testes (script com
+  seis abas do Firefox abrindo os circuitos de teste em paralelo): sai só quando o Playwright fecha a página com a
+  simulação reproduzindo, depois do último ponto em que o fixture ouve o console; durante os testes não aparece.
+  Só no modo de desenvolvimento.
+
 ### A seguir (fase 2)
 
 1. Idioma nas preferências (junto com o i18n do item 3).

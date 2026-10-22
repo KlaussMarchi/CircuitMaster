@@ -5,6 +5,7 @@ import { setProperty } from '../../engine/Edit'
 import { Icon } from '../Icon'
 import { nameOf } from '../../core/Properties'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const MAIN    = ['resistance', 'capacitance', 'inductance', 'amplitude', 'pulsed voltage', 'voltage', 'maximum resistance']
 const PAIRED: Record<string, string> = { amplitude: 'frequency', 'pulsed voltage': 'period' }    // FONTE ALTERNADA E PULSADA MOSTRAM TAMBÉM O TEMPO
@@ -49,7 +50,7 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
 
     const commit = (next: number | null | undefined) => {
         if (next === null || next === undefined || !Number.isFinite(next) || (def.min !== null && next < def.min) || (def.max !== null && next > def.max))
-            return useStore.setState({ message: `${nameOf(def.name)}: use um valor entre ${formatSi(def.min ?? 0, def.symbol)} e ${formatSi(def.max ?? Infinity, def.symbol)}` })
+            return useStore.setState({ message: t('{0}: use um valor entre {1} e {2}', nameOf(def.name), formatSi(def.min ?? 0, def.symbol), formatSi(def.max ?? Infinity, def.symbol)) })
 
         if (next !== number)
             useStore.getState().edit(doc => setProperty(doc, modelIndex, def.name, formatSi(next, def.symbol)))
@@ -76,12 +77,12 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
         <label className="qf">
             <span>{nameOf(def.name)}</span>
             <span className="qrow">
-                <button className="icon-btn" aria-label={`Diminuir ${nameOf(def.name).toLowerCase()}`} title="Valor anterior da série (↓ ou roda)" onClick={() => step(-1)}><Icon name="chevronLeft" /></button>
+                <button className="icon-btn" aria-label={t('Diminuir {0}', nameOf(def.name).toLowerCase())} title={t('Valor anterior da série (↓ ou roda)')} onClick={() => step(-1)}><Icon name="chevronLeft" /></button>
                 <span className="in time">
                     <input ref={input} inputMode="decimal" value={text} aria-label={nameOf(def.name)} onChange={event => setText(event.target.value)} onBlur={() => text.trim() && commit(typed(text, unit))} onKeyDown={onKey} onWheel={onWheel} />
-                    <select aria-label="Unidade" value={unit} onChange={event => { setUnit(event.target.value); commit(typed(text, event.target.value)) }}>{PREFIX[def.symbol].map(prefix => <option key={prefix} value={prefix}>{prefix}{def.symbol}</option>)}</select>
+                    <select aria-label={t('Unidade')} value={unit} onChange={event => { setUnit(event.target.value); commit(typed(text, event.target.value)) }}>{PREFIX[def.symbol].map(prefix => <option key={prefix} value={prefix}>{prefix}{def.symbol}</option>)}</select>
                 </span>
-                <button className="icon-btn" aria-label={`Aumentar ${nameOf(def.name).toLowerCase()}`} title="Próximo valor da série (↑ ou roda)" onClick={() => step(1)}><Icon name="chevronRight" /></button>
+                <button className="icon-btn" aria-label={t('Aumentar {0}', nameOf(def.name).toLowerCase())} title={t('Próximo valor da série (↑ ou roda)')} onClick={() => step(1)}><Icon name="chevronRight" /></button>
             </span>
         </label>
     )

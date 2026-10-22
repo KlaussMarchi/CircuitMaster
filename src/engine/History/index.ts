@@ -1,6 +1,7 @@
 import type { Doc } from '../../core/Document'
 import type { Instance } from '../../core/Sketch'
 import { nameOf } from '../../core/Properties'
+import { t } from '../../core/Text'
 
 const WIRE  = 'WireModuleID'
 const NAMED = 3    // TÍTULOS NO RÓTULO ANTES DE "+N"
@@ -32,37 +33,37 @@ export const describeChange = (before: Doc, after: Doc) => {
     const turned   = changed.filter(([old, next]) => next.moduleIdRef !== WIRE && JSON.stringify(transforms(old)) !== JSON.stringify(transforms(next)))
 
     if (parts(added).length)
-        return `adicionou ${names(parts(added))}`
+        return t('adicionou {0}', names(parts(added)))
 
     if (parts(removed).length)
-        return `apagou ${names(parts(removed))}`
+        return t('apagou {0}', names(parts(removed)))
 
     if (wires(added).length)
-        return wires(removed).length ? 'refez fios' : 'desenhou fio'
+        return wires(removed).length ? t('refez fios') : t('desenhou fio')
 
     if (wires(removed).length)
-        return 'apagou fio'
+        return t('apagou fio')
 
     if (renamed)
-        return `renomeou ${renamed[0].title} para ${renamed[1].title}`
+        return t('renomeou {0} para {1}', renamed[0].title, renamed[1].title)
 
     if (property)
-        return `mudou ${nameOf(property[0]).toLowerCase()} de ${property[1].title}`
+        return t('mudou {0} de {1}', nameOf(property[0]).toLowerCase(), property[1].title)
 
     if (turned.length)
-        return `${turned.some(([old, next]) => mirrored(old, next)) ? 'espelhou' : 'girou'} ${names(turned.map(([, next]) => next))}`
+        return t(turned.some(([old, next]) => mirrored(old, next)) ? 'espelhou {0}' : 'girou {0}', names(turned.map(([, next]) => next)))
 
     if (moved.length)
-        return `moveu ${names(moved)}`
+        return t('moveu {0}', names(moved))
 
     if (changed.length)
-        return 'ajustou fio'
+        return t('ajustou fio')
 
     if (before.edges !== after.edges)
-        return 'mudou ligações'
+        return t('mudou ligações')
 
     if (before.probes !== after.probes)
-        return after.probes.length > before.probes.length ? 'pôs ponta de prova' : after.probes.length < before.probes.length ? 'tirou ponta de prova' : 'moveu ponta de prova'
+        return t(after.probes.length > before.probes.length ? 'pôs ponta de prova' : after.probes.length < before.probes.length ? 'tirou ponta de prova' : 'moveu ponta de prova')
 
-    return 'mudou ajustes do projeto'
+    return t('mudou ajustes do projeto')
 }

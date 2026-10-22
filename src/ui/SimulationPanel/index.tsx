@@ -11,6 +11,7 @@ import { Icon } from '../Icon'
 import { Entry, Kv, TimeField } from '../Inspector'
 import { probeColor } from '../Probe'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const DEFAULTS  = 3                          // CURVAS MOSTRADAS QUANDO NÃO HÁ PONTA NEM INSTRUMENTO
 const HEIGHT    = [220, 320, 640] as const   // PX: MÍNIMO, INICIAL E MÁXIMO DA DOCA ABERTA
@@ -36,7 +37,7 @@ const setWindow = (edge: 'start' | 'stop', seconds: number) => {
     const stop     = edge === 'stop' ? seconds : custom ? parseSi(projectValue(doc, STOP_KEY), 's') ?? 0 : tran?.t1 ?? 0
 
     if (stop <= start)
-        return useStore.setState({ message: 'o fim da janela tem de ser depois do início' })
+        return useStore.setState({ message: t('o fim da janela tem de ser depois do início') })
 
     const kept: Record<string, string> = custom ? {} : { simulator_time_step_mode: 'false', simulator_number_of_steps: String(tran?.steps ?? 500), [INITIAL_KEY]: tran?.initial ?? 'op' }
     setProjectProperties({ ...kept, [PRESET_KEY]: 'custom', [START_KEY]: formatSi(start, 's', 6), [STOP_KEY]: formatSi(stop, 's', 6) })
@@ -64,7 +65,7 @@ const STILL: Record<Mode, string> = {
 }
 
 const Seg = <T extends string>({ value, options, change, label }: { value: T, options: [T, string, string?][], change: (value: T) => void, label: string }) => (
-    <div className="seg tabs" role="tablist" aria-label={label}>{options.map(([id, text, hint]) => <button key={id} className="tab" role="tab" aria-selected={value === id} title={hint} onClick={() => change(id)}>{text}</button>)}</div>
+    <div className="seg tabs" role="tablist" aria-label={t(label)}>{options.map(([id, text, hint]) => <button key={id} className="tab" role="tab" aria-selected={value === id} title={hint && t(hint)} onClick={() => change(id)}>{t(text)}</button>)}</div>
 )
 
 const nameOf = (doc: Doc, library: Library, key: string) => {
@@ -130,18 +131,18 @@ const Curves = ({ options, chosen, focus, toggle, pick }: { options: Series[], c
     const shown             = options.filter(option => option.label.toLowerCase().includes(query.trim().toLowerCase()))
 
     return (
-        <div className="sim-col curves" aria-label="Curvas">
-            <label className="search"><Icon name="search" /><input type="search" placeholder="Buscar curva" aria-label="Buscar curva" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <div className="sim-col curves" aria-label={t('Curvas')}>
+            <label className="search"><Icon name="search" /><input type="search" placeholder={t('Buscar curva')} aria-label={t('Buscar curva')} value={query} onChange={event => setQuery(event.target.value)} /></label>
             <ul className="curve-list">
                 {shown.map(option => (
                     <li key={option.id}>
-                        <input type="checkbox" checked={chosen.includes(option.id)} aria-label={`Mostrar ${option.label}`} onChange={() => toggle(option.id)} />
+                        <input type="checkbox" checked={chosen.includes(option.id)} aria-label={t('Mostrar {0}', option.label)} onChange={() => toggle(option.id)} />
                         <span className="dot-s" style={{ background: option.color }} />
-                        <button className={`curve${focus === option.id ? ' current' : ''}`} aria-pressed={focus === option.id} title="Medir esta curva" onClick={() => pick(option.id)}>{option.label}</button>
+                        <button className={`curve${focus === option.id ? ' current' : ''}`} aria-pressed={focus === option.id} title={t('Medir esta curva')} onClick={() => pick(option.id)}>{option.label}</button>
                     </li>
                 ))}
             </ul>
-            {!options.length && <p className="verdict">As curvas aparecem ao simular: pontas de prova, tensões dos nós e correntes das fontes.</p>}
+            {!options.length && <p className="verdict">{t('As curvas aparecem ao simular: pontas de prova, tensões dos nós e correntes das fontes.')}</p>}
         </div>
     )
 }
@@ -155,10 +156,10 @@ const Readings = ({ curve, time, step, report }: { curve: Series | null, time: A
     const gain  = report?.kind === 'gain' ? report.gain : null
 
     if (!curve || !stats)
-        return <div className="sim-col readings" aria-label="Medidas"><p className="verdict">As medidas da curva escolhida aparecem aqui: valor, média, RMS, pico a pico e, quando valem, subida, τ, sobressinal, acomodação, período, ganho e fase.</p></div>
+        return <div className="sim-col readings" aria-label={t('Medidas')}><p className="verdict">{t('As medidas da curva escolhida aparecem aqui: valor, média, RMS, pico a pico e, quando valem, subida, τ, sobressinal, acomodação, período, ganho e fase.')}</p></div>
 
     return (
-        <div className="sim-col readings" aria-label="Medidas">
+        <div className="sim-col readings" aria-label={t('Medidas')}>
             <h3><span className="dot-s" style={{ background: curve.color }} />{curve.label}</h3>
             <Kv label={time ? 'No cursor' : 'Valor (regime)'} value={formatReading(stats.value, unit)} />
             {time && <Kv label="Média" value={formatReading(stats.mean, unit)} />}
@@ -168,15 +169,15 @@ const Readings = ({ curve, time, step, report }: { curve: Series | null, time: A
             {r && <Kv label="Inicial → final" value={`${formatReading(r.initial, unit)} → ${formatReading(r.final, unit)}`} />}
             {r?.rise && <Kv label="Subida (10–90%)" value={at(r.rise[1] - r.rise[0])} />}
             {r && r.tau !== null && <Kv label="Constante τ (63%)" value={at(r.tau - r.from)} />}
-            {r && r.overshoot > 0 && <Kv label="Sobressinal" value={`${(r.overshoot * 100).toFixed(1)}% · pico ${formatReading(r.peak.value, unit)}`} />}
-            {r && <Kv label="Acomodação (±2%)" value={r.settling !== null ? at(r.settling - r.from) : 'não acomodou na janela'} />}
+            {r && r.overshoot > 0 && <Kv label="Sobressinal" value={t('{0}% · pico {1}', (r.overshoot * 100).toFixed(1), formatReading(r.peak.value, unit))} />}
+            {r && <Kv label="Acomodação (±2%)" value={r.settling !== null ? at(r.settling - r.from) : t('não acomodou na janela')} />}
             {r && r.period !== null && <Kv label="Oscilação" value={`${at(r.period)} · ${formatReading(1 / r.period, 'Hz')}`} />}
             {r && r.damping !== null && <Kv label="Amortecimento ζ" value={r.damping.toFixed(3)} />}
             {gain && <Kv label="Frequência" value={formatReading(gain.frequency, 'Hz')} />}
             {gain && <Kv label="Ganho" value={`${sign(gain).toFixed(2)} V/V · ${gain.decibels.toFixed(1)} dB`} />}
             {gain && <Kv label="Fase" value={`${gain.phase.toFixed(0)}°`} />}
             {gain && <Kv label="Nível DC da saída" value={formatReading(gain.output.offset, unit)} />}
-            <p className="verdict">{!time ? 'Nada muda no tempo neste circuito: cada valor é o de regime (ponto de operação).' : r ? (r.tau !== null ? `1ª ordem: em 5τ = ${at(5 * (r.tau - r.from))} chega a 99% do final.` : r.damping !== null ? `Subamortecida (ζ < 1): passa do final em ${(r.overshoot * 100).toFixed(1)}% e oscila até acomodar.` : 'Sem sobressinal.') + (r.steady ? '' : ' A curva ainda varia no fim: aumente o fim da janela.') : gain ? (Math.abs(gain.phase) > 135 ? 'Inversor: a saída fica em oposição de fase à entrada.' : Math.abs(gain.phase) < 45 ? 'Não inversor: a saída acompanha a entrada.' : 'A saída fica defasada da entrada.') : 'Sem degrau nem senoide para medir resposta nesta curva: escolha Degrau ou Senoide no teste.'}</p>
+            <p className="verdict">{!time ? t('Nada muda no tempo neste circuito: cada valor é o de regime (ponto de operação).') : r ? (r.tau !== null ? t('1ª ordem: em 5τ = {0} chega a 99% do final.', at(5 * (r.tau - r.from))) : r.damping !== null ? t('Subamortecida (ζ < 1): passa do final em {0}% e oscila até acomodar.', (r.overshoot * 100).toFixed(1)) : t('Sem sobressinal.')) + (r.steady ? '' : ` ${t('A curva ainda varia no fim: aumente o fim da janela.')}`) : gain ? (Math.abs(gain.phase) > 135 ? t('Inversor: a saída fica em oposição de fase à entrada.') : Math.abs(gain.phase) < 45 ? t('Não inversor: a saída acompanha a entrada.') : t('A saída fica defasada da entrada.')) : t('Sem degrau nem senoide para medir resposta nesta curva: escolha Degrau ou Senoide no teste.')}</p>
         </div>
     )
 }
@@ -190,7 +191,7 @@ const More = ({ close }: { close: () => void }) => {
     const manual   = getMode(doc) === 'custom'
     const fixed    = value('simulator_time_step_mode').toLowerCase().includes('true')
     const realtime = (parseSi(value('simulator_animation_time_s'), 's') ?? 0) < 0
-    const write    = (key: string, text: string, valid: boolean) => valid ? setProjectProperties({ [key]: text }) : useStore.setState({ message: `${text}: valor inválido` })
+    const write    = (key: string, text: string, valid: boolean) => valid ? setProjectProperties({ [key]: text }) : useStore.setState({ message: t('{0}: valor inválido', text) })
 
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => event.key === 'Escape' && close()
@@ -199,23 +200,23 @@ const More = ({ close }: { close: () => void }) => {
     }, [close])
 
     return (
-        <div className="sim-more" role="dialog" aria-label="Opções da simulação">
+        <div className="sim-more" role="dialog" aria-label={t('Opções da simulação')}>
             <div className="sec">
-                <h3>Animação</h3>
-                <div className="field"><label>Duração</label><TimeField label="Duração da animação" units={SECONDS} value={realtime ? null : parseSi(value('simulator_animation_time_s'), 's')} commit={seconds => setProjectProperties({ simulator_animation_time_s: formatSi(seconds, 's', 6) })} /></div>
-                <label className="checkrow"><input type="checkbox" checked={realtime} onChange={event => setProjectProperties({ simulator_animation_time_s: event.target.checked ? REAL_TIME : PROJECT_DEFAULTS.simulator_animation_time_s })} />Tempo real (1 s simulado leva 1 s)</label>
-                <label className="checkrow"><input type="checkbox" checked={show.values} onChange={event => setShow({ values: event.target.checked })} />Valores das pontas sobre o circuito</label>
+                <h3>{t('Animação')}</h3>
+                <div className="field"><label>{t('Duração')}</label><TimeField label="Duração da animação" units={SECONDS} value={realtime ? null : parseSi(value('simulator_animation_time_s'), 's')} commit={seconds => setProjectProperties({ simulator_animation_time_s: formatSi(seconds, 's', 6) })} /></div>
+                <label className="checkrow"><input type="checkbox" checked={realtime} onChange={event => setProjectProperties({ simulator_animation_time_s: event.target.checked ? REAL_TIME : PROJECT_DEFAULTS.simulator_animation_time_s })} />{t('Tempo real (1 s simulado leva 1 s)')}</label>
+                <label className="checkrow"><input type="checkbox" checked={show.values} onChange={event => setShow({ values: event.target.checked })} />{t('Valores das pontas sobre o circuito')}</label>
             </div>
             {manual && (
                 <div className="sec">
-                    <h3>Amostragem do teste manual</h3>
-                    <div className="field"><label>Amostragem</label><Seg label="Amostragem" value={fixed ? 'step' : 'points'} options={[['points', 'Pontos'], ['step', 'Passo fixo']]} change={item => setProjectProperties({ simulator_time_step_mode: String(item === 'step') })} /></div>
-                    {fixed ? <div className="field"><label>Passo</label><TimeField label="Passo" value={parseSi(value('simulator_time_step_s'), 's')} commit={seconds => seconds > 0 && setProjectProperties({ simulator_time_step_s: formatSi(seconds, 's', 6) })} /></div> : <div className="field"><label>Pontos</label><Entry value={value('simulator_number_of_steps')} options={['200', '400', '1000', '5000']} numeric commit={text => write('simulator_number_of_steps', text || '400', Number(text || 400) >= 2)} /></div>}
-                    <div className="field"><label>Começa</label><Seg label="Condição inicial" value={value(INITIAL_KEY) === 'zero' ? 'zero' : 'op'} options={[['zero', 'Descarregado'], ['op', 'Em regime']]} change={item => setProjectProperties({ [INITIAL_KEY]: item })} /></div>
+                    <h3>{t('Amostragem do teste manual')}</h3>
+                    <div className="field"><label>{t('Amostragem')}</label><Seg label="Amostragem" value={fixed ? 'step' : 'points'} options={[['points', 'Pontos'], ['step', 'Passo fixo']]} change={item => setProjectProperties({ simulator_time_step_mode: String(item === 'step') })} /></div>
+                    {fixed ? <div className="field"><label>{t('Passo')}</label><TimeField label="Passo" value={parseSi(value('simulator_time_step_s'), 's')} commit={seconds => seconds > 0 && setProjectProperties({ simulator_time_step_s: formatSi(seconds, 's', 6) })} /></div> : <div className="field"><label>{t('Pontos')}</label><Entry value={value('simulator_number_of_steps')} options={['200', '400', '1000', '5000']} numeric commit={text => write('simulator_number_of_steps', text || '400', Number(text || 400) >= 2)} /></div>}
+                    <div className="field"><label>{t('Começa')}</label><Seg label="Condição inicial" value={value(INITIAL_KEY) === 'zero' ? 'zero' : 'op'} options={[['zero', 'Descarregado'], ['op', 'Em regime']]} change={item => setProjectProperties({ [INITIAL_KEY]: item })} /></div>
                 </div>
             )}
             <div className="sec">
-                <h3>Opções do SPICE</h3>
+                <h3>{t('Opções do SPICE')}</h3>
                 <Entry value={value('simulator_spice_options')} options={['.options reltol=1e-4']} numeric={false} commit={text => setProjectProperties({ simulator_spice_options: text.trim() })} />
             </div>
         </div>
@@ -287,41 +288,41 @@ export const SimulationPanel = () => {
             resizeRef.current = null
     }
 
-    const finding = !simulation.enabled                                     ? 'parada: aperte Simular' :
-                    simulation.busy                                         ? 'simulando…' :
-                    simulation.error                                        ? `erro: ${simulation.error}` :
-                    still                                                   ? STILL[mode] :
-                    report?.kind === 'step' && report.response.tau !== null ? `${curve?.label}: τ = ${formatReading(report.response.tau - report.response.from, 's')} · final ${formatReading(report.response.final, curve?.unit ?? 'V')}` :
-                    report?.kind === 'step'                                 ? `${curve?.label}: sobressinal ${(report.response.overshoot * 100).toFixed(1)}% · pico ${formatReading(report.response.peak.value, curve?.unit ?? 'V')}` :
-                    report?.kind === 'gain'                                 ? `${curve?.label}: ganho ${sign(report.gain).toFixed(2)} (${report.gain.decibels.toFixed(1)} dB) a ${formatReading(report.gain.frequency, 'Hz')}` :
-                    analysis?.type === 'tran'                               ? `transitório ${formatSi(analysis.t0, 's')} – ${formatSi(analysis.t1, 's')} · ${result?.steps} pontos` : 'aguardando o circuito'
+    const finding = !simulation.enabled                                     ? t('parada: aperte Simular') :
+                    simulation.busy                                         ? t('simulando…') :
+                    simulation.error                                        ? t('erro: {0}', simulation.error) :
+                    still                                                   ? t(STILL[mode]) :
+                    report?.kind === 'step' && report.response.tau !== null ? t('{0}: τ = {1} · final {2}', curve?.label ?? '', formatReading(report.response.tau - report.response.from, 's'), formatReading(report.response.final, curve?.unit ?? 'V')) :
+                    report?.kind === 'step'                                 ? t('{0}: sobressinal {1}% · pico {2}', curve?.label ?? '', (report.response.overshoot * 100).toFixed(1), formatReading(report.response.peak.value, curve?.unit ?? 'V')) :
+                    report?.kind === 'gain'                                 ? t('{0}: ganho {1} ({2} dB) a {3}', curve?.label ?? '', sign(report.gain).toFixed(2), report.gain.decibels.toFixed(1), formatReading(report.gain.frequency, 'Hz')) :
+                    analysis?.type === 'tran'                               ? t('transitório {0} – {1} · {2} pontos', formatSi(analysis.t0, 's'), formatSi(analysis.t1, 's'), result?.steps ?? 0) : t('aguardando o circuito')
 
     return (
-        <section className={`dock card ${open ? '' : 'collapsed'}`} style={open ? { height } : undefined} aria-label="Simulação">
+        <section className={`dock card ${open ? '' : 'collapsed'}`} style={open ? { height } : undefined} aria-label={t('Simulação')}>
             {open && <div className="dock-grip" onPointerDown={onResize} onPointerMove={onResize} onPointerUp={onResize} />}
             <header className="dock-head">
                 <div className="dock-title">
-                    <h2>Simulação</h2>
+                    <h2>{t('Simulação')}</h2>
                     <p className={`sub ${simulation.enabled && simulation.error ? 'err' : ''}`} title={finding}>{finding}</p>
                 </div>
                 <div className="dock-ctl">
                     <Seg label="Teste" value={mode} options={TESTS} change={setTest} />
-                    <div className="win" title={mode === 'custom' ? 'Janela do teste manual' : 'Fim da janela: digite para fixar (passa a Manual)'}>
-                        {mode === 'custom' && <><span>de</span><TimeField label="Início da janela" value={span.start} commit={seconds => setWindow('start', seconds)} /></>}
-                        <span>até</span>
+                    <div className="win" title={mode === 'custom' ? t('Janela do teste manual') : t('Fim da janela: digite para fixar (passa a Manual)')}>
+                        {mode === 'custom' && <><span>{t('de')}</span><TimeField label="Início da janela" value={span.start} commit={seconds => setWindow('start', seconds)} /></>}
+                        <span>{t('até')}</span>
                         <TimeField label="Fim da janela" value={span.stop} commit={seconds => setWindow('stop', seconds)} />
                     </div>
                     {time && result && <>
-                        <button className="icon-btn" aria-label="Voltar ao início" title="Voltar ao início" onClick={() => { seek(0); play() }}><Icon name="reset" /></button>
-                        <button className="icon-btn" aria-label={playing ? 'Pausar' : 'Reproduzir'} title={playing ? 'Pausar' : 'Reproduzir'} onClick={playing ? pause : play}><Icon name={playing ? 'pause' : 'play'} /></button>
-                        <input type="range" min={0} max={result.steps - 1} value={step} aria-label="Instante da simulação" onChange={event => seek(Number(event.target.value))} />
+                        <button className="icon-btn" aria-label={t('Voltar ao início')} title={t('Voltar ao início')} onClick={() => { seek(0); play() }}><Icon name="reset" /></button>
+                        <button className="icon-btn" aria-label={playing ? t('Pausar') : t('Reproduzir')} title={playing ? t('Pausar') : t('Reproduzir')} onClick={playing ? pause : play}><Icon name={playing ? 'pause' : 'play'} /></button>
+                        <input type="range" min={0} max={result.steps - 1} value={step} aria-label={t('Instante da simulação')} onChange={event => seek(Number(event.target.value))} />
                         <span className="num tread">t = {formatReading(result.getTime(step), 's')}</span>
                     </>}
                     <div className="more-wrap">
-                        <button className="icon-btn" aria-label="Mais opções da simulação" aria-expanded={more} title="Animação, valores sobre o circuito, amostragem e opções do SPICE" onClick={() => setMore(!more)}><Icon name="more" /></button>
+                        <button className="icon-btn" aria-label={t('Mais opções da simulação')} aria-expanded={more} title={t('Animação, valores sobre o circuito, amostragem e opções do SPICE')} onClick={() => setMore(!more)}><Icon name="more" /></button>
                         {more && <More close={() => setMore(false)} />}
                     </div>
-                    <button className="icon-btn toggle" aria-label={open ? 'Recolher simulação' : 'Abrir simulação'} aria-expanded={open} title={open ? 'Recolher' : 'Abrir'} onClick={() => setShow({ chart: !open })}><Icon name="chevronDown" /></button>
+                    <button className="icon-btn toggle" aria-label={open ? t('Recolher simulação') : t('Abrir simulação')} aria-expanded={open} title={open ? t('Recolher') : t('Abrir')} onClick={() => setShow({ chart: !open })}><Icon name="chevronDown" /></button>
                 </div>
             </header>
             {open && (
@@ -330,9 +331,9 @@ export const SimulationPanel = () => {
                     {result && time ? <Grapher time={time} series={series} step={step} marks={marks} seek={index => { pause(); seek(index) }} /> : result && still ? <Grapher time={[0, 1]} series={regime} step={1} marks={null} still seek={() => {}} /> : (
                         <div className="scope">
                             <div className="scope-cap">
-                                {!simulation.enabled ? <>Aperte <b>Simular</b>: o ponto de operação e, se algo mudar no tempo, o transitório na janela do teste.<br /><span className="muted">{doc.probes.length ? 'As pontas de prova viram curvas aqui.' : 'Use V, A ou V·A na barra do quadro para medir um fio ou terminal.'}</span></> :
-                                 simulation.busy     ? 'Simulando…' :
-                                 simulation.error    ? <span className="muted">Veja a causa em Problemas.</span> : 'Aguardando o circuito.'}
+                                {!simulation.enabled ? <>{t('Aperte')} <b>{t('Simular')}</b>: {t('o ponto de operação e, se algo mudar no tempo, o transitório na janela do teste.')}<br /><span className="muted">{doc.probes.length ? t('As pontas de prova viram curvas aqui.') : t('Use V, A ou V·A na barra do quadro para medir um fio ou terminal.')}</span></> :
+                                 simulation.busy     ? t('Simulando…') :
+                                 simulation.error    ? <span className="muted">{t('Veja a causa em Problemas.')}</span> : t('Aguardando o circuito.')}
                             </div>
                         </div>
                     )}

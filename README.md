@@ -44,8 +44,14 @@ guardado no navegador (`cm-theme`).
   dos menus; a paleta acha tudo em qualquer modo. No Iniciante o inspetor abre o cartão "Como funciona" da peça (o
   que é, como funciona, a fórmula e a fórmula com os valores do circuito simulado).
 - **Preferências** (Editar › Preferências…, `Ctrl+,`): roda do mouse (zoom ou rolar a vista; Ctrl+roda dá zoom),
-  arrastar o meio do fio curva por padrão (Ctrl inverte), modo, tema e a tecla de cada ação. A tecla escolhida sai da
+  arrastar o meio do fio curva por padrão (Ctrl inverte), modo, idioma, tema e a tecla de cada ação. A tecla escolhida sai da
   ação que a tinha; os menus, a paleta e Ajuda › Atalhos de teclado mostram as teclas em uso.
+- **Idioma**: português (padrão) ou inglês, nas Preferências ou em Exibir › Idioma; a interface, as mensagens e a
+  lista de materiais exportada mudam na hora e a escolha fica no navegador.
+- **Abas de sketches**: Novo, Abrir, Exemplos e os circuitos de teste abrem numa aba nova (a vazia e sem mudança é
+  reusada); cada aba tem o seu circuito, histórico de desfazer e vistas. Fechar uma aba com alterações pergunta;
+  Arquivo › Salvar todos baixa o `.fzz` de cada sketch alterado. O salvamento automático guarda cada aba.
+- **Tour** curto por modo, uma vez só (Ajuda › Tour da interface repete).
 
 - **Peças** (painel esquerdo, atalho `/` para buscar): os básicos (resistor, capacitor, fonte DC, gerador, terra,
   diodo, LED, transistores, amp-op, 555…) vêm primeiro, agrupados, e depois a biblioteca completa do Fritzing. A
@@ -76,20 +82,19 @@ guardado no navegador (`cm-theme`).
   (histórico `<history>` do `.fzp`, com a opção de subir a versão) e cria uma peça nova em Meus itens, que pode
   trocar a peça do sketch e ser baixada como `.fzpz`. Os bins do usuário e as peças importadas ou criadas ficam
   guardados no navegador.
-- **Simulação**: as ferramentas V, A e V·A do quadro colocam pontas de prova num fio ou terminal; Simular liga o
-  ngspice e as leituras aparecem no circuito. A doca de baixo tem três abas:
-  - **Medidas**: valor no cursor, média, RMS e pico a pico de cada curva marcada, e as curvas disponíveis (pontas,
-    tensão de cada nó e corrente de cada fonte).
-  - **Resposta**: na curva escolhida, valor inicial e final, subida 10–90%, constante de tempo τ, pico, sobressinal,
-    acomodação a ±2%, período da oscilação e amortecimento ζ; com fonte senoidal, ganho (V/V e dB), fase e nível DC
-    da saída frente à entrada. O gráfico marca a faixa de ±2%, o valor final, o pico com o sobressinal, τ e a
-    acomodação.
-  - **Ajustes**: o teste do transitório — Automático (janela pela escala de tempo do circuito), Degrau (parte
-    descarregado, para carga do capacitor e sobressinal), Onda quadrada (três períodos da fonte pulsada), Senoide
-    (cinco períodos, para amplificadores) ou Manual (início, fim, número de pontos ou passo fixo e se parte
-    descarregado) —, a duração da animação (3 s por padrão, ou tempo real), os valores sobre o circuito e opções do SPICE.
-    O fim da janela também fica no cabeçalho da doca: digite o valor e escolha s, ms, µs ou ns; "auto" volta ao cálculo
-    automático.
+- **Simulação**: as ferramentas V, A e V·A do quadro colocam pontas de prova num fio ou terminal. **Simular** roda,
+  numa ação, o ponto de operação e o transitório na janela do teste; se nada no circuito varia no tempo, mostra o
+  regime direto, sem animação. Os valores aparecem no circuito e o painel de simulação abre embaixo, um só:
+  - **no cabeçalho**, o teste num controle segmentado — Automático (janela pela escala de tempo do circuito), Degrau
+    (parte descarregado: carga do capacitor e sobressinal), Onda quadrada (três períodos da fonte pulsada), Senoide
+    (cinco períodos, para amplificadores) ou Manual (início e fim ali mesmo) —, o fim da janela (digite e escolha s,
+    ms, µs ou ns; "auto" volta ao cálculo), reproduzir/pausar, a barra de tempo e "⋯" com a duração da animação (3 s
+    ou tempo real), os valores sobre o circuito, a amostragem do Manual e as opções do SPICE;
+  - **à esquerda, as curvas** (pontas, tensão de cada nó e corrente de cada fonte), com busca, caixa para mostrar ou
+    esconder e a cor; o nome escolhe a curva medida;
+  - **no centro, o gráfico**, sempre visível;
+  - **à direita, as medidas** da curva escolhida: valor no cursor, média, RMS e pico a pico e, quando valem, período,
+    valor inicial e final, subida 10–90%, τ, sobressinal, acomodação a ±2%, ζ, ganho (V/V e dB), fase e nível DC.
 
   O gráfico tem tensões à esquerda e correntes à direita, leitura sob o cursor e clique para ir ao instante. Simulação
   › Circuitos de teste (ou a tela inicial) abre RC, onda quadrada, RLC com sobressinal, amplificador inversor com

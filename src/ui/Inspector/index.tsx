@@ -12,6 +12,7 @@ import { pickSwap } from '../Catalog'
 import { Icon } from '../Icon'
 import { probeColor } from '../Probe'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 // CARTÃO DIDÁTICO SÓ CARREGA COM A PRIMEIRA PEÇA SELECIONADA: OS TEXTOS FICAM FORA DO JAVASCRIPT INICIAL
 const LessonCard = lazy(() => import('../Lesson').then(module => ({ default: module.LessonCard })))
@@ -33,7 +34,7 @@ const FREE: [string, (part: Part) => boolean, (part: Part) => string[]][] = [
     ['hole size', part => 'hole size' in part.properties || part.kind === 'via' || part.kind === 'hole', part => DRILLS[part.kind] ?? DRILLS.part]
 ]
 
-export const Kv = ({ label, value }: { label: string, value: string }) => <div className="kv"><span>{label}</span><span className="num" title={value}>{value}</span></div>
+export const Kv = ({ label, value }: { label: string, value: string }) => <div className="kv"><span>{t(label)}</span><span className="num" title={value}>{value}</span></div>
 
 // CAMPO QUE SÓ GRAVA AO CONFIRMAR (Enter OU SAIR DO CAMPO); Escape DESFAZ A DIGITAÇÃO
 export const Entry = ({ value, options, numeric, commit }: { value: string, options: string[], numeric: boolean, commit: (text: string) => void }) => {
@@ -91,8 +92,8 @@ export const TimeField = ({ value, commit, units = TIME_UNITS, label }: { value:
 
     return (
         <div className="in time">
-            <input inputMode="decimal" aria-label={label} value={text} placeholder="auto" onChange={event => setText(event.target.value)} onBlur={() => send(text, unit)} onKeyDown={onKey} />
-            <select aria-label={`Unidade de ${label.toLowerCase()}`} value={unit} onChange={event => { setUnit(event.target.value); send(text, event.target.value) }}>{units.map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
+            <input inputMode="decimal" aria-label={t(label)} value={text} placeholder={t('auto')} onChange={event => setText(event.target.value)} onBlur={() => send(text, unit)} onKeyDown={onKey} />
+            <select aria-label={t('Unidade de {0}', t(label).toLowerCase())} value={unit} onChange={event => { setUnit(event.target.value); send(text, event.target.value) }}>{units.map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
         </div>
     )
 }
@@ -116,7 +117,7 @@ const Reading = ({ modelIndex }: { modelIndex: string }) => {
     const rating   = resistor ? result.getMax(modelIndex, 'power') : Infinity
     const peak     = resistor ? Math.max(...Array.from({ length: result.steps }, (_, i) => Math.abs(result.getBetween(a, b, i) * result.getCurrent(modelIndex, i)))) : 0
     const share    = Number.isFinite(rating) && rating > 0 ? peak / rating : null
-    const title    = result.circuit.analysis.type === 'tran' ? `Medição em t = ${formatSi(result.getTime(step), 's', 3)}` : 'Ponto de operação (DC)'
+    const title    = result.circuit.analysis.type === 'tran' ? t('Medição em t = {0}', formatSi(result.getTime(step), 's', 3)) : t('Ponto de operação (DC)')
     const ohms     = parseSi(result.doc.instances[modelIndex]?.properties.resistance ?? part.properties.resistance ?? '', 'Ω')
 
     return (
@@ -130,7 +131,7 @@ const Reading = ({ modelIndex }: { modelIndex: string }) => {
             </div>
             {share !== null && (
                 <div className="sec">
-                    <h3>Dissipação</h3>
+                    <h3>{t('Dissipação')}</h3>
                     <Kv label="Pico na janela" value={formatReading(peak, 'W')} />
                     <div className={`meter ${share > 1 ? 'over' : ''}`}><i style={{ width: `${Math.min(100, share * 100)}%` }} /></div>
                     <div className="meter-l"><span>{Math.round(share * 100)}% do limite no pico</span><span>limite {formatReading(rating, 'W')}</span></div>
@@ -140,7 +141,7 @@ const Reading = ({ modelIndex }: { modelIndex: string }) => {
     )
 }
 
-export const switchText = (pressed: boolean, spdt: boolean) => spdt ? (pressed ? 'Posição 2' : 'Posição 1') : pressed ? 'Fechado' : 'Aberto'
+export const switchText = (pressed: boolean, spdt: boolean) => t(spdt ? (pressed ? 'Posição 2' : 'Posição 1') : pressed ? 'Fechado' : 'Aberto')
 
 // CHAVE: A POSIÇÃO (VALE NO DC E NO INÍCIO DO TRANSITÓRIO) E AS COMUTAÇÕES PROGRAMADAS NO TEMPO (SPEC 04 §8.10)
 const SwitchEditor = ({ modelIndex }: { modelIndex: string }) => {
@@ -162,22 +163,22 @@ const SwitchEditor = ({ modelIndex }: { modelIndex: string }) => {
 
     return (
         <div className="sec">
-            <h3>Chave</h3>
+            <h3>{t('Chave')}</h3>
             <div className="field">
-                <label>Posição</label>
+                <label>{t('Posição')}</label>
                 <div className="seg tabs" role="tablist">{[false, true].map(pressed => <button key={String(pressed)} className="tab" role="tab" aria-selected={known.pressed === pressed} onClick={() => known.pressed !== pressed && void toggleSwitch(modelIndex)}>{switchText(pressed, known.spdt)}</button>)}</div>
             </div>
-            <h3 style={{ marginTop: 10 }}>Comutação no tempo</h3>
+            <h3 style={{ marginTop: 10 }}>{t('Comutação no tempo')}</h3>
             {events.map(([time, pressed], i) => (
                 <div key={i} className="event">
-                    <div className="in"><select aria-label="Ação" value={pressed ? '1' : '0'} onChange={event => change(i, [time, event.target.value === '1'])}>{verbs.map((verb, k) => <option key={verb} value={String(k)}>{verb}</option>)}</select><Icon name="chevronDown" /></div>
-                    <span>em</span>
+                    <div className="in"><select aria-label={t('Ação')} value={pressed ? '1' : '0'} onChange={event => change(i, [time, event.target.value === '1'])}>{verbs.map((verb, k) => <option key={verb} value={String(k)}>{t(verb)}</option>)}</select><Icon name="chevronDown" /></div>
+                    <span>{t('em')}</span>
                     <TimeField label="Instante da comutação" value={time} commit={seconds => change(i, [seconds, pressed])} />
-                    <button className="icon-btn" aria-label="Remover comutação" title="Remover" onClick={() => void setSwitching(modelIndex, events.filter((_, k) => k !== i))}><Icon name="close" /></button>
+                    <button className="icon-btn" aria-label={t('Remover comutação')} title={t('Remover')} onClick={() => void setSwitching(modelIndex, events.filter((_, k) => k !== i))}><Icon name="close" /></button>
                 </div>
             ))}
-            <button className="btn sm" style={{ marginTop: 6 }} onClick={() => void setSwitching(modelIndex, [...events, next])}><Icon name="plus" />{events.length ? 'Adicionar comutação' : 'Programar comutação'}</button>
-            <p className="sub" style={{ marginTop: 6 }}>{events.length ? 'No transitório a chave muda nesses instantes; antes do primeiro e no DC vale a posição acima.' : 'Escolha quando a chave fecha e abre para ver a resposta no transitório, como a carga e a descarga de um capacitor.'}</p>
+            <button className="btn sm" style={{ marginTop: 6 }} onClick={() => void setSwitching(modelIndex, [...events, next])}><Icon name="plus" />{events.length ? t('Adicionar comutação') : t('Programar comutação')}</button>
+            <p className="sub" style={{ marginTop: 6 }}>{events.length ? t('No transitório a chave muda nesses instantes; antes do primeiro e no DC vale a posição acima.') : t('Escolha quando a chave fecha e abre para ver a resposta no transitório, como a carga e a descarga de um capacitor.')}</p>
         </div>
     )
 }
@@ -205,7 +206,7 @@ const Meter = ({ modelIndex, variants }: { modelIndex: string, variants: Found[]
 
     return (
         <div className="sec">
-            <h3>Visor</h3>
+            <h3>{t('Visor')}</h3>
             <div className="lcd num">{reading.trim() ? reading : '-----'}<small>{unit}</small></div>
             <div className="runrow" style={{ marginTop: 8, justifyContent: 'space-between' }}>
                 <div className="seg tabs" role="tablist">{METER_MODES.map(([label, prefix]) => <button key={label} className="tab" role="tab" aria-selected={variant.startsWith(prefix)} onClick={() => choose(prefix, ac)}>{label}</button>)}</div>
@@ -251,7 +252,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
         const index = netIndex.get(key) ?? -1
         const others = index >= 0 ? nets[index].filter(other => other !== key && splitKey(other)[0] !== modelIndex) : []
         const peers  = others.slice(0, 2).map(other => `${doc.instances[splitKey(other)[0]]?.title}.${library.getPart(doc.instances[splitKey(other)[0]]?.moduleIdRef ?? '')?.connectors.find(connector => connector.id === splitKey(other)[1])?.name ?? ''}`)
-        return index < 0 || nets[index].length < 2 ? 'sem conexão' : `${index === 0 ? 'GND' : `N${index}`}${peers.length ? ` · ${peers.join(' · ')}${others.length > 2 ? '…' : ''}` : ''}`
+        return index < 0 || nets[index].length < 2 ? t('sem conexão') : `${index === 0 ? 'GND' : `N${index}`}${peers.length ? ` · ${peers.join(' · ')}${others.length > 2 ? '…' : ''}` : ''}`
     }
 
     const commitValue = (key: string, text: string) => {
@@ -259,7 +260,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
         const number = def?.numeric ? parseSi(text, def.symbol) : null
 
         if (def?.numeric && (number === null || (def.min !== null && number < def.min) || (def.max !== null && number > def.max)))
-            return useStore.setState({ message: `${key}: valor fora da faixa ${def.min ?? '-∞'}…${def.max ?? '∞'} ${def.symbol}` })
+            return useStore.setState({ message: t('{0}: valor fora da faixa {1}…{2} {3}', key, def.min ?? '-∞', def.max ?? '∞', def.symbol) })
 
         edit(current => setProperty(current, modelIndex, key, number !== null && def ? formatSi(number, def.symbol) : text))
     }
@@ -273,7 +274,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
 
     const commitFree = (key: string, text: string) => {
         if ((key === 'width' || key === 'height') && !(Number(text.replace(',', '.')) > 0))
-            return useStore.setState({ message: `${key}: informe uma medida positiva em mm` })
+            return useStore.setState({ message: t('{0}: informe uma medida positiva em mm', key) })
 
         if (key === 'logo')
             return edit(current => setLogoText(current, library, useStore.getState().view, modelIndex, text))
@@ -311,10 +312,10 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
                 <h2>{instance.title}</h2>
                 <span className="pill neutral" title={name}>{part.title}</span>
             </div>
-            <p className="sub">{[merged.package, `${part.connectors.length} ${part.connectors.length === 1 ? 'pino' : 'pinos'}`].filter(Boolean).join(' · ')}</p>
+            <p className="sub">{[merged.package, t(part.connectors.length === 1 ? '{0} pino' : '{0} pinos', part.connectors.length)].filter(Boolean).join(' · ')}</p>
             <div className="sec">
-                <h3>Valores</h3>
-                <div className="field"><label>Nome</label><Entry value={instance.title} options={[]} numeric={false} commit={text => edit(current => setTitle(current, modelIndex, text.trim() || instance.title))} /></div>
+                <h3>{t('Valores')}</h3>
+                <div className="field"><label>{t('Nome')}</label><Entry value={instance.title} options={[]} numeric={false} commit={text => edit(current => setTitle(current, modelIndex, text.trim() || instance.title))} /></div>
                 {keys.map(key => <div key={key} className="field"><label title={key}>{nameOf(key)}</label>{editor(key)}</div>)}
             </div>
             {familyOf(part) === 'multimeter' && <Meter modelIndex={modelIndex} variants={family} />}
@@ -323,7 +324,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
             <Suspense fallback={null}><LessonCard modelIndex={modelIndex} part={part} properties={merged} /></Suspense>
             {part.connectors.length > 0 && part.connectors.length <= 16 && (
                 <details className="sec">
-                    <summary><h3>Pinos</h3></summary>
+                    <summary><h3>{t('Pinos')}</h3></summary>
                     {part.connectors.map(connector => <Kv key={connector.id} label={connector.name} value={netOf(keyOf(modelIndex, connector.id))} />)}
                 </details>
             )}
@@ -351,16 +352,16 @@ const ProbeCard = ({ id }: { id: string }) => {
 
     return (
         <>
-            <div className="ph"><span className="dot-s" style={{ background: probeColor(index) }} /><h2>{probe.id}</h2><span className="pill neutral">{PROBE_KINDS[probe.kind]}</span></div>
-            <p className="sub">{owner?.moduleIdRef === 'WireModuleID' ? 'num fio' : `em ${owner?.title ?? '—'}`}</p>
+            <div className="ph"><span className="dot-s" style={{ background: probeColor(index) }} /><h2>{probe.id}</h2><span className="pill neutral">{t(PROBE_KINDS[probe.kind])}</span></div>
+            <p className="sub">{owner?.moduleIdRef === 'WireModuleID' ? t('num fio') : t('em {0}', owner?.title ?? '—')}</p>
             <div className="sec">
-                <h3>Leitura</h3>
-                {probe.kind !== 'current' && <Kv label="Tensão" value={at(reading?.voltage) === null ? 'aperte Simular' : formatReading(at(reading?.voltage) ?? 0, 'V')} />}
-                {probe.kind !== 'voltage' && <Kv label="Corrente" value={at(reading?.current) === null ? 'aperte Simular' : formatReading(at(reading?.current) ?? 0, 'A')} />}
+                <h3>{t('Leitura')}</h3>
+                {probe.kind !== 'current' && <Kv label="Tensão" value={at(reading?.voltage) === null ? t('aperte Simular') : formatReading(at(reading?.voltage) ?? 0, 'V')} />}
+                {probe.kind !== 'voltage' && <Kv label="Corrente" value={at(reading?.current) === null ? t('aperte Simular') : formatReading(at(reading?.current) ?? 0, 'A')} />}
             </div>
             <div className="runrow">
-                <button className="btn sm" onClick={() => { setSimulation({ focus: `p:${probe.id}:${probe.kind === 'current' ? 'i' : 'v'}` }); setShow({ chart: true }) }}>Ver medidas</button>
-                <button className="btn sm stop" onClick={() => removeProbes([probe.id])}>Remover</button>
+                <button className="btn sm" onClick={() => { setSimulation({ focus: `p:${probe.id}:${probe.kind === 'current' ? 'i' : 'v'}` }); setShow({ chart: true }) }}>{t('Ver medidas')}</button>
+                <button className="btn sm stop" onClick={() => removeProbes([probe.id])}>{t('Remover')}</button>
             </div>
         </>
     )
@@ -390,28 +391,28 @@ export const Inspector = () => {
 
     return (
         <>
-            {wire && <><div className="ph"><h2>{wire.title}</h2><span className="pill neutral">Fio</span></div><div className="sec"><Kv label="Cor" value={wire.views[view]?.wire?.color ?? '—'} /><Kv label="Largura" value={`${(wire.views[view]?.wire?.mils ?? 0).toFixed(1)} mil`} /></div></>}
-            {selection.length > 1 && <div className="nopart"><b>{selection.length} itens selecionados</b>Arraste para mover juntos; Delete apaga todos.</div>}
+            {wire && <><div className="ph"><h2>{wire.title}</h2><span className="pill neutral">{t('Fio')}</span></div><div className="sec"><Kv label="Cor" value={wire.views[view]?.wire?.color ?? '—'} /><Kv label="Largura" value={`${(wire.views[view]?.wire?.mils ?? 0).toFixed(1)} mil`} /></div></>}
+            {selection.length > 1 && <div className="nopart"><b>{t('{0} itens selecionados', selection.length)}</b>{t('Arraste para mover juntos; Delete apaga todos.')}</div>}
             {!selection.length && (
                 <div className="nopart">
-                    <b>Nada selecionado</b>
-                    Clique numa peça para editar os valores e ver a medição ao vivo durante a simulação.
+                    <b>{t('Nada selecionado')}</b>
+                    {t('Clique numa peça para editar os valores e ver a medição ao vivo durante a simulação.')}
                     <ul className="tips">
-                        <li><b>Fio:</b> clique num terminal, clique para cada dobra e clique no terminal de destino. Botão direito deixa a ponta solta.</li>
-                        <li><b>Mover a vista:</b> arraste o fundo; a roda do mouse dá zoom.</li>
-                        <li><b>Selecionar várias:</b> Shift + arrastar no fundo.</li>
-                        <li><b>Medir:</b> escolha V, A ou V·A na barra e clique num fio ou terminal.</li>
+                        <li><b>{t('Fio')}:</b> {t('clique num terminal, clique para cada dobra e clique no terminal de destino. Botão direito deixa a ponta solta.')}</li>
+                        <li><b>{t('Mover a vista')}:</b> {t('arraste o fundo; a roda do mouse dá zoom.')}</li>
+                        <li><b>{t('Selecionar várias')}:</b> {t('Shift + arrastar no fundo.')}</li>
+                        <li><b>{t('Medir')}:</b> {t('escolha V, A ou V·A na barra e clique num fio ou terminal.')}</li>
                     </ul>
                 </div>
             )}
             {connector && owner && (
                 <div className="sec" style={{ marginTop: 18 }}>
-                    <h3>Conector sob o cursor</h3>
+                    <h3>{t('Conector sob o cursor')}</h3>
                     <Kv label="Peça" value={owner.title} />
                     <Kv label="Nome" value={connector.name} />
                     <Kv label="Tipo" value={connector.type} />
                     {connector.description && <Kv label="Descrição" value={connector.description} />}
-                    <Kv label="Net" value={`${net.length} conectores`} />
+                    <Kv label="Net" value={t('{0} conectores', net.length)} />
                 </div>
             )}
         </>

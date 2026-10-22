@@ -3,6 +3,7 @@ import { Inspector } from '../Inspector'
 import { RoutingPanel } from '../RoutingPanel'
 import { ProjectPanel } from '../ProjectPanel'
 import { useStore, type Panel } from '../Store'
+import { t } from '../../core/Text'
 
 const TABS: [Panel, string][] = [['properties', 'Propriedades'], ['routing', 'Roteamento'], ['document', 'Documento']]
 
@@ -18,9 +19,9 @@ export const SidePanel = () => {
     }, [picked])
 
     return (
-        <aside className="inspector card" aria-label="Inspetor">
+        <aside className="inspector card" aria-label={t('Inspetor')}>
             <div className="tabs insp-tabs" role="tablist">
-                {TABS.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={panel === id} onClick={() => setPanel(id)}>{label}</button>)}
+                {TABS.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={panel === id} onClick={() => setPanel(id)}>{t(label)}</button>)}
             </div>
             <div className="insp-body">
                 {panel === 'properties' && <Inspector />}

@@ -2,6 +2,7 @@ import { VIEWS, VIEW_LABELS } from '../../core/Layer'
 import { Icon } from '../Icon'
 import { MenuBar } from '../MenuBar'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 // BARRA SUPERIOR: MARCA, MENUS, VISTA E O BOTÃO DE SIMULAR, QUE DECIDE SOZINHO ENTRE O PONTO DE OPERAÇÃO E O TRANSITÓRIO
 export const Topbar = () => {
@@ -17,12 +18,12 @@ export const Topbar = () => {
                 <span>CircuitMaster</span>
             </a>
             <MenuBar />
-            <div className="viewtabs" role="tablist" aria-label="Vista do projeto">
-                {VIEWS.map((item, i) => <button key={item} className="tab" role="tab" aria-selected={item === view} title={`${VIEW_LABELS[item]} (${i + 1})`} onClick={() => setView(item)}>{VIEW_LABELS[item]}</button>)}
+            <div className="viewtabs" role="tablist" aria-label={t('Vista do projeto')}>
+                {VIEWS.map((item, i) => <button key={item} className="tab" role="tab" aria-selected={item === view} title={`${t(VIEW_LABELS[item])} (${i + 1})`} onClick={() => setView(item)}>{t(VIEW_LABELS[item])}</button>)}
             </div>
             <div className="topright">
-                <button className={`btn ${enabled ? 'stop' : 'primary'}`} disabled={!ready} title={enabled ? 'Parar a simulação' : 'Simular: o ponto de operação e, se algo muda no tempo, o transitório no teste escolhido no painel'} onClick={toggleSimulation}>
-                    <Icon name={enabled ? 'stop' : 'play'} /><span>{enabled ? 'Parar' : 'Simular'}</span>
+                <button className={`btn ${enabled ? 'stop' : 'primary'}`} disabled={!ready} title={enabled ? t('Parar a simulação') : t('Simular: o ponto de operação e, se algo muda no tempo, o transitório no teste escolhido no painel')} onClick={toggleSimulation}>
+                    <Icon name={enabled ? 'stop' : 'play'} /><span>{enabled ? t('Parar') : t('Simular')}</span>
                 </button>
             </div>
         </header>

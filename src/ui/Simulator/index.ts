@@ -1,5 +1,6 @@
 import type { Run } from '../../core/Ngspice'
 import { Supervisor } from '../Supervisor'
+import { t } from '../../core/Text'
 
 const TIMEOUT = 15000    // MS ATÉ CONSIDERAR O NGSPICE TRAVADO (SPEC 04 §6)
 
@@ -9,6 +10,6 @@ export class Simulator {
 
     async run(deck: string): Promise<Run> {
         const run = await this.supervisor.request<Run>({ deck })
-        return run ?? { vectors: {}, log: [], error: this.supervisor.failure ? `simulação interrompida: ${this.supervisor.failure}` : 'simulação cancelada' }
+        return run ?? { vectors: {}, log: [], error: this.supervisor.failure ? t('simulação interrompida: {0}', this.supervisor.failure) : t('simulação cancelada') }
     }
 }

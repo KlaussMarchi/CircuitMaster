@@ -54,7 +54,6 @@ test('do esquemático vazio ao gráfico, salvar e reabrir', async ({ app, page }
     expect(saved.name).toMatch(/\.fzz$/)
     await expect(page.getByText('Salvo', { exact: true })).toBeVisible()
 
-    app.answers.push(true)
     await page.keyboard.press('Control+n')
     await expect.poll(() => app.count()).toBe(0)
 
@@ -63,7 +62,7 @@ test('do esquemático vazio ao gráfico, salvar e reabrir', async ({ app, page }
     expect(await app.edges()).toBe(edges)
 })
 
-test('Arquivo: Novo pergunta com alterações, Abrir pelo menu e por Ctrl+O, Salvar guarda as pontas de prova', async ({ app, page }) => {
+test('Arquivo: Novo abre outra aba e a de antes fica com o circuito, Abrir pelo menu e por Ctrl+O, Salvar guarda as pontas de prova', async ({ app, page }) => {
     const resistor = await app.place('Resistor', [-300, 0])
     await page.getByRole('toolbar', { name: 'Ferramentas' }).getByRole('button', { name: 'Ponta de tensão: clique num fio ou terminal' }).click()
     await page.mouse.click(...await app.terminal((await app.pins(resistor))['Pin 0']))
@@ -73,13 +72,11 @@ test('Arquivo: Novo pergunta com alterações, Abrir pelo menu e por Ctrl+O, Sal
     const saved = await app.download(() => app.menu('Arquivo', 'Salvar'))
     await page.keyboard.press('Delete')
 
-    app.answers.push(false)
-    await app.menu('Arquivo', 'Novo')
-    expect(await app.count()).toBe(1)
-    app.answers.push(true)
     await app.menu('Arquivo', 'Novo')
     await expect.poll(() => app.count()).toBe(0)
-    await expect(page.getByRole('heading', { name: 'sem título' })).toBeVisible()
+    expect(app.asked).toEqual([])
+    const tabs = page.getByRole('tablist', { name: 'Sketches abertos' })
+    await expect(tabs.getByRole('tab', { name: 'sem título' }).last()).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('Novo', { exact: true })).toBeVisible()
 
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), app.menu('Arquivo', 'Abrir…')])

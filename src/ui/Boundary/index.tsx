@@ -1,4 +1,5 @@
 import { Component, Fragment, type ReactNode } from 'react'
+import { t } from '../../core/Text'
 
 type Props = { name: string, className: string, close?: () => void, children: ReactNode }
 type State = { error: Error | null, round: number }
@@ -21,14 +22,14 @@ export class Boundary extends Component<Props, State> {
             return <Fragment key={round}>{children}</Fragment>
 
         return (
-            <section className={className} role="alert" aria-label={`${name}: falha`}>
+            <section className={className} role="alert" aria-label={t('{0}: falha', t(name))}>
                 <div className="boundary">
-                    <h2>{name} parou</h2>
+                    <h2>{t('{0} parou', t(name))}</h2>
                     <p className="sub">{error.message || String(error)}</p>
-                    <p className="sub">O circuito não foi alterado. Recarregar monta o painel de novo; se o erro voltar, desfaça a última ação.</p>
+                    <p className="sub">{t('O circuito não foi alterado. Recarregar monta o painel de novo; se o erro voltar, desfaça a última ação.')}</p>
                     <div className="boundary-actions">
-                        <button className="btn sm" onClick={this.reload}>Recarregar painel</button>
-                        {close && <button className="btn sm" onClick={() => { close(); this.reload() }}>Fechar</button>}
+                        <button className="btn sm" onClick={this.reload}>{t('Recarregar painel')}</button>
+                        {close && <button className="btn sm" onClick={() => { close(); this.reload() }}>{t('Fechar')}</button>}
                     </div>
                 </div>
             </section>

@@ -93,7 +93,7 @@ test('Editor de peças: metadados, conectores, vistas, gravar com registro, troc
     await editor.getByLabel('Título').fill('Resistor de teste')
     await editor.getByLabel('Título').blur()
 
-    await editor.getByRole('button', { name: 'Conectores' }).click()
+    await editor.getByRole('tab', { name: 'Conectores' }).click()
     const count = editor.locator('input[type="number"]')
     await count.fill('3')
     await expect(editor.getByRole('cell', { name: 'connector2' })).toBeVisible()
@@ -101,9 +101,9 @@ test('Editor de peças: metadados, conectores, vistas, gravar com registro, troc
     await expect(editor.getByRole('cell', { name: 'connector2' })).toHaveCount(0)
 
     for (const tab of ['Protoboard', 'Esquemático', 'PCB', 'Ícone'])
-        await editor.getByRole('button', { name: tab, exact: true }).click()
+        await editor.getByRole('tab', { name: tab, exact: true }).click()
 
-    await editor.getByRole('button', { name: 'Protoboard', exact: true }).click()
+    await editor.getByRole('tab', { name: 'Protoboard', exact: true }).click()
     await editor.locator('input[type="file"]').setInputFiles({ name: 'ruim.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('isto não é svg') })
     await expect.poll(() => app.message()).toBe('ruim.svg: SVG inválido')
 
@@ -200,7 +200,7 @@ test('Editor de peças: SVG novo, conector atribuído a um elemento, terminal, t
     const resistor = await app.place('Resistor', [-300, 0])
     const editor   = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Editor de peças' }) })
     const rows     = async () => {
-        await editor.getByRole('button', { name: 'Metadados' }).click()
+        await editor.getByRole('tab', { name: 'Metadados' }).click()
         await expect(editor.getByRole('heading', { name: 'Histórico de revisões' })).toBeVisible()
         return editor.locator('tbody tr').count()
     }
@@ -209,25 +209,25 @@ test('Editor de peças: SVG novo, conector atribuído a um elemento, terminal, t
     const history = await rows()
     expect(history).toBe(1)
 
-    await editor.getByRole('button', { name: 'Conectores' }).click()
+    await editor.getByRole('tab', { name: 'Conectores' }).click()
     await editor.locator('input[type="number"]').fill('3')
     const first = editor.locator('tbody tr').first()
     await first.locator('select').selectOption('female')
     await first.locator('input').first().fill('A')
     await first.locator('input').first().press('Enter')
 
-    await editor.getByRole('button', { name: 'Protoboard', exact: true }).click()
+    await editor.getByRole('tab', { name: 'Protoboard', exact: true }).click()
     await editor.locator('input[type="file"]').setInputFiles({ name: 'novo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(SVG) })
     await expect(editor.locator('#pino')).toHaveCount(1)
 
     const item = editor.getByRole('button', { name: /connector2/ })
     await item.click()
-    await expect(item.locator('.bg-negative')).toHaveCount(1)
+    await expect(item.locator('.dot.bad')).toHaveCount(1)
     await editor.locator('#pino').click()
-    await expect(item.locator('.bg-positive')).toHaveCount(1)
+    await expect(item.locator('.dot.ok')).toHaveCount(1)
     await expect(editor.locator('#pino')).toHaveCount(0)
     await expect(editor.locator('#connector2pin')).toHaveClass(/pe-current/)
-    await editor.getByRole('button', { name: 'Topo', exact: true }).click()
+    await editor.getByRole('tab', { name: 'Topo', exact: true }).click()
     await expect(editor.getByText(/Terminal em /)).toBeVisible()
 
     await editor.getByRole('button', { name: 'Baixar .fzpz' }).click()

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Icon, type IconName } from '../Icon'
 import { countProblems, getProblems, useProblemState } from '../Problems'
 import { useStore, type Left } from '../Store'
+import { t } from '../../core/Text'
 
 const ITEMS: [Left, IconName, string][] = [['parts', 'parts', 'Peças'], ['project', 'layers', 'Projeto'], ['problems', 'alert', 'Problemas']]
 
@@ -22,17 +23,17 @@ export const Rail = () => {
     const { setLeft, toggleTheme } = useStore.getState()
 
     return (
-        <nav className="rail" aria-label="Painéis">
+        <nav className="rail" aria-label={t('Painéis')}>
             {ITEMS.map(([id, icon, label]) => (
-                <button key={id} className="rail-btn" aria-pressed={left === id} aria-label={label} title={label} onClick={() => { setLeft(id); toggleSheet('sheet-left') }}>
+                <button key={id} className="rail-btn" aria-pressed={left === id} aria-label={t(label)} title={t(label)} onClick={() => { setLeft(id); toggleSheet('sheet-left') }}>
                     <Icon name={icon} />
                     {id === 'problems' && count > 0 && <span className="badge">{count}</span>}
                 </button>
             ))}
-            <button className="rail-btn phone-only" aria-label="Propriedades" title="Propriedades" onClick={() => toggleSheet('sheet-insp')}><Icon name="sliders" /></button>
+            <button className="rail-btn phone-only" aria-label={t('Propriedades')} title={t('Propriedades')} onClick={() => toggleSheet('sheet-insp')}><Icon name="sliders" /></button>
             <span className="rail-gap" />
-            <button className="rail-btn" aria-label="Alternar tema" title="Alternar tema claro/escuro" onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
-            <button className="rail-btn" aria-label="Atalhos" title="Atalhos de teclado" onClick={() => useStore.setState({ dialog: 'shortcuts' })}><Icon name="help" /></button>
+            <button className="rail-btn" aria-label={t('Alternar tema')} title={t('Alternar tema claro/escuro')} onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+            <button className="rail-btn" aria-label={t('Atalhos')} title={t('Atalhos de teclado')} onClick={() => useStore.setState({ dialog: 'shortcuts' })}><Icon name="help" /></button>
         </nav>
     )
 }

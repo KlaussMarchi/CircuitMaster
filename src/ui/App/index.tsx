@@ -12,6 +12,7 @@ import { Boundary } from '../Boundary'
 import { Palette } from '../Palette'
 import { Tour } from '../Tour'
 import { getKeyMap, keyOf } from '../Keys'
+import { t } from '../../core/Text'
 
 // EDITOR DE PEÇAS SÓ CARREGA QUANDO ABRE: FORA DO JAVASCRIPT INICIAL (FRIZING_KICAD §8); A PALETA FICA NO INICIAL PARA O PRIMEIRO Ctrl+K NÃO PERDER TECLAS
 const PartEditor = lazy(() => import('../PartEditor').then(module => ({ default: module.PartEditor })))
@@ -42,8 +43,10 @@ const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
 
 // JANELA DO EDITOR: BARRA SUPERIOR, TRILHO, PAINEL ESQUERDO, PALCO COM A DOCA DE SIMULAÇÃO, INSPETOR E BARRA DE STATUS (DESIGN.md §6)
 export const App = () => {
+    const language = useStore(state => state.language)
+
     useEffect(() => {
-        useStore.getState().setup().then(() => Promise.all([import('../Output'), import('../Lesson')]).catch(() => null), error => useStore.setState({ message: `falha ao iniciar: ${error}` }))    // DEPOIS DA ABERTURA: EXPORTAR E O CARTÃO DIDÁTICO SEGUEM FUNCIONANDO SEM REDE
+        useStore.getState().setup().then(() => Promise.all([import('../Output'), import('../Lesson')]).catch(() => null), error => useStore.setState({ message: t('falha ao iniciar: {0}', String(error)) }))    // DEPOIS DA ABERTURA: EXPORTAR E O CARTÃO DIDÁTICO SEGUEM FUNCIONANDO SEM REDE
         window.addEventListener('keydown', onKey)
         document.addEventListener('visibilitychange', onHide)
         window.addEventListener('pagehide', onHide)
@@ -55,7 +58,7 @@ export const App = () => {
     }, [])
 
     return (
-        <div className="app">
+        <div className="app" key={language}>
             <Boundary name="Barra superior" className="topbar"><Topbar /></Boundary>
             <div className="shell">
                 <Boundary name="Trilho" className="rail"><Rail /></Boundary>
@@ -65,7 +68,7 @@ export const App = () => {
                     <Boundary name="Simulação" className="dock card"><SimulationPanel /></Boundary>
                 </main>
                 <Boundary name="Inspetor" className="inspector card"><SidePanel /></Boundary>
-                <button className="sheet-scrim" aria-label="Fechar painel" onClick={() => toggleSheet(null)} />
+                <button className="sheet-scrim" aria-label={t('Fechar painel')} onClick={() => toggleSheet(null)} />
             </div>
             <Boundary name="Barra de status" className="status"><StatusBar /></Boundary>
             <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb" hidden onChange={onFile} />

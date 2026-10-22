@@ -1,3 +1,5 @@
+import { t } from '../Text'
+
 export type PropertyDef = { name: string, symbol: string, min: number | null, max: number | null, value: string, numeric: boolean, editable: boolean, suffixes: string[], values: string[] }
 
 const PREFIXES: [string, number][] = [['p', 1e-12], ['n', 1e-9], ['µ', 1e-6], ['u', 1e-6], ['μ', 1e-6], ['m', 1e-3], ['', 1], ['k', 1e3], ['M', 1e6], ['G', 1e9], ['T', 1e12]]
@@ -86,7 +88,7 @@ export const formatSi = (value: number, symbol = '', decimals = 3) => {
     return `${+(value / scale).toFixed(decimals)}${prefix}${symbol}`
 }
 
-const TINY_READING = 1e-12    // ABAIXO DISSO A LEITURA É ZERO
+export const TINY_READING = 1e-12    // ABAIXO DISSO A LEITURA É ZERO
 
 // LEITURA DE INSTRUMENTO: 4 ALGARISMOS SIGNIFICATIVOS, PREFIXO SI E ESPAÇO ANTES DA UNIDADE
 export const formatReading = (value: number, symbol: string) => {
@@ -106,4 +108,4 @@ const NAMES: Record<string, string> = {
     'time/div': 'Tempo/div', 'volts/div': 'Volts/div', 'horizontal position': 'Posição horizontal', 'voltage drop': 'Queda de tensão', 'forward current': 'Corrente direta', chip: 'Chip', 'knob status': 'Posição do cursor', 'default state': 'Estado padrão', 'contact resistance': 'Resistência de contato'
 }
 
-export const nameOf = (key: string) => NAMES[key.toLowerCase()] ?? key.charAt(0).toUpperCase() + key.slice(1)
+export const nameOf = (key: string) => NAMES[key.toLowerCase()] ? t(NAMES[key.toLowerCase()]) : key.charAt(0).toUpperCase() + key.slice(1)

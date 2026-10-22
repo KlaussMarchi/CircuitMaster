@@ -5,6 +5,7 @@ import { formatReading } from '../../core/Properties'
 import { Scene } from '../../engine/Scene'
 import { describeChange } from '../../engine/History'
 import { useStore } from '../Store'
+import { t } from '../../core/Text'
 
 const LISTED = new Set(['part', 'symbol', 'breadboard', 'board', 'resizableBoard'])
 const VALUES = ['resistance', 'capacitance', 'inductance', 'voltage', 'amplitude', 'frequency', 'color', 'chip label', 'part number']
@@ -33,7 +34,7 @@ export const Outline = () => {
 
     const past       = useStore(state => state.past)
     const future     = useStore(state => state.future)
-    const history    = useMemo(() => [...past, doc, ...future].map((state, i, timeline) => i ? describeChange(timeline[i - 1], state) : 'início (sketch aberto ou novo)').map((label, i) => [label, i - past.length] as const).reverse(), [past, doc, future])
+    const history    = useMemo(() => [...past, doc, ...future].map((state, i, timeline) => i ? describeChange(timeline[i - 1], state) : t('início (sketch aberto ou novo)')).map((label, i) => [label, i - past.length] as const).reverse(), [past, doc, future])
 
     const parts = useMemo(() => Object.values(doc.instances).filter(instance => LISTED.has(library.getPart(instance.moduleIdRef)?.kind ?? '')).sort((a, b) => byTitle(a.title, b.title)), [doc, library])
     const nets  = useMemo(() => netlist ? getNets(netlist.doc, library, netlist).filter(net => net.length > 1) : [], [library, netlist])
@@ -58,10 +59,10 @@ export const Outline = () => {
     }
 
     return (
-        <section className="lp" aria-label="Projeto">
-            <div className="lp-head"><h2>Projeto</h2><p className="sub">{name} · {parts.length} peças · {nets.length} nós</p></div>
+        <section className="lp" aria-label={t('Projeto')}>
+            <div className="lp-head"><h2>{t('Projeto')}</h2><p className="sub">{t(name)} · {t('{0} peças', parts.length)} · {t('{0} nós', nets.length)}</p></div>
             <div className="lp-body">
-                <h3 className="h3">Lista de peças</h3>
+                <h3 className="h3">{t('Lista de peças')}</h3>
                 {parts.length ? (
                     <ul className="list">
                         {parts.map(instance => (
@@ -74,8 +75,8 @@ export const Outline = () => {
                             </li>
                         ))}
                     </ul>
-                ) : <div className="empty">Nenhuma peça ainda. Escolha uma em Peças e clique no quadro.</div>}
-                {nets.length > 0 && <h3 className="h3">Nós</h3>}
+                ) : <div className="empty">{t('Nenhuma peça ainda. Escolha uma em Peças e clique no quadro.')}</div>}
+                {nets.length > 0 && <h3 className="h3">{t('Nós')}</h3>}
                 <ul className="list">
                     {nets.map((net, i) => (
                         <li key={net[0]}>
@@ -85,14 +86,14 @@ export const Outline = () => {
                         </li>
                     ))}
                 </ul>
-                {history.length > 1 && <h3 className="h3">Histórico de desfazer</h3>}
+                {history.length > 1 && <h3 className="h3">{t('Histórico de desfazer')}</h3>}
                 {history.length > 1 && (
-                    <ul className="list" aria-label="Histórico de desfazer">
+                    <ul className="list" aria-label={t('Histórico de desfazer')}>
                         {history.map(([label, steps]) => (
                             <li key={steps}>
-                                <button className={`row-btn${steps === 0 ? ' current' : ''}`} aria-current={steps === 0 ? 'step' : undefined} title={steps === 0 ? 'estado atual' : steps < 0 ? `desfazer ${-steps} passo(s)` : `refazer ${steps} passo(s)`} onClick={() => useStore.getState().jump(steps)}>
+                                <button className={`row-btn${steps === 0 ? ' current' : ''}`} aria-current={steps === 0 ? 'step' : undefined} title={steps === 0 ? t('estado atual') : steps < 0 ? t('desfazer {0} passo(s)', -steps) : t('refazer {0} passo(s)', steps)} onClick={() => useStore.getState().jump(steps)}>
                                     <span className={`grow${steps > 0 ? ' muted' : ''}`}>{label}</span>
-                                    {steps === 0 && <span className="muted">agora</span>}
+                                    {steps === 0 && <span className="muted">{t('agora')}</span>}
                                 </button>
                             </li>
                         ))}

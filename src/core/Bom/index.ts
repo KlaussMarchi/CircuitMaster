@@ -2,6 +2,7 @@ import type { Doc } from '../Document'
 import type { Library } from '../Library'
 import type { Artwork } from '../Cam'
 import { Pdf } from '../Pdf'
+import { getTag, t } from '../Text'
 
 type Row = { label: string, value: string, mn: string, mpn: string, title: string, properties: string }
 
@@ -34,14 +35,14 @@ export const getShopping = (rows: Row[]) => [...rows.reduce((groups, row) => {
     return groups.set(key, group)
 }, new Map<string, Row & { labels: string[] }>()).values()]
 
-export const exportBomCsv = (doc: Doc, library: Library) => [csv(['Rótulo', 'Valor', 'MN', 'MPN', 'Peça', 'Propriedades']), ...getBomRows(doc, library).map(row => csv([row.label, row.value, row.mn, row.mpn, row.title, row.properties]))].join('\n') + '\n'
+export const exportBomCsv = (doc: Doc, library: Library) => [csv([t('Rótulo'), t('Valor'), 'MN', 'MPN', t('Peça'), t('Propriedades')]), ...getBomRows(doc, library).map(row => csv([row.label, row.value, row.mn, row.mpn, row.title, row.properties]))].join('\n') + '\n'
 
 export const exportBomHtml = (doc: Doc, library: Library, name: string) => {
     const rows     = getBomRows(doc, library)
     const shopping = getShopping(rows)
-    const table    = (head: string[], body: string[][]) => `<table><thead><tr>${head.map(cell => `<th>${escapeHtml(cell)}</th>`).join('')}</tr></thead><tbody>${body.map(line => `<tr>${line.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+    const table    = (head: string[], body: string[][]) => `<table><thead><tr>${head.map(cell => `<th>${escapeHtml(t(cell))}</th>`).join('')}</tr></thead><tbody>${body.map(line => `<tr>${line.map(cell => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
     const style    = 'body{font-family:sans-serif;margin:24px;color:#222}table{border-collapse:collapse;margin:12px 0 28px}th,td{border:1px solid #ccc;padding:4px 8px;font-size:13px;text-align:left}th{background:#eef5ee}'
-    return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Lista de materiais — ${escapeHtml(name)}</title><style>${style}</style></head><body><h1>Lista de materiais</h1><p>${escapeHtml(name)} · ${rows.length} peças</p><h2>Lista de montagem</h2>${table(['Rótulo', 'Peça', 'Valor', 'MN', 'MPN', 'Propriedades'], rows.map(row => [row.label, row.title, row.value, row.mn, row.mpn, row.properties]))}<h2>Lista de compras</h2>${table(['Qtd.', 'Peça', 'Valor', 'Rótulos', 'Propriedades'], shopping.map(group => [String(group.labels.length), group.title, group.value, group.labels.join(', '), group.properties]))}</body></html>\n`
+    return `<!doctype html><html lang="${getTag()}"><head><meta charset="utf-8"><title>${t('Lista de materiais')} — ${escapeHtml(name)}</title><style>${style}</style></head><body><h1>${t('Lista de materiais')}</h1><p>${escapeHtml(name)} · ${t('{0} peças', rows.length)}</p><h2>${t('Lista de montagem')}</h2>${table(['Rótulo', 'Peça', 'Valor', 'MN', 'MPN', 'Propriedades'], rows.map(row => [row.label, row.title, row.value, row.mn, row.mpn, row.properties]))}<h2>${t('Lista de compras')}</h2>${table(['Qtd.', 'Peça', 'Valor', 'Rótulos', 'Propriedades'], shopping.map(group => [String(group.labels.length), group.title, group.value, group.labels.join(', '), group.properties]))}</body></html>\n`
 }
 
 const PAGE: [number, number] = [595.28, 841.89]    // A4 EM PONTOS
@@ -80,7 +81,7 @@ export const exportBomPdf = (doc: Doc, library: Library, name: string) => {
             y += ROW
         }
 
-        const header = () => cells(columns.map(([label]) => label), true)
+        const header = () => cells(columns.map(([label]) => t(label)), true)
 
         y += ROW
         pdf.text(MARGIN, y, 13, title, true)
@@ -98,11 +99,11 @@ export const exportBomPdf = (doc: Doc, library: Library, name: string) => {
     }
 
     newPage()
-    pdf.text(MARGIN, y + 12, 18, 'Lista de materiais', true)
-    pdf.text(MARGIN, y + 30, 10, `${name} · ${rows.length} peças · ${new Date().toLocaleDateString('pt-BR')}`)
+    pdf.text(MARGIN, y + 12, 18, t('Lista de materiais'), true)
+    pdf.text(MARGIN, y + 30, 10, `${name} · ${t('{0} peças', rows.length)} · ${new Date().toLocaleDateString(getTag())}`)
     y += 36
-    table('Lista de montagem', ASSEMBLY, rows.map(row => [row.label, row.title, row.value, row.mn, row.mpn, row.properties]))
-    table('Lista de compras', SHOPPING, shopping.map(group => [String(group.labels.length), group.title, group.value, group.labels.join(', '), group.properties]))
+    table(t('Lista de montagem'), ASSEMBLY, rows.map(row => [row.label, row.title, row.value, row.mn, row.mpn, row.properties]))
+    table(t('Lista de compras'), SHOPPING, shopping.map(group => [String(group.labels.length), group.title, group.value, group.labels.join(', '), group.properties]))
     return pdf.export()
 }
 

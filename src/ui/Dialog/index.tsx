@@ -2,6 +2,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { LEVELS } from '../Modes'
 import { assignKey, getKeyMap, KEY_ACTIONS, keyOf, shortcutOf, showKey } from '../Keys'
 import { useStore } from '../Store'
+import { getTag, LANGUAGES, t } from '../../core/Text'
 
 // GESTOS DE MOUSE E DO FIO EM DESENHO: FIXOS; AS TECLAS SAEM DA TABELA DE AÇÕES (ui/Keys), COM AS ESCOLHAS DAS PREFERÊNCIAS
 const GESTURES: [string, string][] = [
@@ -29,8 +30,8 @@ const Shortcuts = () => {
 
 const Choice = <T extends string | number | boolean,>({ label, value, options, change }: { label: string, value: T, options: [T, string][], change: (value: T) => void }) => (
     <div className="pref">
-        <span>{label}</span>
-        <div className="seg tabs" role="tablist" aria-label={label}>{options.map(([id, text]) => <button key={String(id)} className="tab" role="tab" aria-selected={value === id} onClick={() => change(id)}>{text}</button>)}</div>
+        <span>{t(label)}</span>
+        <div className="seg tabs" role="tablist" aria-label={t(label)}>{options.map(([id, text]) => <button key={String(id)} className="tab" role="tab" aria-selected={value === id} onClick={() => change(id)}>{t(text)}</button>)}</div>
     </div>
 )
 
@@ -38,9 +39,10 @@ const Choice = <T extends string | number | boolean,>({ label, value, options, c
 const Preferences = () => {
     const preferences = useStore(state => state.preferences)
     const level       = useStore(state => state.level)
+    const language    = useStore(state => state.language)
     const theme       = useStore(state => state.theme)
     const keys        = useStore(state => state.keys)
-    const { setPreferences, setLevel, toggleTheme, setKeys } = useStore.getState()
+    const { setPreferences, setLevel, setLanguage, toggleTheme, setKeys } = useStore.getState()
 
     const capture = (id: string) => (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'Escape' || event.key === 'Tab' || MODIFIERS.includes(event.key))
@@ -56,20 +58,21 @@ const Preferences = () => {
             <Choice label="Roda do mouse" value={preferences.wheel} options={[['zoom', 'Zoom'], ['scroll', 'Rolar a vista']]} change={wheel => setPreferences({ wheel })} />
             <Choice label="Arrastar o meio de um fio" value={preferences.curvy} options={[[false, 'Faz uma dobra'], [true, 'Curva o fio']]} change={curvy => setPreferences({ curvy })} />
             <Choice label="Modo da interface" value={level} options={LEVELS.map(([id, text]) => [id, text])} change={setLevel} />
+            <Choice label="Idioma" value={language} options={LANGUAGES.map(([id, text]) => [id, text])} change={next => void setLanguage(next)} />
             <Choice label="Tema" value={theme} options={[['dark', 'Escuro'], ['light', 'Claro']]} change={next => next !== theme && toggleTheme()} />
-            <p className="soft" style={{ margin: '14px 0 6px' }}>Atalhos: clique no campo e aperte a tecla nova. Uma tecla já usada passa para esta ação.</p>
+            <p className="soft" style={{ margin: '14px 0 6px' }}>{t('Atalhos: clique no campo e aperte a tecla nova. Uma tecla já usada passa para esta ação.')}</p>
             <table className="tbl keys prefs-keys">
                 <tbody>
                     {KEY_ACTIONS.map(action => (
                         <tr key={action.id}>
-                            <td>{action.label}</td>
-                            <td><input className="keycap" readOnly aria-label={`Tecla de ${action.label}`} value={shortcutOf(keys, action.id) ?? '—'} onKeyDown={capture(action.id)} /></td>
-                            <td>{keys[action.id] && <button className="link" onClick={() => setKeys(assignKey(keys, action.id, null))}>padrão</button>}</td>
+                            <td>{t(action.label)}</td>
+                            <td><input className="keycap" readOnly aria-label={t('Tecla de {0}', t(action.label))} value={shortcutOf(keys, action.id) ?? '—'} onKeyDown={capture(action.id)} /></td>
+                            <td>{keys[action.id] && <button className="link" onClick={() => setKeys(assignKey(keys, action.id, null))}>{t('padrão')}</button>}</td>
                         </tr>
                     ))}
                 </tbody>
             </table>
-            {Object.keys(keys).length > 0 && <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm" onClick={() => setKeys({})}>Restaurar todos os atalhos</button></div>}
+            {Object.keys(keys).length > 0 && <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm" onClick={() => setKeys({})}>{t('Restaurar todos os atalhos')}</button></div>}
         </>
     )
 }
@@ -84,11 +87,11 @@ const CREDITS: [string, string][] = [
 
 const Table = ({ rows }: { rows: [string, string][] }) => (
     <table className="tbl keys">
-        <tbody>{rows.map(([key, text]) => <tr key={key}><td><kbd>{key}</kbd></td><td>{text}</td></tr>)}</tbody>
+        <tbody>{rows.map(([key, text]) => <tr key={key}><td><kbd>{t(key)}</kbd></td><td>{t(text)}</td></tr>)}</tbody>
     </table>
 )
 
-const when = (time: number) => new Date(time).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+const when = (time: number) => new Date(time).toLocaleString(getTag(), { dateStyle: 'short', timeStyle: 'short' })
 
 // VERSÕES DO SALVAMENTO AUTOMÁTICO: NA ABERTURA, AS DE SESSÕES QUE FECHARAM COM ALTERAÇÕES NÃO SALVAS; PELO MENU, TODAS
 const Versions = ({ startup }: { startup: boolean }) => {
@@ -97,33 +100,35 @@ const Versions = ({ startup }: { startup: boolean }) => {
 
     return (
         <>
-            <p className="soft" style={{ marginBottom: 12 }}>{startup ? 'O CircuitMaster fechou com alterações não salvas. Abra uma versão para continuar dela; nada é apagado até você descartar.' : 'Cópias gravadas sozinhas a cada mudança: uma nova por minuto de edição, as 20 mais recentes.'}</p>
+            <p className="soft" style={{ marginBottom: 12 }}>{startup ? t('O CircuitMaster fechou com alterações não salvas. Abra uma versão para continuar dela; nada é apagado até você descartar.') : t('Cópias gravadas sozinhas a cada mudança: uma nova por minuto de edição, as 20 mais recentes.')}</p>
             {versions.length ? (
                 <table className="tbl">
                     <tbody>
                         {versions.map(version => (
                             <tr key={version.id}>
-                                <td>{version.name}</td>
+                                <td>{t(version.name)}</td>
                                 <td>{when(version.time)}</td>
-                                <td>{version.count} itens</td>
-                                <td className="label">{version.dirty ? 'não salvo' : 'salvo'}</td>
-                                <td><button className="btn sm" onClick={() => void recover(version)}>Abrir</button></td>
+                                <td>{t('{0} itens', version.count)}</td>
+                                <td className="label">{version.dirty ? t('não salvo') : t('salvo')}</td>
+                                <td><button className="btn sm" onClick={() => void recover(version)}>{t('Abrir')}</button></td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-            ) : <p className="soft">Nenhuma versão guardada ainda: elas aparecem depois da primeira mudança no sketch.</p>}
-            {startup && <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm" onClick={() => void dismissRecovery()}>Descartar</button></div>}
+            ) : <p className="soft">{t('Nenhuma versão guardada ainda: elas aparecem depois da primeira mudança no sketch.')}</p>}
+            {startup && <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm" onClick={() => void dismissRecovery()}>{t('Descartar')}</button></div>}
         </>
     )
 }
+
+const About = () => <><p className="soft" style={{ marginBottom: 12 }}>{t('Editor de circuitos compatível com o Fritzing 1.0.8: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM).')}</p><Table rows={CREDITS} /></>
 
 const CONTENT: Record<string, [string, ReactNode]> = {
     recovery: ['Recuperar trabalho não salvo', <Versions startup />],
     versions: ['Versões salvas automaticamente', <Versions startup={false} />],
     shortcuts: ['Atalhos de teclado', <Shortcuts />],
     preferences: ['Preferências', <Preferences />],
-    about: ['Sobre o CircuitMaster', <><p className="soft" style={{ marginBottom: 12 }}>Editor de circuitos compatível com o Fritzing 1.0.8: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM).</p><Table rows={CREDITS} /></>]
+    about: ['Sobre o CircuitMaster', <About />]
 }
 
 // JANELA MODAL DE AJUDA E DE VERSÕES; FECHA NO BOTÃO, NO FUNDO OU NO ESC
@@ -136,11 +141,11 @@ export const Dialog = () => {
         return null
 
     return (
-        <div className="modal" role="dialog" aria-modal="true" aria-label={shown[0]} onPointerDown={event => event.target === event.currentTarget && close()} onKeyDown={event => event.key === 'Escape' && close()}>
+        <div className="modal" role="dialog" aria-modal="true" aria-label={t(shown[0])} onPointerDown={event => event.target === event.currentTarget && close()} onKeyDown={event => event.key === 'Escape' && close()}>
             <section className="card">
                 <header className="modal-head">
-                    <h2>{shown[0]}</h2>
-                    <button className="btn sm" autoFocus onClick={close}>Fechar</button>
+                    <h2>{t(shown[0])}</h2>
+                    <button className="btn sm" autoFocus onClick={close}>{t('Fechar')}</button>
                 </header>
                 {shown[1]}
             </section>

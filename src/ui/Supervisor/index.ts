@@ -1,3 +1,5 @@
+import { t } from '../../core/Text'
+
 type Pending = { resolve: (result: unknown) => void, progress: (progress: never) => void }
 
 export type Reply = { id?: number, result?: unknown, progress?: unknown, error?: string }
@@ -25,10 +27,10 @@ export class Supervisor<M extends object = object> {
 
         const worker = this.create()
         worker.onmessage      = ({ data }) => this.receive(data)
-        worker.onmessageerror = () => this.stop('o processo de fundo mandou uma resposta ilegível')
+        worker.onmessageerror = () => this.stop(t('o processo de fundo mandou uma resposta ilegível'))
         worker.onerror        = event => {
             event.preventDefault()
-            this.stop(`o processo de fundo falhou (${event.message || 'sem mensagem'})`)
+            this.stop(t('o processo de fundo falhou ({0})', event.message || t('sem mensagem')))
         }
         this.worker = worker
         return worker
@@ -55,7 +57,7 @@ export class Supervisor<M extends object = object> {
 
         if (data.error !== undefined) {
             pending.resolve(null)
-            return this.stop(`o processo de fundo falhou (${data.error})`)
+            return this.stop(t('o processo de fundo falhou ({0})', data.error))
         }
 
         pending.resolve(data.result)
@@ -65,7 +67,7 @@ export class Supervisor<M extends object = object> {
         clearTimeout(this.timer)
 
         if (this.pending.size)
-            this.timer = setTimeout(() => this.stop(`o processo de fundo ficou ${this.idle / 1000} s sem responder e foi reiniciado`), this.idle)
+            this.timer = setTimeout(() => this.stop(t('o processo de fundo ficou {0} s sem responder e foi reiniciado', this.idle / 1000)), this.idle)
     }
 
     stop(reason = '') {

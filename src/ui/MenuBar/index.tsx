@@ -13,6 +13,7 @@ import { getMode } from '../../core/Spice'
 import { TESTS } from '../SimulationPanel'
 import { LAYER_GROUPS } from '../Layers'
 import { LEVELS } from '../Modes'
+import { t } from '../../core/Text'
 import type { ProbeKind } from '../../core/Document'
 
 type State = ReturnType<typeof useStore.getState>
@@ -47,7 +48,9 @@ const fileMenu = (state: State): MenuEntry[] => {
         { label: 'Exemplos', disabled: !state.samples.length, items: sampleTree(state, state.samples) },
         null,
         { label: 'Salvar', shortcut: shortcutOf(state.keys, 'save'), apply: () => void state.save() },
+        ...state.sheets.length > 1 ? [{ label: 'Salvar todos', apply: () => void state.saveAll() }] : [],
         { label: 'Versões salvas automaticamente…', apply: () => void state.showVersions() },
+        { label: 'Fechar sketch', apply: () => state.closeSheet(state.sheet) },
         { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: [item(['Tudo para fabricar (zip)…', 'production']), null, ...PRODUCTION.map(item)] }, null, ...LISTS.map(item)] }
     ]
 }
@@ -198,10 +201,10 @@ export const MenuBar = () => {
     }, [])
 
     return (
-        <nav ref={ref} className="menubar" aria-label="Menu principal">
+        <nav ref={ref} className="menubar" aria-label={t('Menu principal')}>
             {MENUS.map(([title, build], i) => (
                 <div key={title} className={`menu ${open === i ? 'open' : ''}`}>
-                    <button aria-haspopup="true" aria-expanded={open === i} disabled={!ready} onClick={() => setOpen(open === i ? null : i)} onMouseEnter={() => open !== null && setOpen(i)}>{title}</button>
+                    <button aria-haspopup="true" aria-expanded={open === i} disabled={!ready} onClick={() => setOpen(open === i ? null : i)} onMouseEnter={() => open !== null && setOpen(i)}>{t(title)}</button>
                     {open === i && <div className="absolute left-0 top-8 z-[60]"><MenuList items={build(useStore.getState())} close={() => setOpen(null)} left={false} /></div>}
                 </div>
             ))}

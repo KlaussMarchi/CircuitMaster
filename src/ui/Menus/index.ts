@@ -7,6 +7,7 @@ import { getConfig } from '../Pcb'
 import type { MenuEntry } from '../ContextMenu'
 import { isEditable, useStore } from '../Store'
 import { shortcutOf } from '../Keys'
+import { t } from '../../core/Text'
 
 export type Target = { kind: 'part' | 'wire' | 'ratsnest', modelIndex: string, key: string | null, point: Point, rat: [string, string] | null }
 
@@ -20,7 +21,7 @@ const ROTATIONS: [string, string, number, boolean][] = [['Girar 45° no sentido 
 
 // BIN NOVO COM O NOME PEDIDO; CANCELAR NÃO CRIA
 export const promptBin = (moduleIds: string[]) => {
-    const title = window.prompt('Nome do novo bin', `Bin ${useStore.getState().userBins.length + 1}`)
+    const title = window.prompt(t('Nome do novo bin'), `Bin ${useStore.getState().userBins.length + 1}`)
 
     if (title !== null)
         useStore.getState().createBin(title, moduleIds)
