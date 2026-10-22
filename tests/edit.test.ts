@@ -4,7 +4,7 @@ import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import { cubicAt, distance, nearestOnCubic, type Point } from '../src/core/Geometry'
 import { Scene } from '../src/engine/Scene'
-import { bendToVia, bendWire, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, viaToBend } from '../src/engine/Edit'
+import { bendToVia, bendWire, setAutoroutable, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, viaToBend } from '../src/engine/Edit'
 import { getDrawing } from '../src/engine/Drawing'
 import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
 
@@ -180,6 +180,22 @@ describe.skipIf(!HAS_FRITZING)('edição de fios e peças (spec 02 §4, §10)', 
 
         expect(doc.instances['1'].properties.sticky).toBeUndefined()
         expect(doc.instances['2'].properties.sticky).toBe('true')
+    })
+
+    it('não rotear automaticamente vale para a cadeia inteira da trilha, como o collectChained do Fritzing', async () => {
+        const library = makeLibrary()
+        await library.load([RESISTOR, WIRE])
+        const placed  = [[0, 0], [300, 0]].reduce((current, point) => createInstance(current, library, RESISTOR, everywhere(point as Point)), emptyDoc())
+        const traced  = createWire(placed, library, 'pcbView', keyOf('1', 'connector1'), keyOf('2', 'connector0'))
+        const bent    = splitWire(splitWire(traced, 'pcbView', '3', [100, 0]).doc, 'pcbView', '3', [50, 0]).doc
+        const wires   = Object.values(bent.instances).filter(instance => instance.moduleIdRef === WIRE).map(instance => instance.modelIndex)
+        const flags   = (doc: Doc) => wires.map(wire => (doc.instances[wire]?.views.pcbView?.geometry.wireFlags ?? 0) & 32)
+
+        expect(wires).toHaveLength(3)
+
+        const routed = setAutoroutable(bent, library, 'pcbView', wires[1], true)
+        expect(flags(routed)).toEqual([32, 32, 32])
+        expect(flags(setAutoroutable(routed, library, 'pcbView', wires[2], false))).toEqual([0, 0, 0])
     })
 
     it('apagar a linha de ratsnest leva a cadeia inteira do fio com dobras, como o collectChained do Fritzing', async () => {

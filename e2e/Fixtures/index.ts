@@ -27,6 +27,9 @@ const traceRenderUpdates = () => {
     console.error = (...args: unknown[]) => original(...args, ...String(args[0]).includes('while rendering a different component') ? [new Error().stack] : [])
 }
 
+// OS TESTES ENXERGAM TODOS OS MENUS (MODO PROFISSIONAL) A MENOS QUE ESCOLHAM OUTRO MODO; O TESTE DOS MODOS TROCA E RECARREGA
+const professional = () => localStorage.getItem('circuitmaster.level') === null && localStorage.setItem('circuitmaster.level', '3')
+
 // O APP NUMA ABA: ABRE, LÊ O ESTADO PELO STORE QUE A PÁGINA CARREGOU E JUNTA TODO ERRO DE CONSOLE, PÁGINA OU REDE
 export class App {
     issues: string[]  = []
@@ -40,6 +43,7 @@ export class App {
     async setup() {
         this.watch()
         await this.page.addInitScript(traceRenderUpdates)
+        await this.page.addInitScript(professional)
         await this.open()
     }
 
@@ -137,7 +141,7 @@ export class App {
     simulated() {
         return this.page.evaluate(() => {
             const { busy, result, error } = cm.store.getState().simulation
-            return busy ? 'busy' : error ? `erro: ${error}` : result ? result.circuit.analysis.type : 'nada'
+            return busy ? 'busy' : error ? `erro: ${error}` : result ? (result.isStill() ? 'op' : 'tran') : 'nada'
         })
     }
 

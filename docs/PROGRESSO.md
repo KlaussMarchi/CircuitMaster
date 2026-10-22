@@ -133,9 +133,6 @@ Build de produção no `vite preview`, Chromium 156, i5-13450HX, 16 GB:
 
 ### Bugs e pendências abertos
 
-- Na PCB, em zoom normal a via fica inteira sob a faixa de clique das trilhas que chegam nela. Fase 2 (auditoria de
-  cliques).
-- Abrir um arquivo ou exemplo troca o documento sem perguntar, mesmo com alterações não salvas. Fase 1.
 - Aviso do React "Cannot update a component (`Rail`) while rendering a different component" apareceu duas vezes
   em rodadas completas (com `Canvas` e com `Icon` como componente em render), depois da última asserção de algum
   teste; não reproduziu em três rodadas instrumentadas. O fixture agora espera 300 ms antes de conferir os erros e
@@ -204,6 +201,10 @@ Spec `docs/specs/06-ROBUSTNESS-SPEC.md`.
    `e2e/perf.spec.ts` (pan sem tarefa longa).
 8. **Sem rede o Salvar não baixava**: o worker do `.fzz` nascia no primeiro uso e, offline, o script dele não
    carrega. Ele sobe na abertura. Teste: `e2e/robust.spec.ts` "Sem rede".
+Fechamento: `npm run verify` verde na pasta de trabalho e no clone limpo (Vitest 124 + 2 pulados pela falta do
+ngspice nativo, 152 E2E nos dois navegadores, desempenho dentro dos orçamentos); `npm run soak` verde. Commit
+`67aca5a`.
+
 ### Decisões
 
 - O salvamento automático grava a cada mudança, sem o intervalo configurável do Fritzing: o padrão certo no lugar de
@@ -216,9 +217,101 @@ Spec `docs/specs/06-ROBUSTNESS-SPEC.md`.
 - O aviso do React "Cannot update a component (`Rail`) while rendering…" (fase 0) não voltou nas rodadas da fase 1.
 - O JavaScript inicial está em 702 de 710 KB: a fase 2 carrega sob demanda o editor de peças e o que vier de novo.
 
+## Fase 2 — interface direta
+
+Spec `docs/specs/05-INTERFACE-SPEC.md` (a escrever ao fechar a fase).
+
+### Auditoria de cliques (antes → depois)
+
+Fotos do antes em `build/ui-antes/` (fim da fase 1); do depois em `build/ui/`.
+
+| Fluxo | Antes | Depois |
+|---|---|---|
+| Começar a desenhar no esquemático | 1 clique (o app abria na protoboard) | 0: abre no Esquemático |
+| Ver o circuito no tempo | 2 (Transitório na barra + Simular) | 1 (Simular); se nada varia, o regime direto |
+| Gráfico e medidas depois de simular | 0 a 1 (doca aberta; trocar de aba para Resposta) | 0: curvas, gráfico e medidas juntos |
+| Trocar o teste para Degrau | 2 (aba Ajustes + Degrau), só com Transitório ligado | 1 (Degrau no cabeçalho do painel) |
+| Ver τ, sobressinal e acomodação | 1 (aba Resposta) | 0 (coluna das medidas) |
+| Janela manual | 3 (Ajustes + Manual + campo) | 1 (digitar o fim ou Manual: os campos aparecem no cabeçalho) |
+| Duração da animação, valores sobre o circuito, opções do SPICE | 1 (Ajustes) + rolar | 1 ("⋯" do painel) |
+| Achar uma ação sem saber o menu | percorrer os menus | 2 (Ctrl+K e o nome, em português ou em inglês) |
+
+### Feito
+
+- **Abre no Esquemático** (decisão 1): o app, o sketch novo e o arquivo aberto (`START_VIEW` em `ui/Store`).
+- **Uma simulação só** (decisão 2): saiu o seletor DC/Transitório da barra e do menu; Simular roda o transitório na
+  janela do teste e, se todo vetor fica parado (até 10⁻⁴ do nível), mostra o regime sem animação, com a causa
+  quando o teste pedia variação ("Onda quadrada precisa de uma fonte de pulso…"). `Simulation.isStill()`; teste em
+  `tests/spice.test.ts`. O `.fzz` segue com as propriedades `simulator_*`.
+- **Painel único de simulação** (decisão 3, `ui/SimulationPanel`): teste em controle segmentado no cabeçalho
+  (Automático, Degrau, Onda quadrada, Senoide, Manual; o Manual mostra início e fim ali mesmo), fim da janela,
+  reproduzir/pausar e barra de tempo; "⋯" com animação, valores sobre o circuito, amostragem do manual e opções do
+  SPICE; corpo em três colunas: curvas (busca, caixa, cor; o nome escolhe a curva das medidas), gráfico sempre
+  visível (o regime sem eixo de tempo) e medidas da curva escolhida (no cursor, média, RMS, pico a pico; período,
+  subida, τ, sobressinal, acomodação, ζ, ganho e fase só quando valem). Abre sozinho ao simular. Até 1280 px curvas
+  e medidas dividem a coluna da esquerda; no celular tudo empilha. Saíram as abas Medidas/Resposta/Ajustes e o
+  `ui/SimulationSettings`. Menu Simulação › Teste ▸ e Painel de simulação.
+- **Paleta de comandos** (`ui/Palette`, `Ctrl+K`, Ajuda › Paleta de comandos): todo item dos menus (inclusive
+  exemplos e submenus) e os painéis, com caminho e atalho; termos em inglês do Fritzing e do KiCad por rótulo.
+
+### Bugs achados e corrigidos
+
+1. **Ponta de prova no terminal do esquemático não pegava**: em 100% o terminal fica na ponta da perna, fora da
+   área clicável da imagem, e a ponta só procurava terminais da peça sob o cursor. Agora procura o terminal a até
+   14 px do clique (`ui/Canvas.placeProbe`). Teste: `e2e/circuit.spec.ts` "Arquivo: Novo pergunta…".
+2. **Cabeçalho do painel alargava a página no celular** (478 px numa janela de 390): o cabeçalho quebra em linhas e
+   o controle de testes também. Teste: `e2e/ui.spec.ts` "Layout a 390 px".
+
+3. **Na PCB a via ficava inteira sob a faixa de clique das trilhas** (pendência da fase 0): em zoom normal não dava
+   para chegar ao menu da via. O quadro desenha um alvo de clique de cada via acima das trilhas, como no KiCad
+   (`ui/Canvas`, `viaHits`). Teste: `e2e/pcb.spec.ts` "dobra vira via" clica no centro da via sem aproximar o zoom
+   (falha sem a correção).
+4. **"Não rotear automaticamente" marcava só o trecho clicado**: ao apagar as trilhas autoroteadas, os trechos
+   vizinhos saíam e o trecho fixo ficava solto sobre o pad, cobre sem net que o DRC acusava. Agora vale para a cadeia
+   direta inteira, como o `excludeFromAutoroute` do Fritzing (`engine/Edit.setAutoroutable`). Testes:
+   `tests/edit.test.ts` "não rotear automaticamente vale para a cadeia inteira" e `e2e/pcb.spec.ts` "regras
+   gravadas" (o DRC volta a zero com a folga de 0,01 in).
+5. **Os E2E antigos não achavam itens avançados no modo Iniciante** (o modo novo esconde "Colar no lugar", "Travar
+   peça"…): 13 testes vermelhos nos dois navegadores. O fixture abre no modo Profissional quando a página ainda não
+   escolheu modo; o teste dos modos troca e recarrega (`e2e/ui.spec.ts` "Modos").
+6. **Timer 555 caía no cartão genérico de CI**: ganhou cartão próprio, com as fórmulas do astável e do monoestável
+   (`core/Lesson`). Teste: `tests/lesson.test.ts` (toda peça básica tem cartão próprio; família mais específica
+   vence; fórmula com os valores do circuito).
+
+7. **Firefox: a indexação parava em 2600/2619 sem erro** (achado pelo `verify`). O cache do IndexedDB só resolvia
+   em `complete` ou `error`: uma transação abortada deixava a promessa pendente, e a gravação final era esperada antes
+   do "pronto". A transação abortada também resolve, o "pronto" não espera o cache (que serve à próxima abertura) e
+   cada leitura tem 15 s com uma segunda tentativa (`workers/Indexer`). Sem teste que reproduza o aborto; a suíte do
+   Firefox inteira passou em três rodadas seguidas.
+8. **Salvar e fechar a aba logo depois oferecia "recuperar trabalho não salvo"**: a versão automática só virava
+   "salva" 1,5 s depois, montando o pacote de novo. O Salvar grava na hora a versão limpa com os mesmos bytes
+   (`ui/Store.save`). Teste: `e2e/ui.spec.ts` "Preferências" (salva, recarrega e não aparece a recuperação).
+9. **JavaScript inicial passou do orçamento** (723 de 710 KB, achado pelo `verify`). O editor de peças carrega quando
+   abre (`React.lazy`, 29 KB com o `PartDraft`); fica em 695 KB. A paleta continua no inicial: carregada sob demanda
+   ela perdia as primeiras teclas digitadas logo depois do Ctrl+K. Teste: `e2e/perf.spec.ts` e `e2e/ui.spec.ts`
+   "Modos" (Ctrl+K e digitar na hora).
+
+### Feito (continuação)
+
+- **Preferências** (Editar › Preferências…, Ctrl+,): roda do mouse (zoom ou rolar a vista, com Ctrl+roda para o
+  zoom), arrastar o meio do fio curva por padrão (Ctrl inverte, como o "curvy wires" do Fritzing), modo e tema;
+  gravadas no navegador (`circuitmaster.preferences`).
+- **Atalhos configuráveis** (`ui/Keys`): uma tabela de ações com nome, teclas padrão e o que fazem alimenta o
+  teclado, os atalhos dos menus e da paleta, o diálogo Atalhos (que deixou de ser uma lista escrita à mão) e o
+  editor de teclas das Preferências. A tecla escolhida sai da ação que a tinha; "padrão" e "Restaurar todos" voltam
+  ao Fritzing. Testes: `tests/keys.test.ts` e `e2e/ui.spec.ts` "Preferências".
+
+- "Tudo para fabricar (zip)…" em Exportar › Para produção (Gerber, furação, pick-and-place, BOM e IPC).
+- DRC automático na PCB a cada mudança, marcado no desenho (`[data-drc]`); Problemas lista.
+- Camadas da PCB na legenda do quadro e em Exibir › Camadas da PCB.
+- Modos Iniciante (padrão), Maker e Profissional (`ui/Modes`, Exibir › Modo da interface): só escondem itens; a
+  paleta acha tudo em qualquer modo; o modo fica gravado.
+- Cartão "Como funciona" no inspetor (`ui/Lesson`, `core/Lesson`): o que é, como funciona, fórmula e a fórmula com
+  os valores do circuito simulado; aberto no Iniciante.
+
 ### A seguir (fase 2)
 
-1. Abrir no Esquemático; Simular única (sem o seletor DC/Transitório); painel único de simulação em três colunas.
-2. Auditoria de cliques de cada fluxo, com o antes e o depois em fotos.
-3. Paleta de comandos (`Ctrl+K`), modos Iniciante/Maker/Profissional, painel de camadas, preferências, abas de
-   sketches, i18n pt-BR e en, atalhos configuráveis, tour e cartões didáticos.
+1. Idioma nas preferências (junto com o i18n do item 3).
+2. Tour curto por modo (o cartão didático já existe).
+3. Abas de sketches; i18n pt-BR e en.
+4. Spec 05 com o teste de clareza de cada função existente; README e spec 02 §10.4 com a interface nova; matriz.

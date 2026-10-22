@@ -7,7 +7,12 @@ import { MenuList, type MenuEntry } from '../ContextMenu'
 import { getMenu } from '../Menus'
 import { BOARD_EXPORTS, type ExportKind } from '../Export'
 import { useStore } from '../Store'
+import { shortcutOf } from '../Keys'
 import { BENCHES } from '../../engine/Bench'
+import { getMode } from '../../core/Spice'
+import { TESTS } from '../SimulationPanel'
+import { LAYER_GROUPS } from '../Layers'
+import { LEVELS } from '../Modes'
 import type { ProbeKind } from '../../core/Document'
 
 type State = ReturnType<typeof useStore.getState>
@@ -37,33 +42,35 @@ const fileMenu = (state: State): MenuEntry[] => {
     const item  = ([label, kind]: [string, ExportKind]): MenuEntry => ({ label, disabled: BOARD_EXPORTS.includes(kind) && !board, apply: () => void state.exportFile(kind) })
 
     return [
-        { label: 'Novo', shortcut: 'Ctrl+N', apply: state.newSketch },
-        { label: 'Abrir…', shortcut: 'Ctrl+O', apply: () => document.getElementById('open-file')?.click() },
+        { label: 'Novo', shortcut: shortcutOf(state.keys, 'new'), apply: state.newSketch },
+        { label: 'Abrir…', shortcut: shortcutOf(state.keys, 'open'), apply: () => document.getElementById('open-file')?.click() },
         { label: 'Exemplos', disabled: !state.samples.length, items: sampleTree(state, state.samples) },
         null,
-        { label: 'Salvar', shortcut: 'Ctrl+S', apply: () => void state.save() },
+        { label: 'Salvar', shortcut: shortcutOf(state.keys, 'save'), apply: () => void state.save() },
         { label: 'Versões salvas automaticamente…', apply: () => void state.showVersions() },
-        { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: PRODUCTION.map(item) }, null, ...LISTS.map(item)] }
+        { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: [item(['Tudo para fabricar (zip)…', 'production']), null, ...PRODUCTION.map(item)] }, null, ...LISTS.map(item)] }
     ]
 }
 
 const editMenu = (state: State): MenuEntry[] => [
-    { label: 'Desfazer', shortcut: 'Ctrl+Z', disabled: !state.past.length, apply: state.undo },
-    { label: 'Refazer', shortcut: 'Ctrl+Shift+Z', disabled: !state.future.length, apply: state.redo },
+    { label: 'Desfazer', shortcut: shortcutOf(state.keys, 'undo'), disabled: !state.past.length, apply: state.undo },
+    { label: 'Refazer', shortcut: shortcutOf(state.keys, 'redo'), disabled: !state.future.length, apply: state.redo },
     { label: 'Histórico de desfazer', disabled: !state.past.length && !state.future.length, apply: () => state.setLeft('project') },
     null,
-    { label: 'Recortar', shortcut: 'Ctrl+X', disabled: !state.selection.length, apply: state.cut },
-    { label: 'Copiar', shortcut: 'Ctrl+C', disabled: !state.selection.length, apply: state.copy },
-    { label: 'Colar', shortcut: 'Ctrl+V', disabled: !state.clipboard, apply: () => void state.paste(false) },
-    { label: 'Colar no lugar', shortcut: 'Ctrl+Shift+V', disabled: !state.clipboard, apply: () => void state.paste(true) },
-    { label: 'Duplicar', shortcut: 'Ctrl+D', disabled: !state.selection.length, apply: () => void state.duplicate() },
-    { label: 'Apagar', shortcut: 'Delete', disabled: !state.selection.length, apply: () => state.remove(false) },
-    { label: 'Apagar sem fios', shortcut: 'Alt+Backspace', disabled: !state.selection.length, apply: () => state.remove(true) },
+    { label: 'Recortar', shortcut: shortcutOf(state.keys, 'cut'), disabled: !state.selection.length, apply: state.cut },
+    { label: 'Copiar', shortcut: shortcutOf(state.keys, 'copy'), disabled: !state.selection.length, apply: state.copy },
+    { label: 'Colar', shortcut: shortcutOf(state.keys, 'paste'), disabled: !state.clipboard, apply: () => void state.paste(false) },
+    { label: 'Colar no lugar', shortcut: shortcutOf(state.keys, 'pasteInPlace'), disabled: !state.clipboard, apply: () => void state.paste(true) },
+    { label: 'Duplicar', shortcut: shortcutOf(state.keys, 'duplicate'), disabled: !state.selection.length, apply: () => void state.duplicate() },
+    { label: 'Apagar', shortcut: shortcutOf(state.keys, 'remove'), disabled: !state.selection.length, apply: () => state.remove(false) },
+    { label: 'Apagar sem fios', shortcut: shortcutOf(state.keys, 'removeMinus'), disabled: !state.selection.length, apply: () => state.remove(true) },
     null,
-    { label: 'Selecionar tudo', shortcut: 'Ctrl+A', apply: state.selectAll },
-    { label: 'Desmarcar', shortcut: 'Esc', disabled: !state.selection.length, apply: () => state.select([]) },
+    { label: 'Selecionar tudo', shortcut: shortcutOf(state.keys, 'selectAll'), apply: state.selectAll },
+    { label: 'Desmarcar', shortcut: shortcutOf(state.keys, 'escape'), disabled: !state.selection.length, apply: () => state.select([]) },
     null,
-    { label: 'Adicionar nota', apply: () => void state.addNote() }
+    { label: 'Adicionar nota', apply: () => void state.addNote() },
+    null,
+    { label: 'Preferências…', shortcut: shortcutOf(state.keys, 'preferences'), apply: () => state.setDialog('preferences') }
 ]
 
 const partMenu = (state: State): MenuEntry[] => {
@@ -77,18 +84,20 @@ const partMenu = (state: State): MenuEntry[] => {
 const viewMenu = (state: State): MenuEntry[] => {
     const settings = state.doc.settings[state.view] ?? {}
     return [
-        { label: 'Ampliar', shortcut: 'Ctrl++', apply: () => state.zoom(ZOOM_STEP) },
-        { label: 'Reduzir', shortcut: 'Ctrl+-', apply: () => state.zoom(1 / ZOOM_STEP) },
-        { label: 'Enquadrar', shortcut: 'Ctrl+0', apply: () => state.setViewport(state.view, undefined) },
+        { label: 'Ampliar', shortcut: shortcutOf(state.keys, 'zoomIn'), apply: () => state.zoom(ZOOM_STEP) },
+        { label: 'Reduzir', shortcut: shortcutOf(state.keys, 'zoomOut'), apply: () => state.zoom(1 / ZOOM_STEP) },
+        { label: 'Enquadrar', shortcut: shortcutOf(state.keys, 'fit'), apply: () => state.setViewport(state.view, undefined) },
         { label: 'Tamanho real', apply: () => state.setZoom(REAL_SIZE) },
-        { label: '100%', shortcut: 'Ctrl+Shift+0', apply: () => state.setZoom(1) },
+        { label: '100%', shortcut: shortcutOf(state.keys, 'actual'), apply: () => state.setZoom(1) },
         null,
         { label: 'Alinhar à grade', checked: settings.alignToGrid !== '0', apply: () => state.setViewSetting('alignToGrid', settings.alignToGrid === '0' ? '1' : '0') },
         { label: 'Mostrar grade', checked: settings.showGrid !== '0', apply: () => state.setViewSetting('showGrid', settings.showGrid === '0' ? '1' : '0') },
         { label: 'Fios ortogonais (90°)', checked: state.isOrthogonal(state.view), disabled: state.view === 'pcbView', apply: () => state.setViewSetting('orthogonalWires', settings.orthogonalWires === '0' ? '1' : '0') },
         null,
-        ...VIEWS.map((view, i): MenuEntry => ({ label: VIEW_LABELS[view], shortcut: `Ctrl+${i + 1}`, checked: view === state.view, apply: () => state.setView(view) })),
+        ...VIEWS.map((view, i): MenuEntry => ({ label: VIEW_LABELS[view], shortcut: shortcutOf(state.keys, ['breadboard', 'schematic', 'pcb'][i]), checked: view === state.view, apply: () => state.setView(view) })),
+        ...state.view === 'pcbView' ? [{ label: 'Camadas da PCB', items: [...LAYER_GROUPS.map(([id, label]): MenuEntry => ({ label, checked: !state.hiddenLayers.includes(id), apply: () => state.toggleLayer(id) })), null, { label: 'Mostrar todas as camadas', apply: () => state.setHiddenLayers([]) }, { label: 'Ocultar todas as camadas', apply: () => state.setHiddenLayers(LAYER_GROUPS.map(([id]) => id)) }] }] : [],
         null,
+        { label: 'Modo da interface', items: LEVELS.map(([level, label]): MenuEntry => ({ label, checked: state.level === level, apply: () => state.setLevel(level) })) },
         { label: state.theme === 'dark' ? 'Tema claro' : 'Tema escuro', apply: state.toggleTheme }
     ]
 }
@@ -100,14 +109,14 @@ const routingMenu = (state: State): MenuEntry[] => {
     const busy   = state.routing !== null
 
     if (state.view === 'schematicView')
-        return [{ label: 'Autorotear', shortcut: 'Ctrl+Shift+A', disabled: busy, apply: () => void state.autoroute() }, { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, modelIndex, fixed), doc)) }, null, wires, { label: 'Apagar fios autoroteados', disabled: busy, apply: state.clearAutorouted }]
+        return [{ label: 'Autorotear', shortcut: shortcutOf(state.keys, 'autoroute'), disabled: busy, apply: () => void state.autoroute() }, { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, state.library, state.view, modelIndex, fixed), doc)) }, null, wires, { label: 'Apagar fios autoroteados', disabled: busy, apply: state.clearAutorouted }]
 
     if (state.view !== 'pcbView')
         return [wires]
 
     return [
-        { label: 'Autorotear', shortcut: 'Ctrl+Shift+A', disabled: busy, apply: () => void state.autoroute() },
-        { label: 'Verificar regras (DRC)', shortcut: 'Ctrl+Shift+D', disabled: busy, apply: () => void state.checkRules() },
+        { label: 'Autorotear', shortcut: shortcutOf(state.keys, 'autoroute'), disabled: busy, apply: () => void state.autoroute() },
+        { label: 'Verificar regras (DRC)', shortcut: shortcutOf(state.keys, 'drc'), disabled: busy, apply: () => void state.checkRules() },
         { label: 'Regras do autorouter e DRC…', apply: () => state.setPanel('routing') },
         { label: 'Preenchimento de cobre', disabled: busy, items: [
             { label: 'Preencher com terra', apply: () => void state.fillCopper('ground') },
@@ -118,7 +127,7 @@ const routingMenu = (state: State): MenuEntry[] => {
         ] },
         null,
         { label: 'Mover trilha para a outra face', disabled: !traces.length, apply: () => state.edit(doc => traces.reduce(setTraceSide, doc)) },
-        { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, modelIndex, fixed), doc)) },
+        { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, state.library, state.view, modelIndex, fixed), doc)) },
         null,
         wires,
         { label: 'Selecionar trilhas autoroteáveis', apply: () => state.selectWhere(instance => instance.moduleIdRef === 'WireModuleID' && ((instance.views.pcbView?.geometry.wireFlags ?? 0) & AUTOROUTED) !== 0) },
@@ -132,28 +141,35 @@ const routingMenu = (state: State): MenuEntry[] => {
 const PROBE_ITEMS: [string, ProbeKind][] = [['Ponta de tensão', 'voltage'], ['Ponta de corrente', 'current'], ['Ponta de tensão e corrente', 'both']]
 
 const simulationMenu = (state: State): MenuEntry[] => {
-    const { enabled, transient } = state.simulation
+    const mode = getMode(state.doc)
     return [
-        { label: enabled ? 'Parar a simulação' : 'Simular', apply: () => state.setSimulation({ enabled: !enabled, result: null, error: null, playing: false, step: 0 }) },
-        null,
-        { label: 'Ponto de operação (DC)', checked: !transient, apply: () => state.setSimulation({ transient: false }) },
-        { label: 'Transitório', checked: transient, apply: () => state.setSimulation({ transient: true }) },
+        { label: state.simulation.enabled ? 'Parar a simulação' : 'Simular', apply: state.toggleSimulation },
+        { label: 'Teste', items: TESTS.map(([id, label]): MenuEntry => ({ label, checked: mode === id, apply: () => state.setTest(id) })) },
+        { label: 'Painel de simulação', checked: state.show.chart, apply: () => state.setShow({ chart: !state.show.chart }) },
         null,
         ...PROBE_ITEMS.map(([label, kind]): MenuEntry => ({ label, checked: state.tool === kind, disabled: state.view === 'pcbView', apply: () => state.setTool(kind) })),
         { label: 'Remover todas as pontas de prova', disabled: !state.doc.probes.length, apply: () => state.removeProbes(state.doc.probes.map(probe => probe.id)) },
         null,
-        { label: 'Tempo, amostragem e testes…', apply: () => state.setReadout('settings') },
-        { label: 'Resposta (subida, sobressinal, ganho)', apply: () => state.setReadout('response') },
         { label: 'Circuitos de teste', items: BENCHES.map(bench => ({ label: bench.title, apply: () => void state.openBench(bench.id) })) }
     ]
 }
 
-const helpMenu = (): MenuEntry[] => [
+const helpMenu = (state: State): MenuEntry[] => [
+    { label: 'Paleta de comandos', shortcut: shortcutOf(state.keys, 'palette'), apply: () => useStore.setState({ dialog: 'palette' }) },
     { label: 'Atalhos de teclado', apply: () => useStore.setState({ dialog: 'shortcuts' }) },
     { label: 'Sobre o CircuitMaster', apply: () => useStore.setState({ dialog: 'about' }) }
 ]
 
 const MENUS: [string, (state: State) => MenuEntry[]][] = [['Arquivo', fileMenu], ['Editar', editMenu], ['Peça', partMenu], ['Exibir', viewMenu], ['Roteamento', routingMenu], ['Simulação', simulationMenu], ['Ajuda', helpMenu]]
+
+export type Command = { path: string[], entry: NonNullable<MenuEntry> }
+
+// TODO ITEM DOS MENUS COM O CAMINHO ATÉ ELE, MAIS OS PAINÉIS DO TRILHO, PARA A PALETA DE COMANDOS
+export const getCommands = (state: State): Command[] => {
+    const walk   = (entries: MenuEntry[], path: string[]): Command[] => entries.flatMap(entry => !entry ? [] : entry.items ? walk(entry.items, [...path, entry.label]) : [{ path, entry }])
+    const panels = ([['parts', 'Peças'], ['project', 'Projeto'], ['problems', 'Problemas']] as const).map(([id, label]): Command => ({ path: ['Painéis'], entry: { label, apply: () => state.setLeft(id) } }))
+    return [...MENUS.flatMap(([title, build]) => walk(build(state), [title])), ...panels]
+}
 
 // BARRA DE MENUS DA JANELA: CLIQUE ABRE, PASSAR POR OUTRO TÍTULO TROCA, CLIQUE FORA OU ESC FECHA (SPEC 02 §10.4)
 export const MenuBar = () => {

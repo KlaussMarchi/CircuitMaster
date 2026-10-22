@@ -2,8 +2,6 @@ import { test, expect, type App } from './Fixtures'
 
 const TRACE      = 4
 const AUTOROUTED = 32
-const VIA_ZOOM   = 12
-const VIA_RING   = 0.42    // FRAÇÃO DA LARGURA DA VIA: DENTRO DO ANEL, FORA DA FAIXA DE CLIQUE DAS TRILHAS
 
 const census = (app: App) => app.page.evaluate(([TRACE, AUTOROUTED]) => {
     const { doc, library, drc, netlist } = cm.store.getState()
@@ -22,24 +20,8 @@ const census = (app: App) => app.page.evaluate(([TRACE, AUTOROUTED]) => {
     }
 }, [TRACE, AUTOROUTED])
 
-// PONTO DO ANEL DA VIA FORA DA FAIXA DE CLIQUE DAS TRILHAS, COM O ZOOM APROXIMADO NELA
-const reach = async (app: App, modelIndex: string) => {
-    await app.page.evaluate(([modelIndex, ZOOM]) => {
-        const { doc, library, view, size, setViewport } = cm.store.getState()
-        const [x0, y0, x1, y1] = new cm.Scene(doc, library, view).getBounds(modelIndex) ?? [0, 0, 0, 0]
-        setViewport(view, { x: (x0 + x1) / 2 - size[0] / 2 / ZOOM, y: (y0 + y1) / 2 - size[1] / 2 / ZOOM, zoom: ZOOM })
-    }, [modelIndex, VIA_ZOOM] as const)
-    await app.paint()
-    const [cx, cy] = await app.center(modelIndex)
-    const radius   = VIA_RING * await app.page.evaluate(modelIndex => document.querySelector(`[data-index="${modelIndex}"]`)?.getBoundingClientRect().width ?? 0, modelIndex)
-    const ring     = Array.from({ length: 16 }, (_, k): [number, number] => [cx + radius * Math.cos(k * Math.PI / 8), cy + radius * Math.sin(k * Math.PI / 8)])
-    const owners   = await app.page.evaluate(points => points.map(([x, y]) => document.elementFromPoint(x, y)?.closest('[data-index]')?.getAttribute('data-index')), ring)
-    const found    = ring[owners.indexOf(modelIndex)]
-    expect(found, `anel da via ${modelIndex}`).toBeDefined()
-    return found
-}
-
 const build = async (app: App) => {
+    await app.page.getByRole('tab', { name: 'Protoboard' }).click()
     const first  = await app.place('Resistor', [-300, -100])
     const second = await app.place('Resistor', [0, 100])
     const third  = await app.place('Capacitor', [200, -100])
@@ -132,7 +114,7 @@ test('PCB: dobra vira via e via vira dobra; trilha a partir do ratsnest', async 
     await expect.poll(async () => (await census(app)).traces.length).toBe(pieces + 1)
     await app.context(middle, 'Converter dobra em via')
     await expect.poll(async () => (await census(app)).vias.length).toBe(1)
-    await app.context(await reach(app, (await census(app)).vias[0]), 'Converter via em dobra')
+    await app.context(await app.center((await census(app)).vias[0]), 'Converter via em dobra')
     await expect.poll(async () => (await census(app)).vias.length).toBe(0)
 })
 
@@ -162,7 +144,7 @@ const setRule = async (app: App, label: string, value: string) => {
     await rule(app, label).press('Enter')
 }
 
-test('PCB: regras gravadas valem no autorouter, trilha fixa fica, DRC acusa folga grande e a folga do cobre muda o preenchimento', async ({ app, page }) => {
+test('PCB: regras gravadas valem no autorouter, trilha fixa fica, DRC automático acusa folga grande e a folga do cobre muda o preenchimento', async ({ app, page }) => {
     const [first] = await build(app)
     const panel   = page.getByRole('complementary', { name: 'Inspetor' })
     const mils    = () => page.evaluate(() => Object.values(cm.store.getState().doc.instances).filter(instance => instance.moduleIdRef === 'WireModuleID' && ((instance.views.pcbView?.geometry.wireFlags ?? 0) & 4)).map(instance => instance.views.pcbView?.wire?.mils))
@@ -182,6 +164,11 @@ test('PCB: regras gravadas valem no autorouter, trilha fixa fica, DRC acusa folg
     await expect.poll(async () => (await census(app)).left, { timeout: 60000 }).toBe(0)
     expect((await census(app)).traces).toContain(kept)
 
+    await setRule(app, 'Folga mínima', '0.3in')
+    await expect.poll(async () => (await census(app)).drc ?? 0).toBeGreaterThan(0)
+    await expect(page.locator('#canvas [data-drc]').first()).toBeVisible()
+    await setRule(app, 'Folga mínima', '0.01in')
+    await expect.poll(async () => (await census(app)).drc ?? -1).toBe(0)
     await setRule(app, 'Folga mínima', '0.3in')
     await panel.getByRole('button', { name: 'Verificar regras' }).click()
     await expect.poll(async () => (await census(app)).drc ?? 0).toBeGreaterThan(0)
@@ -229,4 +216,27 @@ test('Roteamento: vias e fios selecionados pelo menu; autorouter no esquemático
     expect(await page.evaluate(() => cm.store.getState().netlist?.getStatus('schematicView').left)).toBeGreaterThan(0)
     await app.menu('Roteamento', 'Autorotear')
     await expect.poll(() => page.evaluate(() => cm.store.getState().netlist?.getStatus('schematicView').left), { timeout: 60000 }).toBe(0)
+})
+
+test('Camadas da PCB na legenda: um clique liga ou desliga; Exibir › Camadas da PCB mostra e oculta todas', async ({ app, page }) => {
+    await build(app)
+    await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('tab', { name: 'Roteamento' }).click()
+    await page.getByRole('button', { name: 'Criar placa e rotear' }).click()
+    await expect.poll(async () => (await census(app)).left, { timeout: 60000 }).toBe(0)
+
+    const legend = page.getByRole('group', { name: 'Camadas da PCB' })
+    const drawn  = () => page.locator('#canvas [data-index]').count()
+    const before = await drawn()
+    await app.shoot('camadas')
+    await legend.getByRole('button', { name: 'Cobre de cima' }).click()
+    await expect(legend.getByRole('button', { name: 'Cobre de cima' })).toHaveAttribute('aria-pressed', 'false')
+    await expect.poll(drawn).toBeLessThan(before)
+    await legend.getByRole('button', { name: 'Cobre de cima' }).click()
+    await expect.poll(drawn).toBe(before)
+
+    await app.menu('Exibir', 'Camadas da PCB', 'Ocultar todas as camadas')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().hiddenLayers.length)).toBe(7)
+    await expect.poll(drawn).toBe(0)
+    await app.menu('Exibir', 'Camadas da PCB', 'Mostrar todas as camadas')
+    await expect.poll(drawn).toBe(before)
 })

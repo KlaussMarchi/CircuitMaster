@@ -15,7 +15,7 @@ import { Pdf } from '../../core/Pdf'
 import { Scene } from '../../engine/Scene'
 import createClipper from '../../core/Clipper/clipper2.js'
 
-export type ExportKind = 'png' | 'jpg' | 'svg' | 'pdf' | 'etchablePdf' | 'etchableSvg' | 'gerber' | 'pnp' | 'bomHtml' | 'bomCsv' | 'bomPdf' | 'ipc' | 'xml' | 'spice'
+export type ExportKind = 'png' | 'jpg' | 'svg' | 'pdf' | 'production' | 'etchablePdf' | 'etchableSvg' | 'gerber' | 'pnp' | 'bomHtml' | 'bomCsv' | 'bomPdf' | 'ipc' | 'xml' | 'spice'
 export type Context    = { doc: Doc, library: Library, netlist: Netlist | null, view: typeof VIEWS[number], name: string, svg: SVGSVGElement | null, bounds: Box | null, selection: string[] }
 
 type Output = [string, string | Uint8Array, string]
@@ -44,7 +44,17 @@ const zip = (files: Record<string, string | Uint8Array>) => zipSync(Object.fromE
 
 const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
 
+// TUDO O QUE A FÁBRICA PEDE NUM ZIP SÓ: GERBER E FURAÇÃO, MONTAGEM (PICK-AND-PLACE), TESTE ELÉTRICO (IPC-D-356A) E A LISTA DE MATERIAIS
+const getProduction = (artwork: Artwork, clipper: Clipper, context: Context, base: string) => ({
+    ...exportFabrication(artwork, clipper, base),
+    [`${base}_pnp.xy`]: exportPickAndPlace(artwork, context.library, base),
+    [`${base}.ipc`]: exportIpc(context.doc, context.library, artwork, new Scene(context.doc, context.library, 'pcbView'), base),
+    [`${base}_bom.csv`]: exportBomCsv(context.doc, context.library),
+    [`${base}_bom.html`]: exportBomHtml(context.doc, context.library, base)
+})
+
 const BOARD: Partial<Record<ExportKind, (artwork: Artwork, clipper: Clipper, context: Context, base: string) => Output>> = {
+    production: (artwork, clipper, context, base) => [`${base}_producao.zip`, zip(getProduction(artwork, clipper, context, base)), ZIP],
     gerber: (artwork, clipper, context, base) => [`${base}_gerber.zip`, zip({ ...exportFabrication(artwork, clipper, base), [`${base}_pnp.xy`]: exportPickAndPlace(artwork, context.library, base) }), ZIP],
     etchableSvg: (artwork, clipper, _, base) => [`${base}_etch_svg.zip`, zip(exportEtchable(artwork, clipper, base)), ZIP],
     etchablePdf: (artwork, clipper, _, base) => [`${base}_etch_pdf.zip`, zip(exportEtchablePdf(artwork, clipper, base)), ZIP],

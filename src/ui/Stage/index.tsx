@@ -1,6 +1,7 @@
 import type { ProbeKind } from '../../core/Document'
 import { formatReading, formatSi } from '../../core/Properties'
 import { Canvas } from '../Canvas'
+import { Layers } from '../Layers'
 import { Icon, ProbeIcon } from '../Icon'
 import { Welcome } from '../Welcome'
 import { useStore, type Side } from '../Store'
@@ -101,6 +102,7 @@ export const Stage = () => {
                 <SimChip />
                 <SelectionBar />
                 <Zoom />
+                {view === 'pcbView' && <Layers />}
                 <Welcome />
             </div>
         </section>

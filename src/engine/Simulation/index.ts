@@ -37,6 +37,7 @@ const SCOPE_SCREEN     = { width: 3376.022, height: 2700.072, breadboardView: [2
 const SI_LETTERS       = [['p', 1e-12], ['n', 1e-9], ['µ', 1e-6], ['m', 1e-3], ['', 1], ['k', 1e3], ['M', 1e6], ['G', 1e9], ['T', 1e12]] as const
 const HYSTERESIS       = 0.1        // FRAÇÃO DO PICO A PICO PARA CONTAR UMA PASSAGEM PELA MÉDIA
 const FLAT             = 1e-6       // PICO A PICO MENOR QUE ISSO DO NÍVEL É RUÍDO NUMÉRICO DO SOLVER
+const STILL            = 1e-4       // VARIAÇÃO DE UM VETOR DO TRANSITÓRIO ABAIXO DISSO DO NÍVEL NÃO SE VÊ: É REGIME (O LED DC VARIA 2e-6)
 
 export const ledBase = (part: Part, instance: Instance) => LED_COLORS[getProperty(part, instance, 'color')] ?? null
 
@@ -60,6 +61,10 @@ export const toDisplay = (value: number) => {
 }
 
 // MEDIDAS DE UMA SÉRIE ATÉ O PASSO last, PONDERADAS PELO TEMPO NO TRANSITÓRIO (MÉDIA = NÍVEL DC, RMS, PICO A PICO E FREQUÊNCIA PELAS SUBIDAS PELA MÉDIA)
+const isFlat = (min: number, max: number, tolerance = FLAT) => max - min <= Math.max(tolerance * Math.max(Math.abs(max), Math.abs(min)), TINY)
+
+const span = (values: ArrayLike<number>) => Array.from(values).reduce<[number, number]>(([min, max], value) => [Math.min(min, value), Math.max(max, value)], [Infinity, -Infinity])
+
 export const getStats = (values: ArrayLike<number>, time: ArrayLike<number> | null, last: number): Stats => {
     const count = Math.max(1, Math.min(last + 1, values.length))
     const list  = Array.from({ length: count }, (_, i) => values[i])
@@ -78,7 +83,7 @@ export const getStats = (values: ArrayLike<number>, time: ArrayLike<number> | nu
         low = value < mean - band ? true : value > mean + band ? false : low
     })
 
-    const flat      = max - min <= Math.max(FLAT * Math.max(Math.abs(max), Math.abs(min)), TINY)
+    const flat      = isFlat(min, max)
     const frequency = time && rises.length > 1 && !flat ? (rises.length - 1) / (rises[rises.length - 1] - rises[0]) : null
     return { value: list[count - 1], min, max, mean, rms: Math.sqrt(Math.max(0, area(value => value * value))), pp: flat ? 0 : max - min, frequency }
 }
@@ -95,6 +100,7 @@ export class Simulation {
     circuit: Circuit
     vectors: Vectors
     steps: number
+    still: boolean | null = null
 
     constructor(doc: Doc, library: Library, circuit: Circuit, vectors: Vectors) {
         this.doc     = doc
@@ -102,6 +108,12 @@ export class Simulation {
         this.circuit = circuit
         this.vectors = vectors
         this.steps   = vectors.time?.length ?? 1
+    }
+
+    // NADA MUDA NO TEMPO: TODO VETOR DO TRANSITÓRIO FICA PARADO (PICO A PICO NO RUÍDO DO SOLVER); O PAINEL MOSTRA O REGIME, SEM ANIMAÇÃO (FRIZING_KICAD §5, DECISÃO 2)
+    isStill() {
+        this.still ??= this.circuit.analysis.type === 'op' || Object.entries(this.vectors).every(([name, values]) => name === 'time' || isFlat(...span(values), STILL))
+        return this.still
     }
 
     getTime(step: number) {
@@ -157,6 +169,17 @@ export class Simulation {
     getCurrent(modelIndex: string, step: number, sub = '') {
         const name = this.getCurrentName(modelIndex, sub)
         return name ? this.getSeries(name, step) : 0
+    }
+
+    // TENSÃO ENTRE OS DOIS PINOS E CORRENTE DE UMA PEÇA DE DOIS TERMINAIS SIMULADA; NULO NAS OUTRAS
+    getReading(modelIndex: string, step: number) {
+        const part = this.getPart(modelIndex)
+
+        if (!part || part.connectors.length !== 2 || !this.circuit.simulated.includes(modelIndex))
+            return null
+
+        const [a, b] = part.connectors.map(connector => keyOf(modelIndex, connector.id))
+        return { voltage: this.getBetween(a, b, step), current: this.getCurrent(modelIndex, step) }
     }
 
     getMax(modelIndex: string, name: string) {

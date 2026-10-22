@@ -13,6 +13,7 @@ import { Glow, Overlay } from '../Effects'
 import { ContextMenu, type MenuEntry } from '../ContextMenu'
 import { getMenu, type Target } from '../Menus'
 import { useStore, type View, type Viewport } from '../Store'
+import { ALTIUM, hiddenPlanes } from '../Layers'
 import { PART_MIME } from '../Library'
 import { NoteShape } from '../Note'
 import { QuickValue } from '../QuickValue'
@@ -67,8 +68,6 @@ const EDITABLE    = '[contenteditable="true"]'
 const SELECTED    = 'var(--accent)'
 const AIMED       = 'var(--accent)'
 const CONNECTED_MARK = '#00ff00'    // NO ESQUEMÁTICO E NA PCB SÓ O TERMINAL SOLTO (VERMELHO) FICA MARCADO
-// PCB COM AS CORES DO ALTIUM, SÓ NA TELA (O ARQUIVO E AS EXPORTAÇÕES GUARDAM AS DO FRITZING): COBRE DE CIMA VERMELHO, DE BAIXO AZUL, PAD PASSANTE PRATA, SERIGRAFIA AMARELA, PLACA PRETA
-const ALTIUM: Record<string, string> = { copper1: '#ff3030', copper0: '#3d5cff', silkscreen: '#ffff00', silkscreen0: '#9a9a00', groundplane1: '#a81c1c', groundplane: '#25349e', board: '#000000' }
 const ALTIUM_TRACE: Record<string, string> = { copper1trace: '#ff3030', copper0trace: '#3d5cff' }
 const MULTI_LAYER = '#c8c8c8'
 const PCB_GROUND  = '#262626'    // ÁREA DE TRABALHO FORA DA PLACA
@@ -268,6 +267,7 @@ export const Canvas = () => {
     const side      = useStore(state => state.side)
     const placing   = useStore(state => state.placing)
     const values    = useStore(state => state.show.values)
+    const planesOff = useStore(state => state.hiddenLayers)
     const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, getGrid, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing } = useStore.getState()
 
     const svgRef              = useRef<SVGSVGElement>(null)
@@ -291,6 +291,10 @@ export const Canvas = () => {
         return drc && back && view === 'pcbView' ? drc.violations.map(violation => violation.polygons.map(polygon => `M${Array.from({ length: polygon.length / 2 }, (_, k) => apply(back, polygon[2 * k], polygon[2 * k + 1]).join(' ')).join('L')}Z`).join('')) : []
     }, [drc, view])
     const wireItems  = useMemo(() => new Map(drawing.items.flatMap(item => item.type === 'wire' ? [[item.modelIndex, item] as const] : [])), [drawing])
+    const viaHits    = useMemo(() => view !== 'pcbView' ? [] : Object.values(doc.instances).flatMap(instance => {
+        const box = library.getPart(instance.moduleIdRef)?.kind === 'via' && scene.isShown(instance) ? scene.getBounds(instance.modelIndex) : null
+        return box ? [<circle key={instance.modelIndex} data-index={instance.modelIndex} cx={(box[0] + box[2]) / 2} cy={(box[1] + box[3]) / 2} r={(box[2] - box[0]) / 2} fill="transparent" />] : []
+    }), [doc, library, scene, view])    // A VIA RECEBE O CLIQUE ACIMA DAS TRILHAS QUE CHEGAM NELA, COMO NO KICAD
     const plans      = useMemo(() => getSwitching(doc), [doc])
     const probing    = tool !== 'select' && tool !== 'area'
     const settings   = doc.settings[view] ?? {}
@@ -357,7 +361,7 @@ export const Canvas = () => {
     useEffect(() => {
         const element = svgRef.current
 
-        // RODA (E PINÇA) DÁ ZOOM EM TORNO DO CURSOR; SHIFT+RODA MOVE A VISTA
+        // RODA (E PINÇA) DÁ ZOOM EM TORNO DO CURSOR, OU ROLA A VISTA SE AS PREFERÊNCIAS PEDEM (Ctrl+RODA DÁ ZOOM); SHIFT+RODA MOVE NA HORIZONTAL
         const onWheel = (event: WheelEvent) => {
             const rect     = element?.parentElement?.getBoundingClientRect()
             const base     = liveRef.current ?? shownRef.current
@@ -365,6 +369,9 @@ export const Canvas = () => {
             const scale    = event.deltaMode === 1 ? LINE_PX : 1
             const zoom     = clamp(base.zoom * ZOOM_STEP ** -(event.deltaY * scale))
             event.preventDefault()
+
+            if (useStore.getState().preferences.wheel === 'scroll' && !event.ctrlKey && !event.shiftKey)
+                return showLive({ ...base, x: base.x + event.deltaX * scale / base.zoom, y: base.y + event.deltaY * scale / base.zoom })
 
             if (event.shiftKey)
                 return showLive({ ...base, x: base.x + (event.deltaX || event.deltaY) * scale / base.zoom, y: base.y + (event.deltaX ? event.deltaY * scale : 0) / base.zoom })
@@ -515,14 +522,14 @@ export const Canvas = () => {
         return { ...current, cursor: freePoint(current, point, mode), aim, mode }
     }
 
-    // PONTA DE PROVA NO FIO (NO PONTO MAIS PRÓXIMO DO CLIQUE) OU NO TERMINAL DA PEÇA SOB O CURSOR (OU A ATÉ PIN_PX DELE)
+    // PONTA DE PROVA NO FIO (NO PONTO MAIS PRÓXIMO DO CLIQUE) OU NO TERMINAL DA PEÇA SOB O CURSOR, OU A ATÉ PIN_PX DO CLIQUE MESMO FORA DA IMAGEM (A PONTA DA PERNA NO ESQUEMÁTICO)
     const placeProbe = (point: Point, target: Element, keep: boolean) => {
         const index = target.closest('[data-index]')?.getAttribute('data-index') ?? ''
         const ends  = scene.isWire(index) ? scene.getWireEnds(index) : null
         const curve = scene.getWireCurve(index)
         const t     = ends ? curve ? nearestOnCubic(ends[0], curve[0], curve[1], ends[1], point) : nearestOnSegment(ends[0], ends[1], point) : 0
         const near  = index && !ends ? scene.getKeys(index).map(key => [key, distance(scene.getTerminal(key) ?? [Infinity, Infinity], point)] as const).filter(([, d]) => d * vp.zoom <= PIN_PX).sort((a, b) => a[1] - b[1])[0]?.[0] : null
-        const key   = ends ? keyOf(index, 'connector0') : index ? scene.getConnectorAt(point, modelIndex => modelIndex === index) ?? near : null
+        const key   = ends ? keyOf(index, 'connector0') : index ? scene.getConnectorAt(point, modelIndex => modelIndex === index) ?? near : scene.getConnectorNear(point, PIN_PX / vp.zoom, modelIndex => !scene.isWire(modelIndex))
 
         if (!key || tool === 'select' || tool === 'area')
             return useStore.setState({ message: 'clique num fio ou no terminal de uma peça para medir' })
@@ -667,7 +674,7 @@ export const Canvas = () => {
                 return setDrag({ type: 'segment', origin: doc, wire: index, start: point, horizontal, level: horizontal ? ends[0][1] : ends[0][0], moved: false })
             }
 
-            return setDrag({ type: 'body', origin: doc, wire: index, start: point, curve: event.ctrlKey || event.metaKey, moved: false, bend: null, base: null })
+            return setDrag({ type: 'body', origin: doc, wire: index, start: point, curve: (event.ctrlKey || event.metaKey) !== useStore.getState().preferences.curvy, moved: false, bend: null, base: null })    // FIOS CURVOS NAS PREFERÊNCIAS: Ctrl INVERTE
         }
 
         const key = scene.getConnectorAt(point, modelIndex => modelIndex === index) ?? (isBoard(index) ? null : startKey(point))
@@ -932,10 +939,12 @@ export const Canvas = () => {
         return symbol && bounds && pins.every(pin => pin !== null) ? <SymbolArt kind={symbol[1]} pins={pins as Point[]} center={[(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2]} pressed={known ? pressedAt(item.modelIndex, known.pressed) : false} /> : null
     }
 
+    const planes  = useMemo(() => view === 'pcbView' ? hiddenPlanes(planesOff) : new Set<string>(), [view, planesOff])
+
     const content = useMemo(() => drawing.items.map(item => {
         if (item.type === 'wire' && view === 'pcbView') {
             const layer = scene.getView(item.modelIndex)?.layer ?? ''
-            return <g key={item.modelIndex} opacity={dimmed(layer) ? DIMMED : 1}><WireShape item={{ ...item, color: ALTIUM_TRACE[layer] ?? item.color }} /></g>
+            return planes.has(layer) ? null : <g key={item.modelIndex} opacity={dimmed(layer) ? DIMMED : 1}><WireShape item={{ ...item, color: ALTIUM_TRACE[layer] ?? item.color }} /></g>
         }
 
         if (item.type === 'wire')
@@ -950,11 +959,14 @@ export const Canvas = () => {
         const shown  = view === 'pcbView' ? altium(item) : timedItem(item)
         const art    = symbolArt(item)
 
+        if (view === 'pcbView' && planes.has(item.plane))
+            return null
+
         if (view === 'pcbView')
             return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.layer) ? DIMMED : 1}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
 
         return <PartShape key={`${item.modelIndex}|${item.layer}`} item={shown} image={art ? undefined : getImage(library, shown, view, effect?.color ? [['color_', effect.color]] : item.paint)} effect={effect} greyed={greyed} view={view} lab={item.moduleId.includes('LabDCPowerSupply')} art={art} />
-    }), [drawing, effects, running, library, view, editing, plans, result, simulated.step, side])
+    }), [drawing, effects, running, library, view, editing, plans, result, simulated.step, side, planes])
 
     const ratsnest = useMemo(() => drawing.ratsnest.map((rat, i) => (
         <g key={`${rat.from}|${rat.to}`} data-rat={i} data-overlay>
@@ -1073,15 +1085,16 @@ export const Canvas = () => {
                     {content}
                     {drawing.junctions.map((junction, i) => <circle key={i} cx={junction.point[0]} cy={junction.point[1]} r={junction.radius} fill="#404040" pointerEvents="none" />)}
                     {drawing.marks.filter(mark => view === 'breadboardView' || mark.color !== CONNECTED_MARK).map(mark => mark.box ? <rect key={mark.key} x={mark.box[0]} y={mark.box[1]} width={mark.box[2] - mark.box[0]} height={mark.box[3] - mark.box[1]} fill={mark.color} fillOpacity={mark.opacity} pointerEvents="none" data-overlay /> : <circle key={mark.key} cx={mark.point?.[0]} cy={mark.point?.[1]} r={mark.radius} fill={mark.color} fillOpacity={mark.opacity * 2} pointerEvents="none" data-overlay />)}
-                    {ratsnest}
+                    {!planes.has('ratsnest') && ratsnest}
+                    {viaHits}
                 </g>
-                {drawing.labels.map(label => (
+                {!planes.has('silkscreen') && drawing.labels.map(label => (
                     <g key={label.modelIndex} data-label={label.modelIndex} fontSize={label.size} fontFamily={view === 'pcbView' ? label.font : 'var(--font)'} fill={ink(label.color)}>
                         {label.box && <rect x={label.box[0]} y={label.box[1]} width={label.box[2] - label.box[0]} height={label.box[3] - label.box[1]} fill="transparent" />}
                         {label.lines.map((line, i) => view === 'pcbView' ? <text key={i} x={label.x} y={label.y + label.size * (i + 1)}>{line}</text> : <text key={i} x={label.x} y={label.y + label.size * (i + 1)} fontWeight={i === 0 ? 600 : 400} fill={i === 0 ? undefined : 'var(--soft)'}>{i === 0 ? line : unitSpace(line)}</text>)}
                     </g>
                 ))}
-                {flagged.map((d, i) => <path key={`drc${i}`} d={d} fill="#ff0000" fillOpacity={0.45} stroke="#ff0000" strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay />)}
+                {flagged.map((d, i) => <path key={`drc${i}`} d={d} style={{ fill: 'var(--negative)', stroke: 'var(--negative)' }} fillOpacity={0.45} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay data-drc />)}
                 {chain.map(modelIndex => halo(modelIndex, modelIndex === pointed?.index ? 0.4 : 0.18))}
                 {selection.filter(modelIndex => wireItems.has(modelIndex)).map(modelIndex => halo(modelIndex, 0.45))}
                 {selection.filter(modelIndex => wireItems.has(modelIndex)).flatMap(handles)}

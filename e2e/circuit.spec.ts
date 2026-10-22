@@ -1,7 +1,7 @@
 import { test, expect } from './Fixtures'
 
 test('do esquemático vazio ao gráfico, salvar e reabrir', async ({ app, page }) => {
-    await page.getByRole('tab', { name: 'Esquemático' }).click()
+    await expect(page.getByRole('tab', { name: 'Esquemático' })).toHaveAttribute('aria-selected', 'true')
 
     const source    = await app.place('Fonte DC', [-420, 0])
     const resistor  = await app.place('Resistor', [-200, -120])
@@ -28,24 +28,25 @@ test('do esquemático vazio ao gráfico, salvar e reabrir', async ({ app, page }
         await expect(page.getByRole('tab', { name: view })).toHaveAttribute('aria-selected', 'true')
     }
 
+    const dock     = page.getByRole('region', { name: 'Simulação' })
+    const tests    = dock.getByRole('tablist', { name: 'Teste' })
+    const readings = dock.getByLabel('Medidas')
     await page.getByRole('button', { name: 'Simular' }).click()
     await expect.poll(() => app.simulated()).toBe('op')
+    await expect(page.getByRole('img', { name: 'Valores de regime da simulação' })).toBeVisible()
+    await expect(readings).toContainText('Valor (regime)')
+    await expect(dock.getByLabel('Curvas').getByRole('checkbox').first()).toBeVisible()
 
-    await page.getByRole('tablist', { name: 'Tipo de análise' }).getByRole('tab', { name: 'Transitório' }).click()
+    await tests.getByRole('tab', { name: 'Degrau' }).click()
     await expect.poll(() => app.simulated()).toBe('tran')
     await expect(page.getByRole('img', { name: 'Formas de onda da simulação no tempo' })).toBeVisible()
+    await expect(readings).toContainText('Constante τ (63%)')
 
-    const dock = page.getByRole('region', { name: 'Simulação' })
-    await dock.getByRole('tab', { name: 'Ajustes' }).click()
-    await dock.getByRole('button', { name: /^Degrau/ }).click()
+    await tests.getByRole('tab', { name: 'Onda quadrada' }).click()
+    await expect.poll(() => app.simulated()).toBe('op')
+    await expect(dock).toContainText('Onda quadrada precisa de uma fonte de pulso')
+    await tests.getByRole('tab', { name: 'Degrau' }).click()
     await expect.poll(() => app.simulated()).toBe('tran')
-    await dock.getByRole('tab', { name: 'Resposta' }).click()
-    await expect(dock.getByText('Constante τ (63%)')).toBeVisible()
-
-    await dock.getByRole('tab', { name: 'Ajustes' }).click()
-    await dock.getByRole('button', { name: /^Onda quadrada/ }).click()
-    await expect.poll(() => app.simulated()).toBe('tran')
-    await dock.getByRole('tab', { name: 'Medidas' }).click()
 
     const count = await app.count()
     const edges = await app.edges()

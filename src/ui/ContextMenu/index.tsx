@@ -1,13 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
+import { shownIn } from '../Modes'
+import { useStore } from '../Store'
 
 export type MenuEntry = { label: string, shortcut?: string, disabled?: boolean, checked?: boolean, apply?: () => void, items?: MenuEntry[] } | null
 
 const EDGE    = 4      // PX DE FOLGA ATÉ A BORDA DA JANELA
 const SUBMENU = 260    // PX RESERVADOS PARA ABRIR SUBMENU À DIREITA
 
-export const MenuList = ({ items, close, left }: { items: MenuEntry[], close: () => void, left: boolean }) => {
+export const MenuList = ({ items: all, close, left }: { items: MenuEntry[], close: () => void, left: boolean }) => {
     const [open, setOpen] = useState<number | null>(null)
+    const level           = useStore(state => state.level)
+    const items           = shownIn(all, level)
     const leaf            = items.every(entry => !entry?.items)
 
     const choose = (entry: NonNullable<MenuEntry>) => {

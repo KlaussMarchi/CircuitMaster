@@ -10,6 +10,7 @@ import type { Part } from '../../core/Part'
 import type { Found } from '../../workers/Indexer'
 import { pickSwap } from '../Catalog'
 import { Icon } from '../Icon'
+import { LessonCard } from '../Lesson'
 import { probeColor } from '../Probe'
 import { useStore } from '../Store'
 
@@ -99,14 +100,14 @@ const Reading = ({ modelIndex }: { modelIndex: string }) => {
     const simulation = useStore(state => state.simulation)
     const result     = simulation.enabled ? simulation.result : null
     const part       = result?.getPart(modelIndex)
+    const step       = result ? Math.min(simulation.step, result.steps - 1) : 0
+    const reading    = result?.getReading(modelIndex, step)
 
-    if (!result || !part || !result.circuit.simulated.includes(modelIndex) || part.connectors.length !== 2)
+    if (!result || !part || !reading)
         return null
 
-    const step     = Math.min(simulation.step, result.steps - 1)
+    const { voltage, current } = reading
     const [a, b]   = part.connectors.map(connector => keyOf(modelIndex, connector.id))
-    const voltage  = result.getBetween(a, b, step)
-    const current  = result.getCurrent(modelIndex, step)
     const power    = Math.abs(voltage * current)
     const family   = familyOf(part)
     const resistor = family === 'resistor'
@@ -317,11 +318,12 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
             {familyOf(part) === 'multimeter' && <Meter modelIndex={modelIndex} variants={family} />}
             <SwitchEditor modelIndex={modelIndex} />
             <Reading modelIndex={modelIndex} />
+            <LessonCard modelIndex={modelIndex} part={part} properties={merged} />
             {part.connectors.length > 0 && part.connectors.length <= 16 && (
-                <div className="sec">
-                    <h3>Pinos</h3>
+                <details className="sec">
+                    <summary><h3>Pinos</h3></summary>
                     {part.connectors.map(connector => <Kv key={connector.id} label={connector.name} value={netOf(keyOf(modelIndex, connector.id))} />)}
-                </div>
+                </details>
             )}
             <p className="sub" style={{ marginTop: 18, overflowWrap: 'anywhere' }}>{part.moduleId}</p>
         </>
@@ -340,7 +342,7 @@ const ProbeCard = ({ id }: { id: string }) => {
     const reading    = result && probe ? result.getProbe(probe.id) : null
     const at         = (series: ArrayLike<number> | null | undefined) => series ? series[Math.min(simulation.step, series.length - 1)] ?? 0 : null
     const owner      = probe ? doc.instances[splitKey(probe.key)[0]] : undefined
-    const { removeProbes, setReadout } = useStore.getState()
+    const { removeProbes, setSimulation, setShow } = useStore.getState()
 
     if (!probe)
         return null
@@ -355,7 +357,7 @@ const ProbeCard = ({ id }: { id: string }) => {
                 {probe.kind !== 'voltage' && <Kv label="Corrente" value={at(reading?.current) === null ? 'aperte Simular' : formatReading(at(reading?.current) ?? 0, 'A')} />}
             </div>
             <div className="runrow">
-                <button className="btn sm" onClick={() => setReadout('measures')}>Ver medidas</button>
+                <button className="btn sm" onClick={() => { setSimulation({ focus: `p:${probe.id}:${probe.kind === 'current' ? 'i' : 'v'}` }); setShow({ chart: true }) }}>Ver medidas</button>
                 <button className="btn sm stop" onClick={() => removeProbes([probe.id])}>Remover</button>
             </div>
         </>

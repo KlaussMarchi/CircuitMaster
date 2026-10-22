@@ -8,7 +8,7 @@ import { readBundle } from '../src/core/Sketch'
 import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import type { Point } from '../src/core/Geometry'
-import { buildCircuit, substitute } from '../src/core/Spice'
+import { PRESET_KEY, buildCircuit, substitute } from '../src/core/Spice'
 import { Ngspice, type Vectors } from '../src/core/Ngspice'
 import { Simulation, toDisplay } from '../src/engine/Simulation'
 import { createInstance, createWire } from '../src/engine/Edit'
@@ -158,6 +158,28 @@ describe.skipIf(!HAS_FRITZING)('simulação com ngspice em WASM (spec 04)', () =
         expect(sim.getCurrent('3', 0)).toBeLessThan(0.016)
         expect(sim.getBetween(keyOf('3', 'connector1'), keyOf('3', 'connector0'), 0)).toBeGreaterThan(1.5)
         expect(sim.getEffect('3', 0).light).toBeGreaterThan(0)
+    })
+
+    it('Simular decide sozinho: o transitório parado é mostrado como regime; degrau, fonte pulsada ou senoidal varia (spec 04 §5.1)', async () => {
+        const library = makeLibrary()
+        const parts   = ['77c36646df552e9fe72f360837f556ccleg', 'ResistorModuleID', '100milCeramicCapacitorModuleID', 'DCPulseSourceModuleID', '1_SinePowerSupplyModuleID', 'WireModuleID']
+        await library.load(parts)
+
+        const analysis = async (source: string, preset: string) => {
+            const created = [source, 'ResistorModuleID', '100milCeramicCapacitorModuleID'].reduce((current, moduleId, i) => createInstance(current, library, moduleId, everywhere([200 * i, 0])), emptyDoc())
+            const start: Doc = { ...created, projectProperties: { [PRESET_KEY]: preset } }
+            const wired   = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector0'], ['3/connector1', '1/connector0']].reduce((current, [a, b]) => createWire(current, library, 'schematicView', a, b), start)
+            const netlist = new Netlist(wired, library, await loadWasm())
+            netlist.update()
+            const circuit = buildCircuit(wired, library, netlist, true)
+            return new Simulation(wired, library, circuit, (await session()).run(circuit.deck).vectors).isStill() ? 'op' : 'tran'
+        }
+
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'auto')).toBe('op')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'square')).toBe('op')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'step')).toBe('tran')
+        expect(await analysis('DCPulseSourceModuleID', 'auto')).toBe('tran')
+        expect(await analysis('1_SinePowerSupplyModuleID', 'sine')).toBe('tran')
     })
 
     it('fonte de bancada: ilimit trocado por fontes B, tensão constante e corrente limitada (spec 04 §10.1)', async () => {

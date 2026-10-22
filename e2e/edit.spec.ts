@@ -160,6 +160,7 @@ test('Peça: espelhar no esquemático', async ({ app, page }) => {
 })
 
 test('Fios: cor, dobra, apagar até as dobras e ratsnest para fio', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     const first  = await app.place('Resistor', [-300, -150])
     const second = await app.place('Resistor', [100, 150])
     await app.wire((await app.pins(first))['Pin 1'], (await app.pins(second))['Pin 0'])
@@ -193,6 +194,7 @@ test('Fios: cor, dobra, apagar até as dobras e ratsnest para fio', async ({ app
 })
 
 test('Exibir: zoom, enquadrar, grade, fios ortogonais, vistas e tema', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     await app.place('Resistor', [-300, 0])
     await app.place('Resistor', [100, 100])
     const zoom = async () => (await app.viewport())?.zoom ?? 0
@@ -314,6 +316,7 @@ test('Selecionar tudo pega só o que aparece na vista: apagar na protoboard não
 })
 
 test('Editar: colar duas vezes, duplicar pelo contexto e pela barra, Backspace, nota só na própria vista', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     const resistor = await app.place('Resistor', [-300, 0])
     const origin   = (await app.state(resistor))?.geometry
     const grid     = await page.evaluate(() => cm.store.getState().getGrid())
@@ -405,6 +408,7 @@ test('Peça: espelhar horizontal pelo |, 45° na PCB, Avançar e Recuar, seis al
 })
 
 test('Exibir: Ctrl+Shift+0, encaixe na grade ao soltar, grade gravada no .fzz', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     await app.place('Resistor', [-300, 0])
     await page.keyboard.press('Control+)')
     await expect.poll(async () => (await app.viewport())?.zoom).toBeCloseTo(1)
@@ -432,6 +436,7 @@ test('Exibir: Ctrl+Shift+0, encaixe na grade ao soltar, grade gravada no .fzz', 
 })
 
 test('Fios: as cores das duas vistas, ratsnest vira fio e apagar ratsnest desfaz a ligação', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     const first  = await app.place('Resistor', [-300, -150])
     const second = await app.place('Resistor', [100, 150])
     await app.wire((await app.pins(first))['Pin 1'], (await app.pins(second))['Pin 0'])
@@ -534,6 +539,7 @@ test('Quadro: setas sem grade movem 1 px; espaço+arrastar, botão do meio e Shi
 })
 
 test('Peça: na protoboard o giro de 45° fica desabilitado e não há Sticky; na PCB a placa nasce sticky e leva as peças apoiadas', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
     const search = page.getByRole('searchbox', { name: 'Buscar peça' })
     const first  = page.getByRole('region', { name: 'Peças' }).locator('.results button').first()
     await expect.poll(() => page.evaluate(() => cm.store.getState().indexed.ready), { timeout: 60000 }).toBe(true)

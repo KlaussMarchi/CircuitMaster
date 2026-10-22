@@ -36,6 +36,7 @@ const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR
 const SEARCH_MAX   = 300
 const BINS         = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
 const ENGINE_FAULT = 'InternalError'
+const FETCH_MS     = 15000    // LEITURA PRESA NO SERVIDOR VIRA UMA SEGUNDA TENTATIVA EM VEZ DE PRENDER A INDEXAÇÃO
 
 let entries: Entry[] = []
 let byId = new Map<string, Entry>()
@@ -67,6 +68,7 @@ const writeCache = (db: IDBDatabase, records: [string, Cached][]) => new Promise
     records.forEach(([key, value]) => transaction.objectStore(STORE).put(value, key))
     transaction.oncomplete = () => resolve()
     transaction.onerror = () => resolve()
+    transaction.onabort = () => resolve()    // TRANSAÇÃO ABORTADA SEM ERRO NÃO DISPARA complete: SEM ISSO A INDEXAÇÃO FICAVA PRESA
 })
 
 // O SPIDERMONKEY ACUSA "too much recursion" NUMA REGEX INTERROMPIDA DENTRO DO WORKER, COM A PILHA RASA E SOB CARGA; A SEGUNDA TENTATIVA PASSA
@@ -90,11 +92,14 @@ const toEntry = ({ root, path }: Listing, text: string): Entry | null => {
     return { moduleId: part.moduleId, root, path, title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? '', obsolete: path.startsWith('obsolete/'), properties: part.properties, haystack: haystackOf(part) }
 }
 
-const fetchText = async (url: string) => {
+const fetchText = async (url: string, tries = 2): Promise<string | null> => {
     try {
-        const response = await fetch(url)
+        const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_MS) })
         return response.ok ? await response.text() : null
     } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError')
+            return tries > 1 ? fetchText(url, tries - 1) : null
+
         return error instanceof TypeError ? null : Promise.reject(error)
     }
 }
@@ -135,9 +140,6 @@ const index = async () => {
 
     await Promise.all(Array.from({ length: CONCURRENCY }, work))
 
-    if (db && fresh.length)
-        await writeCache(db, fresh)
-
     const read  = await Promise.all(BINS.map(async ([title, file]) => [title, readBin(await fetchText(`/fritzing/parts/bins/${file}`) ?? '')] as const))
     const named = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
     const made  = read.flatMap(([, bin]) => bin?.entries ?? []).filter(({ moduleIdRef }) => !named.has(moduleIdRef)).flatMap(({ moduleIdRef }) => {
@@ -166,6 +168,9 @@ const index = async () => {
 
     inBins = bins.map(bin => new Set(bin.sections.flatMap(section => section.entries.map(entry => entry.moduleId))))
     scope.postMessage({ type: 'bin', bins })
+
+    if (db && fresh.length)
+        await writeCache(db, fresh)
 }
 
 // BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR

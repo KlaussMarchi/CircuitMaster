@@ -46,6 +46,12 @@ test('Exportar: imagens, produção com placa, listas e netlists', async ({ app,
         expect(Object.keys(unzipSync(file.bytes)).length).toBeGreaterThan(0)
     }
 
+    const all   = await app.download(() => app.menu('Arquivo', 'Exportar', 'Para produção', 'Tudo para fabricar (zip)…'))
+    const files = Object.keys(unzipSync(all.bytes))
+    expect(all.name).toMatch(/_producao\.zip$/)
+    for (const pattern of [...GERBER, /\.ipc$/, /_bom\.csv$/, /_bom\.html$/])
+        expect(files.some(name => pattern.test(name)), String(pattern)).toBe(true)
+
     const pnp = await app.download(() => app.menu('Arquivo', 'Exportar', 'Para produção', 'Pick-and-place…'))
     expect(pnp.bytes.toString()).toMatch(/^# Pick And Place List/)
 

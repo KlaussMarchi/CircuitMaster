@@ -113,4 +113,6 @@ ou `error` (spec 06 §2).
 Estilo "data terminal": tokens dos dois temas em `src/ui/Theme/style.css` (cor nova vira token nos dois), cor só
 em dados, seleção como linha de 1px em `--accent`, vão de 8px, monoespaçada só em números, sem gradiente nem sombra
 decorativa, interface em pt-BR. O guia de origem, `circuit-master-ui/DESIGN.md`, não está mais no disco. Botão,
-menu ou painel sem funcionalidade real por trás sai da interface em vez de ficar desabilitado.
+menu ou painel sem funcionalidade real por trás sai da interface em vez de ficar desabilitado. Atalho de teclado
+novo entra só na tabela `ui/Keys` (o teclado, os menus, a paleta, Ajuda › Atalhos e as Preferências leem dela);
+item de menu avançado entra em `ui/Modes` com o modo a partir do qual aparece.

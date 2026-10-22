@@ -7,7 +7,7 @@ import { BOARD_EXPORTS, type ExportKind } from '../Export'
 import { useStore } from '../Store'
 
 const GRID_SIZES: Record<string, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }
-const EXPORTS: [string, ExportKind][] = [['PNG', 'png'], ['SVG', 'svg'], ['PDF', 'pdf'], ['Netlist SPICE', 'spice'], ['Lista de materiais', 'bomHtml'], ['Gerber', 'gerber']]
+const EXPORTS: [string, ExportKind][] = [['PNG', 'png'], ['SVG', 'svg'], ['PDF', 'pdf'], ['Netlist SPICE', 'spice'], ['Lista de materiais', 'bomHtml'], ['Para produção', 'production']]
 const BOARDS  = ['board', 'resizableBoard']
 
 const Check = ({ label, checked, change, hint }: { label: string, checked: boolean, change: (checked: boolean) => void, hint?: string }) => (

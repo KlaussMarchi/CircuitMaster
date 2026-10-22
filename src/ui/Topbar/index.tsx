@@ -3,13 +3,12 @@ import { Icon } from '../Icon'
 import { MenuBar } from '../MenuBar'
 import { useStore } from '../Store'
 
-// BARRA SUPERIOR: MARCA, MENUS, VISTA, ANÁLISE E O BOTÃO DE SIMULAR (DESIGN.md §6)
+// BARRA SUPERIOR: MARCA, MENUS, VISTA E O BOTÃO DE SIMULAR, QUE DECIDE SOZINHO ENTRE O PONTO DE OPERAÇÃO E O TRANSITÓRIO
 export const Topbar = () => {
-    const view      = useStore(state => state.view)
-    const ready     = useStore(state => state.ready)
-    const enabled   = useStore(state => state.simulation.enabled)
-    const transient = useStore(state => state.simulation.transient)
-    const { setView, setSimulation } = useStore.getState()
+    const view    = useStore(state => state.view)
+    const ready   = useStore(state => state.ready)
+    const enabled = useStore(state => state.simulation.enabled)
+    const { setView, toggleSimulation } = useStore.getState()
 
     return (
         <header className="topbar">
@@ -22,11 +21,7 @@ export const Topbar = () => {
                 {VIEWS.map((item, i) => <button key={item} className="tab" role="tab" aria-selected={item === view} title={`${VIEW_LABELS[item]} (${i + 1})`} onClick={() => setView(item)}>{VIEW_LABELS[item]}</button>)}
             </div>
             <div className="topright">
-                <div className="modetabs" role="tablist" aria-label="Tipo de análise">
-                    <button className="tab" role="tab" aria-selected={!transient} title="Ponto de operação (.OP)" onClick={() => setSimulation({ transient: false })}>DC</button>
-                    <button className="tab" role="tab" aria-selected={transient} title="Análise no tempo (.TRAN)" onClick={() => setSimulation({ transient: true })}>Transitório</button>
-                </div>
-                <button className={`btn ${enabled ? 'stop' : 'primary'}`} disabled={!ready} title={view === 'pcbView' ? 'Simular (os efeitos aparecem na protoboard e no esquemático)' : 'Simular / parar'} onClick={() => setSimulation({ enabled: !enabled, result: null, error: null, playing: false, step: 0 })}>
+                <button className={`btn ${enabled ? 'stop' : 'primary'}`} disabled={!ready} title={enabled ? 'Parar a simulação' : 'Simular: o ponto de operação e, se algo muda no tempo, o transitório no teste escolhido no painel'} onClick={toggleSimulation}>
                     <Icon name={enabled ? 'stop' : 'play'} /><span>{enabled ? 'Parar' : 'Simular'}</span>
                 </button>
             </div>

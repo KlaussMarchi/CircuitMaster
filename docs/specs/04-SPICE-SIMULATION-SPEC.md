@@ -150,13 +150,20 @@ vira `RVCC1`; `D{instanceTitle}` com `LED1` vira `DLED1`. O valor 0.1 da resist�
 
 ## 5. ANÁLISES
 
-### 5.1 Ponto de operação (padrão)
+### 5.1 Uma simulação só (CircuitMaster)
 
-`.OP`. É a análise usada sempre que o transitório está desligado.
+No Fritzing o usuário escolhe antes entre ponto de operação e transitório. No CircuitMaster não há essa escolha:
+**Simular** roda o transitório na janela do teste escolhido (§5.5; o padrão é Automático), que parte do ponto de
+operação (ou do circuito descarregado no Degrau). Se todo vetor fica parado na janela (pico a pico até
+$10^{-4}$ do nível, ou $10^{-12}$: o ruído do solver num LED em DC chega a $2\cdot10^{-6}$), o resultado é mostrado como **regime**: sem animação, sem eixo de tempo
+e com "Valor (regime)" nas medidas; é o que acontece num circuito só com fontes DC. Osciladores sem fonte variável
+(555 astável, pisca-pisca) variam e ficam no tempo. O painel diz por que deu regime quando o teste pedia variação
+("Onda quadrada precisa de uma fonte de pulso…"). O `.OP` sozinho fica para a exportação do netlist SPICE (§4),
+como no Fritzing.
 
 ### 5.2 Transitório
 
-Ativo quando o usuário habilita o modo transitório. Janela de tempo:
+Janela de tempo:
 
 - janela escolhida pelo usuário (extensão do CircuitMaster, §9): `circuitmaster_start_time_s` e
   `circuitmaster_stop_time_s`, quando o fim é válido, maior que o início e o início não é negativo;

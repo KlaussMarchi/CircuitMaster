@@ -44,8 +44,8 @@ const getScales = (volts: Series[], amps: Series[]) => {
 
 const axisText = (value: number, unit: string) => formatSi(value, unit, 3).replace(/^(-?[\d.]+)/, '$1 ')
 
-// OSCILOSCÓPIO DO TRANSITÓRIO: TENSÕES À ESQUERDA, CORRENTES À DIREITA, CURVAS ATÉ O PASSO DA ANIMAÇÃO, LEITURA SOB O CURSOR, CLIQUE LEVA AO INSTANTE E, NA RESPOSTA AO DEGRAU, FAIXA DE ±2%, VALOR FINAL, PICO, τ E ACOMODAÇÃO
-export const Grapher = ({ time, series, step, marks, seek }: { time: ArrayLike<number>, series: Series[], step: number, marks: Marks | null, seek: (step: number) => void }) => {
+// OSCILOSCÓPIO DO TRANSITÓRIO (still: OS VALORES DE REGIME DO PONTO DE OPERAÇÃO, SEM EIXO DE TEMPO): TENSÕES À ESQUERDA, CORRENTES À DIREITA, CURVAS ATÉ O PASSO DA ANIMAÇÃO, LEITURA SOB O CURSOR, CLIQUE LEVA AO INSTANTE E, NA RESPOSTA AO DEGRAU, FAIXA DE ±2%, VALOR FINAL, PICO, τ E ACOMODAÇÃO
+export const Grapher = ({ time, series, step, marks, seek, still = false }: { time: ArrayLike<number>, series: Series[], step: number, marks: Marks | null, seek: (step: number) => void, still?: boolean }) => {
     const ref                 = useRef<HTMLDivElement>(null)
     const [size, setSize]     = useState<[number, number]>([600, 200])
     const [cursor, setCursor] = useState<number | null>(null)
@@ -87,7 +87,7 @@ export const Grapher = ({ time, series, step, marks, seek }: { time: ArrayLike<n
         return index < 0 ? time.length - 1 : index
     }
 
-    const rows    = [`t = ${formatReading(time[at] ?? 0, 's')}`, ...series.map(item => `${item.label} = ${formatReading(item.values[at] ?? 0, item.unit)}`)]
+    const rows    = [...still ? ['regime (DC)'] : [`t = ${formatReading(time[at] ?? 0, 's')}`], ...series.map(item => `${item.label} = ${formatReading(item.values[at] ?? 0, item.unit)}`)]
     const tipW    = Math.max(...rows.map(row => row.length)) * CHAR + 18
     const tipX    = x(time[at] ?? t0) + 12 + tipW > w - 8 ? x(time[at] ?? t0) - 12 - tipW : x(time[at] ?? t0) + 12
     const r       = marks?.response
@@ -95,18 +95,19 @@ export const Grapher = ({ time, series, step, marks, seek }: { time: ArrayLike<n
 
     return (
         <div ref={ref} className="scope">
-            <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Formas de onda da simulação no tempo" onPointerMove={event => setCursor(Math.min(pick(event), shown))} onPointerLeave={() => setCursor(null)} onClick={event => seek(pick(event))}>
+            <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={still ? 'Valores de regime da simulação' : 'Formas de onda da simulação no tempo'} onPointerMove={event => setCursor(Math.min(pick(event), shown))} onPointerLeave={() => setCursor(null)} onClick={event => seek(pick(event))}>
                 {lines.map(i => <line key={i} className={i === 0 ? 'base' : 'gl'} x1={margin.left} x2={margin.left + plotW} y1={margin.top + plotH - i * plotH / scales.count} y2={margin.top + plotH - i * plotH / scales.count} />)}
                 {volts.length > 0 && lines.map(i => <text key={`v${i}`} x={margin.left - 8} y={margin.top + plotH - i * plotH / scales.count + 4} textAnchor="end">{axisText(level('V', i), 'V')}</text>)}
                 {amps.length > 0 && lines.map(i => <text key={`a${i}`} x={margin.left + plotW + 8} y={margin.top + plotH - i * plotH / scales.count + 4}>{axisText(level('A', i), 'A')}</text>)}
-                {ticks.map((t, i) => <text key={t} x={x(t)} y={h - 8} textAnchor={i === 0 ? 'start' : 'middle'}>{axisText(t, 's')}</text>)}
+                {!still && ticks.map((t, i) => <text key={t} x={x(t)} y={h - 8} textAnchor={i === 0 ? 'start' : 'middle'}>{axisText(t, 's')}</text>)}
+                {still && <text x={margin.left + plotW / 2} y={h - 8} textAnchor="middle">regime permanente: nada muda no tempo</text>}
                 {r && marks && <rect className="band" x={x(r.from)} width={Math.max(0, x(r.to) - x(r.from))} y={y(r.final + delta, marks.unit)} height={Math.max(1, y(r.final - delta, marks.unit) - y(r.final + delta, marks.unit))} />}
                 {r && marks && <line className="ref" x1={x(r.from)} x2={x(r.to)} y1={y(r.final, marks.unit)} y2={y(r.final, marks.unit)} />}
                 {series.map((item, i) => <polyline key={item.id} className="tr" points={paths[i]} style={{ stroke: item.color }} strokeDasharray={item.dashed ? '5 3' : undefined} />)}
                 {r && marks && r.tau !== null && r.tau <= time[shown] && <g className="mk"><line className="ref" x1={x(r.tau)} x2={x(r.tau)} y1={margin.top} y2={margin.top + plotH} /><text x={x(r.tau) + 5} y={margin.top + plotH - 6} style={{ fill: marks.color }}>τ = {formatReading(r.tau - r.from, 's')}</text></g>}
                 {r && marks && r.settling !== null && r.tau === null && r.settling <= time[shown] && <g className="mk"><line className="ref" x1={x(r.settling)} x2={x(r.settling)} y1={margin.top} y2={margin.top + plotH} /><text x={x(r.settling) + 5} y={margin.top + plotH - 6} style={{ fill: marks.color }}>acomoda em {formatReading(r.settling - r.from, 's')}</text></g>}
                 {r && marks && r.overshoot > RINGING && r.peak.time <= time[shown] && <g className="mk"><circle cx={x(r.peak.time)} cy={y(r.peak.value, marks.unit)} r={3.5} style={{ fill: marks.color }} /><text x={x(r.peak.time) + 7} y={y(r.peak.value, marks.unit) - 6} style={{ fill: marks.color }}>+{(r.overshoot * 100).toFixed(1)}%</text></g>}
-                <line className="cur" x1={x(time[at] ?? t0)} x2={x(time[at] ?? t0)} y1={margin.top} y2={margin.top + plotH} />
+                {!still && <line className="cur" x1={x(time[at] ?? t0)} x2={x(time[at] ?? t0)} y1={margin.top} y2={margin.top + plotH} />}
                 {series.length > 0 && <g className="tip"><rect x={tipX} y={margin.top + 4} width={tipW} height={rows.length * ROW + 10} rx={4} />{rows.map((row, i) => <text key={i} x={tipX + 9} y={margin.top + 20 + i * ROW}>{row}</text>)}</g>}
             </svg>
         </div>

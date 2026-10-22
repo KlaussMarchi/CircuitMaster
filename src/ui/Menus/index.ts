@@ -6,6 +6,7 @@ import { bendToVia, clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires
 import { getConfig } from '../Pcb'
 import type { MenuEntry } from '../ContextMenu'
 import { isEditable, useStore } from '../Store'
+import { shortcutOf } from '../Keys'
 
 export type Target = { kind: 'part' | 'wire' | 'ratsnest', modelIndex: string, key: string | null, point: Point, rat: [string, string] | null }
 
@@ -13,9 +14,9 @@ const COLOR_NAMES: Record<string, string> = { blue: 'azul', red: 'vermelho', bla
 const SILKSCREEN  = ['silkscreen', 'silkscreen0']
 const AUTOROUTE   = 32
 
-const Z_ITEMS: [string, string, ZMode][] = [['Trazer para frente', 'Ctrl+Shift+]', 'front'], ['Avançar', 'Ctrl+]', 'forward'], ['Recuar', 'Ctrl+[', 'backward'], ['Enviar para trás', 'Ctrl+Shift+[', 'back']]
+const Z_ITEMS: [string, ZMode][] = [['Trazer para frente', 'front'], ['Avançar', 'forward'], ['Recuar', 'backward'], ['Enviar para trás', 'back']]
 
-const ROTATIONS: [string, string, number, boolean][] = [['Girar 45° no sentido horário', '', 45, true], ['Girar 90° no sentido horário', ']', 90, false], ['Girar 180°', '', 180, false], ['Girar 90° no sentido anti-horário', '[', -90, false], ['Girar 45° no sentido anti-horário', '', -45, true]]
+const ROTATIONS: [string, string, number, boolean][] = [['Girar 45° no sentido horário', '', 45, true], ['Girar 90° no sentido horário', 'rotateCw', 90, false], ['Girar 180°', '', 180, false], ['Girar 90° no sentido anti-horário', 'rotateCcw', -90, false], ['Girar 45° no sentido anti-horário', '', -45, true]]
 
 // BIN NOVO COM O NOME PEDIDO; CANCELAR NÃO CRIA
 export const promptBin = (moduleIds: string[]) => {
@@ -25,11 +26,11 @@ export const promptBin = (moduleIds: string[]) => {
         useStore.getState().createBin(title, moduleIds)
 }
 
-const zMenu = (disabled: boolean): MenuEntry => ({ label: 'Elevar e rebaixar', disabled, items: Z_ITEMS.map(([label, shortcut, mode]) => ({ label, shortcut, apply: () => useStore.getState().zOrder(mode) })) })
+const zMenu = (disabled: boolean): MenuEntry => ({ label: 'Elevar e rebaixar', disabled, items: Z_ITEMS.map(([label, mode]) => ({ label, shortcut: shortcutOf(useStore.getState().keys, mode), apply: () => useStore.getState().zOrder(mode) })) })
 
 // MENU DE PEÇA DA VISTA CORRENTE (SPEC 02 §10.1)
 const partMenu = (target: Target): MenuEntry[] => {
-    const { doc, library, view, selection, edit, rotate, flip, copy, duplicate, remove, addToMine, userBins, addToBin, editPart } = useStore.getState()
+    const { doc, library, view, selection, edit, rotate, flip, copy, duplicate, remove, addToMine, userBins, addToBin, editPart, keys } = useStore.getState()
     const scene     = new Scene(doc, library, view)
     const chosen    = selection.filter(modelIndex => !scene.isWire(modelIndex))
     const partOf    = (modelIndex: string) => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')
@@ -50,16 +51,16 @@ const partMenu = (target: Target): MenuEntry[] => {
     const modules   = [...new Set(chosen.map(modelIndex => doc.instances[modelIndex]?.moduleIdRef ?? ''))]
 
     return [
-        { label: 'Girar', disabled: !free.length, items: ROTATIONS.map(([label, shortcut, degrees, fine]) => ({ label, shortcut, disabled: fine && !turn45, apply: () => rotate(degrees) })) },
-        ...view === 'schematicView' ? [{ label: 'Espelhar horizontalmente', shortcut: '|', disabled: !canFlip(true), apply: () => flip(true) }, { label: 'Espelhar verticalmente', disabled: !canFlip(false), apply: () => flip(false) }] : [],
+        { label: 'Girar', disabled: !free.length, items: ROTATIONS.map(([label, id, degrees, fine]) => ({ label, shortcut: shortcutOf(keys, id), disabled: fine && !turn45, apply: () => rotate(degrees) })) },
+        ...view === 'schematicView' ? [{ label: 'Espelhar horizontalmente', shortcut: shortcutOf(keys, 'flip'), disabled: !canFlip(true), apply: () => flip(true) }, { label: 'Espelhar verticalmente', disabled: !canFlip(false), apply: () => flip(false) }] : [],
         zMenu(chosen.length >= shown),
         { label: 'Travar peça', checked: locked, disabled: !chosen.length, apply: () => edit(current => setLocked(current, view, chosen, !locked)) },
         ...sticky ? [{ label: 'Sticky', checked: stickyOn, apply: () => edit(current => setSticky(current, [target.modelIndex], !stickyOn)) }] : [],
         null,
-        { label: 'Copiar', shortcut: 'Ctrl+C', apply: copy },
-        { label: 'Duplicar', shortcut: 'Ctrl+D', apply: () => void duplicate() },
-        { label: 'Apagar', shortcut: 'Delete', disabled: !free.length, apply: () => remove(false) },
-        { label: 'Apagar sem fios', shortcut: 'Alt+Backspace', disabled: !free.length, apply: () => remove(true) },
+        { label: 'Copiar', shortcut: shortcutOf(keys, 'copy'), apply: copy },
+        { label: 'Duplicar', shortcut: shortcutOf(keys, 'duplicate'), apply: () => void duplicate() },
+        { label: 'Apagar', shortcut: shortcutOf(keys, 'remove'), disabled: !free.length, apply: () => remove(false) },
+        { label: 'Apagar sem fios', shortcut: shortcutOf(keys, 'removeMinus'), disabled: !free.length, apply: () => remove(true) },
         null,
         { label: 'Editar (editor de peças)', disabled: !isEditable(part), apply: () => editPart(target.modelIndex) },
         { label: 'Adicionar ao bin', items: [
@@ -82,7 +83,7 @@ const partMenu = (target: Target): MenuEntry[] => {
 
 // MENU DE FIO, TRILHA OU LINHA DE RATSNEST (SPEC 02 §10.2)
 const wireMenu = (target: Target): MenuEntry[] => {
-    const { doc, library, view, edit, connect, select } = useStore.getState()
+    const { doc, library, view, edit, connect, select, keys } = useStore.getState()
     const scene  = new Scene(doc, library, view)
     const isRat  = target.kind === 'ratsnest'
     const wire   = target.modelIndex
@@ -104,9 +105,9 @@ const wireMenu = (target: Target): MenuEntry[] => {
         ...colors.length ? [{ label: 'Cor do fio', disabled: isRat, items: colors.map(([name, color]) => ({ label: COLOR_NAMES[name], checked: state?.wire?.color.toLowerCase() === color, apply: () => edit(current => setWireColor(current, view, [wire], color)) })) }] : [],
         ...view === 'pcbView' ? [{ label: state?.layer === 'copper0trace' ? 'Mover para a face de cima' : 'Mover para a face de baixo', disabled: isRat || !trace, apply: () => edit(current => setTraceSide(current, wire)) }] : [],
         { label: view === 'breadboardView' ? 'Criar fio a partir do ratsnest' : 'Criar trilha a partir do ratsnest', disabled: !isRat, apply: () => void connect(rat[0], rat[1]) },
-        ...view !== 'breadboardView' ? [{ label: 'Não rotear automaticamente', checked: trace && (flags & AUTOROUTE) === 0, disabled: isRat || !trace, apply: () => edit(current => setAutoroutable(current, wire, (flags & AUTOROUTE) === 0)) }] : [],
+        ...view !== 'breadboardView' ? [{ label: 'Não rotear automaticamente', checked: trace && (flags & AUTOROUTE) === 0, disabled: isRat || !trace, apply: () => edit(current => setAutoroutable(current, library, view, wire, (flags & AUTOROUTE) === 0)) }] : [],
         null,
-        { label: isRat ? 'Apagar linha de ratsnest' : 'Apagar fio', shortcut: 'Delete', apply: () => isRat ? edit(current => deleteRatsnest(current, library, view, rat[0], rat[1])) : removeWire(false) },
+        { label: isRat ? 'Apagar linha de ratsnest' : 'Apagar fio', shortcut: shortcutOf(keys, 'remove'), apply: () => isRat ? edit(current => deleteRatsnest(current, library, view, rat[0], rat[1])) : removeWire(false) },
         { label: 'Apagar fio até as dobras', disabled: isRat, apply: () => removeWire(true) },
         null,
         { label: bend ? 'Remover dobra' : 'Adicionar dobra', disabled: isRat || (bend !== null && bend.length !== 2), apply: () => edit(current => bend ? joinWires(current, library, view, bend[0]) : splitWire(current, view, wire, target.point).doc) },

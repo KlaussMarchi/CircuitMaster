@@ -6,8 +6,9 @@ import { exportBinBundle, readFile, type BundleFile, type Instance } from '../..
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
+import { formatSi } from '../../core/Properties'
 import { apply, boxesTouch, unionBoxes, type Matrix, type Point } from '../../core/Geometry'
-import { SWITCH_KEY, buildCircuit, getSwitching, resumeCircuit, type Event } from '../../core/Spice'
+import { INITIAL_KEY, PRESET_KEY, START_KEY, STOP_KEY, SWITCH_KEY, buildCircuit, getSwitching, projectValue, resumeCircuit, type Event, type Mode } from '../../core/Spice'
 import { FONT_FILES } from '../../core/Font'
 import { getArtwork, pickBoard } from '../../core/Cam'
 import { getGroupOf, type Violation } from '../../core/Drc'
@@ -24,6 +25,7 @@ import { Catalog, fetchBytes, fetchText, pickSwap, type IndexerStatus } from '..
 import { Simulator } from '../Simulator'
 import { createPcbTools, getConfig, type Progress } from '../Pcb'
 import { createSaver } from '../Saver'
+import { LEVELS, type Level } from '../Modes'
 import { boardProblem, download, exportAs, getClipper, type ExportKind } from '../Export'
 import { PARTS, Vault } from '../Vault'
 import { Autosave, type Snapshot, type Version } from '../Autosave'
@@ -36,12 +38,12 @@ export type Panel      = 'properties' | 'routing' | 'document'
 export type Left       = 'parts' | 'project' | 'problems'
 export type Theme      = 'dark' | 'light'
 export type Side       = 'both' | 'top' | 'bottom'
-export type Readout    = 'measures' | 'response' | 'settings'
 export type UserBin    = { title: string, moduleIds: string[] }
-export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | null
+export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'palette' | 'preferences' | null
+export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean }
 export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
 export type Show       = { values: boolean, chart: boolean }
-export type Simulating = { enabled: boolean, transient: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[] }
+export type Simulating = { enabled: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[], focus: string | null }
 
 type State = {
     catalog: Catalog
@@ -70,7 +72,6 @@ type State = {
     placing: string | null
     saved: Doc
     stored: boolean
-    readout: Readout
     hover: string | null
     past: Doc[]
     future: Doc[]
@@ -88,6 +89,10 @@ type State = {
     autosave: Autosave
     recovery: Version[]
     drc: Checked | null
+    hiddenLayers: string[]
+    level: Level
+    preferences: Preferences
+    keys: Record<string, string[]>
     routing: Progress | null
     setup: () => Promise<void>
     open: (name: string, bytes: Uint8Array) => Promise<void>
@@ -123,7 +128,14 @@ type State = {
     setSide: (side: Side) => void
     makeBoard: () => Promise<void>
     setPlacing: (moduleId: string | null) => void
-    setReadout: (readout: Readout) => void
+    toggleSimulation: () => void
+    toggleLayer: (id: string) => void
+    setLevel: (level: Level) => void
+    setPreferences: (patch: Partial<Preferences>) => void
+    setKeys: (keys: Record<string, string[]>) => void
+    setDialog: (dialog: Dialog) => void
+    setHiddenLayers: (ids: string[]) => void
+    setTest: (mode: Mode) => void
     selectProbe: (id: string | null) => void
     addProbe: (probe: Omit<Probe, 'id'>) => void
     updateProbe: (id: string, patch: Partial<Probe>) => void
@@ -161,7 +173,7 @@ type State = {
     align: (mode: AlignMode) => void
     selectWhere: (test: (instance: Instance, part: Part | undefined) => boolean) => void
     exportFile: (kind: ExportKind) => Promise<void>
-    checkRules: () => Promise<void>
+    checkRules: (quiet?: boolean) => Promise<void>
     fillCopper: (mode: FillMode) => Promise<void>
     fillUnit: (point: Point) => Promise<void>
     removeFills: () => void
@@ -178,6 +190,7 @@ type State = {
 }
 
 const HISTORY   = 200
+const START_VIEW: View = 'schematicView'    // O APP, O SKETCH NOVO E O ARQUIVO ABERTO COMEÇAM NO ESQUEMÁTICO (FRIZING_KICAD §5, DECISÃO 1)
 const TOOL_NAMES: Record<ProbeKind, string> = { voltage: 'Ponta de tensão', current: 'Ponta de corrente', both: 'Ponta de tensão e corrente' }
 const NOTE      = 'NoteModuleID'
 const FILL      = 'GroundPlaneModuleID'
@@ -189,13 +202,18 @@ const INSTRUMENTS  = ['voltage source', 'multimeter', 'oscilloscope']    // FAM�
 const MINE_KEY  = 'circuitmaster.mine'
 const BINS_KEY  = 'circuitmaster.bins'
 const SHOW_KEY  = 'circuitmaster.show'     // VALORES NAS PONTAS E PAINEL DE TABELA E GRÁFICO DA SIMULAÇÃO
+const LEVEL_KEY = 'circuitmaster.level'    // MODO DA INTERFACE: INICIANTE, MAKER OU PROFISSIONAL
+const PREFS_KEY = 'circuitmaster.preferences'
+const KEYS_KEY  = 'circuitmaster.keys'      // TECLAS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
+const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
 const THEME_KEY = 'cm-theme'               // MESMA CHAVE QUE O <head> LÊ ANTES DE DESENHAR (DESIGN.md §7)
 const PARTS_KEY = 'circuitmaster.parts'    // ARQUIVOS DAS PEÇAS QUE VIERAM DE .fzpz/.fzbz OU DO EDITOR (SPEC 01 §8A.6)
 const PASTE     = 20     // PX POR COLAGEM SEGUIDA (SPEC 02 §10.3)
 const GRID: Record<View, string> = { breadboardView: '0.1in', schematicView: '0.1in', pcbView: '0.05in' }
 const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SPEC 04 §5.4)
+const DRC_DELAY = 600    // MS ENTRE A ÚLTIMA MUDANÇA NA PCB E O DRC AUTOMÁTICO
 
-const IDLE: Simulating = { enabled: false, transient: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [] }
+const IDLE: Simulating = { enabled: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [], focus: null }
 
 const entryOf = (part: Part): Found => ({ moduleId: part.moduleId, root: 'bundle', path: '', title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? part.views.breadboardView?.image ?? '', obsolete: false, properties: part.properties })
 
@@ -317,7 +335,7 @@ export const useStore = create<State>((set, get) => {
         name: 'sem título',
         doc: blank,
         netlist: null,
-        view: 'breadboardView',
+        view: START_VIEW,
         selection: [],
         probe: null,
         tool: 'select',
@@ -328,7 +346,6 @@ export const useStore = create<State>((set, get) => {
         placing: null,
         saved: blank,
         stored: false,
-        readout: 'measures',
         hover: null,
         past: [],
         future: [],
@@ -346,6 +363,10 @@ export const useStore = create<State>((set, get) => {
         autosave: new Autosave(vault, message => set({ message })),
         recovery: [],
         drc: null,
+        hiddenLayers: [],
+        level: readStored<Level>(LEVEL_KEY, 1),
+        preferences: { ...PREFERENCES, ...readStored<Partial<Preferences>>(PREFS_KEY, {}) },
+        keys: readStored<Record<string, string[]>>(KEYS_KEY, {}),
         routing: null,
 
         setup: async () => {
@@ -404,7 +425,7 @@ export const useStore = create<State>((set, get) => {
             await library.load([WIRE, ...Object.values(doc.instances).map(instance => instance.moduleIdRef)])
 
             const missing = Object.values(doc.instances).filter(instance => !library.getPart(instance.moduleIdRef)).length
-            set({ ...withNetlist(doc, null), name, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
+            set({ ...withNetlist(doc, null), name, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: START_VIEW, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
         },
 
         save: async () => {
@@ -415,7 +436,12 @@ export const useStore = create<State>((set, get) => {
                 return set({ message: `não salvou: ${bundle}` })
 
             download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
-            set({ saved: doc, stored: true, message: `${bundle.base}.fzz salvo (${Object.keys(doc.instances).length} itens${bundle.files.length ? `, ${bundle.files.length} arquivos de peça embutidos` : ''})` })
+            set({ saved: doc, stored: true })
+
+            // A VERSÃO AUTOMÁTICA VIRA "SALVA" JÁ, COM OS MESMOS BYTES: FECHAR A ABA LOGO DEPOIS DE SALVAR NÃO OFERECE RECUPERAR O QUE FOI SALVO
+            get().autosave.schedule(async () => ({ name: get().name, dirty: false, count: Object.keys(doc.instances).length, bytes: bundle.bytes }))
+            await get().autosave.flush()
+            set({ message: `${bundle.base}.fzz salvo (${Object.keys(doc.instances).length} itens${bundle.files.length ? `, ${bundle.files.length} arquivos de peça embutidos` : ''})` })
         },
 
         openSample: async file => {
@@ -436,8 +462,8 @@ export const useStore = create<State>((set, get) => {
 
             await get().library.load([...BENCH_PARTS, WIRE])
             const doc = buildBench(get().library, bench)
-            set({ ...withNetlist(doc, null), name: bench.title, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, view: 'schematicView', message: bench.summary, simulation: { ...IDLE, enabled: true, transient: true } })
-            get().setReadout('response')
+            set({ ...withNetlist(doc, null), name: bench.title, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: 'schematicView', message: bench.summary, simulation: { ...IDLE, enabled: true } })
+            get().setShow({ chart: true })
         },
 
         // VERSÃO SALVA SOZINHA ABERTA COMO DOCUMENTO NÃO SALVO; AS SESSÕES MORTAS OFERECIDAS DEIXAM DE SER OFERECIDAS
@@ -467,7 +493,7 @@ export const useStore = create<State>((set, get) => {
 
             const selection = get().selection.filter(modelIndex => doc.instances[modelIndex])
             const probe     = doc.probes.some(item => item.id === get().probe) ? get().probe : null
-            set({ ...withNetlist(doc), past: [...get().past, origin].slice(-HISTORY), future: [], selection, probe, drc: null })
+            set({ ...withNetlist(doc), past: [...get().past, origin].slice(-HISTORY), future: [], selection, probe })
         },
 
         edit: change => get().commit(change(get().doc)),
@@ -623,9 +649,39 @@ export const useStore = create<State>((set, get) => {
 
         setPlacing: placing => set({ placing, tool: 'select', message: placing ? 'clique no quadro para posicionar a peça (Shift mantém, Esc cancela)' : '' }),
 
-        setReadout: readout => {
-            get().setShow({ chart: true })
-            set({ readout })
+        toggleLayer: id => set({ hiddenLayers: get().hiddenLayers.includes(id) ? get().hiddenLayers.filter(other => other !== id) : [...get().hiddenLayers, id] }),
+
+        setHiddenLayers: ids => set({ hiddenLayers: ids }),
+
+        setPreferences: patch => {
+            const preferences = { ...get().preferences, ...patch }
+            set({ preferences, message: writeStored(PREFS_KEY, preferences) ?? 'preferências gravadas neste navegador' })
+        },
+
+        setKeys: keys => set({ keys, message: writeStored(KEYS_KEY, keys) ?? 'atalhos gravados neste navegador' }),
+
+        setDialog: dialog => set({ dialog }),
+
+        setLevel: level => {
+            writeStored(LEVEL_KEY, level)
+            set({ level, message: `modo ${LEVELS.find(([id]) => id === level)?.[1]}: ${LEVELS.find(([id]) => id === level)?.[2]}; a paleta (Ctrl+K) acha tudo em qualquer modo` })
+        },
+
+        // TESTE DO TRANSITÓRIO NO PROJETO; O MANUAL COMEÇA DA JANELA QUE ESTAVA VALENDO (SPEC 04 §5.5)
+        setTest: mode => {
+            const { doc, simulation, setProjectProperties } = get()
+            const analysis = simulation.result?.circuit.analysis.type === 'tran' ? simulation.result.circuit.analysis : null
+            const kept: Record<string, string> = mode === 'custom' && analysis && !projectValue(doc, STOP_KEY) ? { [START_KEY]: formatSi(analysis.t0, 's', 6), [STOP_KEY]: formatSi(analysis.t1, 's', 6), simulator_number_of_steps: String(analysis.steps), simulator_time_step_mode: 'false', [INITIAL_KEY]: analysis.initial } : {}
+            setProjectProperties({ [PRESET_KEY]: mode, ...kept })
+        },
+
+        // SIMULAR LIGA E ABRE O PAINEL; PARAR DESLIGA E LIMPA O RESULTADO (FRIZING_KICAD §5, DECISÃO 2)
+        toggleSimulation: () => {
+            const enabled = !get().simulation.enabled
+            get().setSimulation({ enabled, result: null, error: null, playing: false, step: 0 })
+
+            if (enabled)
+                get().setShow({ chart: true })
         },
 
         selectProbe: id => set({ probe: id, selection: id ? [] : get().selection }),
@@ -780,7 +836,7 @@ export const useStore = create<State>((set, get) => {
                 return
 
             const doc = emptyDoc()
-            set({ ...withNetlist(doc, null), name: 'sem título', saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, message: 'sketch novo' })
+            set({ ...withNetlist(doc, null), name: 'sem título', saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, drc: null, view: START_VIEW, message: 'sketch novo' })
         },
 
         addNote: async () => {
@@ -845,22 +901,27 @@ export const useStore = create<State>((set, get) => {
             }
         },
 
-        checkRules: async () => {
-            const board = await pcbBoard(get())
+        // quiet: O DRC AUTOMÁTICO DA PCB, SEM MENSAGEM NA BARRA; AS MARCAS ANTIGAS FICAM ATÉ O NOVO RESULTADO E O DE UM DOCUMENTO QUE JÁ MUDOU É DESCARTADO
+        checkRules: async (quiet = false) => {
+            const { doc } = get()
+            const board   = await pcbBoard(get())
 
             if (typeof board === 'string')
-                return set({ message: board })
+                return set(quiet ? { drc: null } : { message: board })
 
             const { artwork, config } = board
-            const groups              = artwork.conductors.map(getGroupOf(get().doc, board.netlist))
-            set({ message: 'verificando regras de projeto…' })
+            const groups              = artwork.conductors.map(getGroupOf(doc, board.netlist))
+
+            if (!quiet)
+                set({ message: 'verificando regras de projeto…' })
 
             const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, keepout: config.keepout })
+            const message    = !violations ? stopped('DRC', get().pcb.failure) : violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil`
 
-            if (!violations)
-                return set({ message: stopped('DRC', get().pcb.failure) })
+            if (get().doc !== doc)
+                return
 
-            set({ drc: { violations, frame: artwork.board.frame, keepout: config.keepout }, message: violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil` })
+            set({ ...violations ? { drc: { violations, frame: artwork.board.frame, keepout: config.keepout } } : {}, ...quiet ? {} : { message } })
         },
 
         fillCopper: async mode => {
@@ -1023,7 +1084,7 @@ export const useStore = create<State>((set, get) => {
             if (missing.length)
                 await library.load(missing)
 
-            const circuit  = buildCircuit(doc, library, netlist, simulation.transient)
+            const circuit  = buildCircuit(doc, library, netlist, true)
             const previous = simulation.result
             const before   = previous?.circuit.analysis
             const after    = circuit.analysis
@@ -1044,7 +1105,7 @@ export const useStore = create<State>((set, get) => {
                 return get().setSimulation({ busy: false, result, error: null })
 
             if (get().simulation.enabled)
-                get().setSimulation({ busy: false, result, error: run.error, step: 0, playing: simulation.transient && !run.error, started: performance.now() })
+                get().setSimulation({ busy: false, result, error: run.error, step: 0, playing: !run.error && !result.isStill(), started: performance.now() })
         },
 
         play: () => {
@@ -1212,10 +1273,20 @@ useStore.subscribe((state, previous) => {
 })
 
 let pending: ReturnType<typeof setTimeout> | undefined
+let checking: ReturnType<typeof setTimeout> | undefined
+
+// NA PCB, MUDANÇA DO DOCUMENTO OU A CHEGADA NA VISTA REFAZ O DRC SOZINHO: O PROBLEMA APARECE MARCADO NO DESENHO E EM PROBLEMAS (FRIZING_KICAD §5)
+useStore.subscribe((state, previous) => {
+    if (!state.ready || state.view !== 'pcbView' || state.routing || (state.doc === previous.doc && state.view === previous.view))
+        return
+
+    clearTimeout(checking)
+    checking = setTimeout(() => void useStore.getState().checkRules(true), DRC_DELAY)
+})
 
 // COM O SIMULADOR LIGADO, MUDANÇA DE TOPOLOGIA, DE PEÇA OU DE PROPRIEDADE AGENDA NOVA SIMULAÇÃO
 useStore.subscribe((state, previous) => {
-    const toggled = state.simulation.enabled !== previous.simulation.enabled || state.simulation.transient !== previous.simulation.transient
+    const toggled = state.simulation.enabled !== previous.simulation.enabled
     const changed = state.netlist !== previous.netlist || (state.doc !== previous.doc && signature(state.doc) !== signature(previous.doc))
 
     if (!state.simulation.enabled || !(toggled || changed))

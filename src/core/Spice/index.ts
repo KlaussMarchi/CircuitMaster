@@ -195,7 +195,7 @@ export const getMode = (doc: Doc): Mode => {
 }
 
 // JANELA E PASSO DO TRANSITÓRIO: PERSONALIZADO USA A JANELA E O PASSO DO USUÁRIO; AUTOMÁTICO USA A DOS OSCILOSCÓPIOS OU A ESCALA DE TEMPO DO CIRCUITO (SEM NENHUMA, 0–10 s); OS OUTROS MODELOS SÓ A ESCALA. DEGRAU PARTE DO CIRCUITO DESCARREGADO; ANIMAÇÃO NEGATIVA É TEMPO REAL E ZERO MOSTRA O FIM DE UMA VEZ (SPEC 04 §5.2, §5.5)
-export const getTransient = (doc: Doc, library: Library, simulated: string[], timing: Timing): Analysis => {
+export const getTransient = (doc: Doc, library: Library, simulated: string[], timing: Timing): Extract<Analysis, { type: 'tran' }> => {
     const scopes = simulated.map(modelIndex => doc.instances[modelIndex]).filter(instance => (library.getPart(instance.moduleIdRef)?.properties.family ?? '').toLowerCase().includes('oscilloscope'))
     const ranges = scopes.map(instance => {
         const part = library.getPart(instance.moduleIdRef) as Part

@@ -253,7 +253,7 @@ test('500 desfazer e refazer seguidos voltam exatamente aos mesmos documentos', 
     expect(await json()).toBe(first)
 })
 
-const KINDS = ['png', 'jpg', 'svg', 'pdf', 'etchablePdf', 'etchableSvg', 'gerber', 'pnp', 'bomHtml', 'bomCsv', 'bomPdf', 'ipc', 'xml', 'spice']
+const KINDS = ['png', 'jpg', 'svg', 'pdf', 'production', 'etchablePdf', 'etchableSvg', 'gerber', 'pnp', 'bomHtml', 'bomCsv', 'bomPdf', 'ipc', 'xml', 'spice']
 
 const exportAll = async (app: App) => {
     for (const kind of KINDS) {

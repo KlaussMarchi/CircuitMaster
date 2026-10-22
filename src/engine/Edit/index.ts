@@ -864,7 +864,8 @@ export const setTraceSide = (doc: Doc, wireIndex: string) => updateView(doc, 'pc
     return { ...state, layer, geometry: { ...state.geometry, z: getLayerZ('pcbView', layer) + (state.geometry.z % 1) }, wire: state.wire && { ...state.wire, color: TRACE_COLORS[layer] } }
 })
 
-export const setAutoroutable = (doc: Doc, wireIndex: string, autoroutable: boolean) => updateInstance(doc, wireIndex, instance => mapViews(instance, state => ({ ...state, geometry: { ...state.geometry, wireFlags: autoroutable ? state.geometry.wireFlags | AUTOROUTABLE : state.geometry.wireFlags & ~AUTOROUTABLE } })))
+// A MARCA VALE PARA A CADEIA DIRETA DA TRILHA, COMO O excludeFromAutoroute DO FRITZING: UM TRECHO FIXO SOLTO VIRARIA COBRE SEM NET AO APAGAR AS AUTOROTEADAS
+export const setAutoroutable = (doc: Doc, library: Library, view: View, wireIndex: string, autoroutable: boolean) => [...getChain(new Scene(doc, library, view), wireIndex)].reduce((current, wire) => updateInstance(current, wire, instance => mapViews(instance, state => ({ ...state, geometry: { ...state.geometry, wireFlags: autoroutable ? state.geometry.wireFlags | AUTOROUTABLE : state.geometry.wireFlags & ~AUTOROUTABLE } }))), doc)
 
 export const setGroundFillSeed = (doc: Doc, key: string, seed: boolean) => {
     const [modelIndex, connectorId] = splitKey(key)

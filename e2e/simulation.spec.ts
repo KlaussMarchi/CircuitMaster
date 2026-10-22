@@ -16,8 +16,8 @@ for (const bench of BENCHES)
         await expect(page.getByRole('img', { name: 'Formas de onda da simulação no tempo' })).toBeVisible()
 
         const dock = page.getByRole('region', { name: 'Simulação' })
-        await dock.getByRole('tab', { name: 'Resposta' }).click()
-        await expect(dock.getByText(/Inicial → final|Ganho/).first()).toBeVisible()
+        await expect(dock.getByLabel('Medidas').getByText(/Inicial → final|Ganho|Período/).first()).toBeVisible()
+        await expect(dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { selected: true })).toHaveCount(1)
     })
 
 test('Pontas V, A e V·A, LED aceso no ponto de operação, multímetro, fumaça e parar', async ({ app, page }) => {
@@ -71,7 +71,7 @@ test('Pontas V, A e V·A, LED aceso no ponto de operação, multímetro, fumaça
 })
 
 test('Transitório: reproduzir, pausar, instante, janela e teste gravados no .fzz', async ({ app, page }) => {
-    await app.menu('Simulação', 'Circuitos de teste', 'Carga do capacitor (RC)')
+    await app.menu('Simulação', 'Circuitos de teste', 'Carga e descarga (onda quadrada)')
     await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
     const dock = page.getByRole('region', { name: 'Simulação' })
     const step = () => page.evaluate(() => cm.store.getState().simulation.step)
@@ -83,9 +83,9 @@ test('Transitório: reproduzir, pausar, instante, janela e teste gravados no .fz
     await expect.poll(step).toBeGreaterThan(0)
     await dock.getByRole('button', { name: 'Pausar' }).click()
 
-    await dock.getByRole('tab', { name: 'Ajustes' }).click()
-    await dock.getByRole('button', { name: /^Senoide/ }).click()
+    await dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { name: 'Senoide' }).click()
     await expect.poll(() => page.evaluate(() => Object.values(cm.store.getState().doc.projectProperties).join(' '))).toContain('sine')
+    await expect.poll(() => app.simulated()).toBe('tran')
     const end = dock.getByRole('textbox', { name: 'Fim da janela' })
     await end.fill('5')
     await dock.getByRole('combobox', { name: 'Unidade de fim da janela' }).selectOption('ms')
@@ -139,4 +139,43 @@ test('Osciloscópio ligado ao circuito mostra o traço no transitório', async (
     await app.wire(pins['V1 Probe'], node)
     await app.wire(pins['COM Probe'], ground)
     await expect.poll(async () => Object.values((await effect(app, scope))?.scope ?? {}).flat().length, { timeout: 30000 }).toBeGreaterThan(0)
+})
+
+test('Painel único: abre sozinho ao simular, curvas com busca e caixa, medidas da curva escolhida, teste e opções no cabeçalho', async ({ app, page }) => {
+    const dock     = page.getByRole('region', { name: 'Simulação' })
+    const curves   = dock.getByLabel('Curvas')
+    const readings = dock.getByLabel('Medidas')
+    await page.evaluate(() => cm.store.getState().setShow({ chart: false }))
+    await expect(dock.getByRole('button', { name: 'Abrir simulação' })).toHaveAttribute('aria-expanded', 'false')
+
+    await app.menu('Simulação', 'Circuitos de teste', 'RLC série com sobressinal')
+    await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
+    await expect(dock.getByRole('button', { name: 'Recolher simulação' })).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('img', { name: 'Formas de onda da simulação no tempo' })).toBeVisible()
+    await expect(readings).toContainText('Sobressinal')
+    await app.shoot('painel-simulacao')
+
+    const boxes = curves.getByRole('checkbox')
+    const total = await boxes.count()
+    expect(total).toBeGreaterThan(1)
+    await curves.getByRole('searchbox', { name: 'Buscar curva' }).fill('P1')
+    await expect(boxes).toHaveCount(await curves.locator('.curve').filter({ hasText: 'P1' }).count())
+    await curves.getByRole('searchbox', { name: 'Buscar curva' }).fill('')
+    await expect(boxes).toHaveCount(total)
+
+    const label = await curves.locator('.curve').nth(1).textContent() ?? ''
+    await curves.locator('.curve').nth(1).click()
+    await expect(readings.getByRole('heading')).toHaveText(label)
+    const shown = () => page.evaluate(() => cm.store.getState().simulation.series.length)
+    await boxes.nth(1).click()
+    const before = await shown()
+    await boxes.nth(1).click()
+    await expect.poll(shown).not.toBe(before)
+
+    await dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { name: 'Manual' }).click()
+    await expect(dock.getByRole('textbox', { name: 'Início da janela' })).toBeVisible()
+    await dock.getByRole('button', { name: 'Mais opções da simulação' }).click()
+    await expect(dock.getByRole('dialog', { name: 'Opções da simulação' })).toContainText('Amostragem do teste manual')
+    await page.keyboard.press('Escape')
+    await expect(dock.getByRole('dialog', { name: 'Opções da simulação' })).toHaveCount(0)
 })

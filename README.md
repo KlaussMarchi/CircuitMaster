@@ -34,9 +34,18 @@ Chromium e o Firefox do Playwright (`npx playwright install chromium firefox` na
 
 ## Interface
 
-Layout do guia `circuit-master-ui/DESIGN.md`: barra superior (menus, vista, DC/Transitório e Simular), trilho de
-ícones, painel esquerdo, quadro com a doca de simulação embaixo e o inspetor à direita. Tema escuro ou claro pelo
-botão do trilho (ou Exibir › Tema), guardado no navegador (`cm-theme`).
+Barra superior (menus, vista e Simular), trilho de ícones, painel esquerdo, quadro com o painel de simulação embaixo
+e o inspetor à direita. O app abre no Esquemático. Tema escuro ou claro pelo botão do trilho (ou Exibir › Tema),
+guardado no navegador (`cm-theme`).
+
+- **Paleta de comandos** (`Ctrl+K`): acha qualquer ação pelo nome, em português ou em inglês (termos do Fritzing e do
+  KiCad), com o caminho no menu e o atalho.
+- **Modos** (Exibir › Modo da interface): Iniciante (padrão), Maker e Profissional. O modo só esconde itens avançados
+  dos menus; a paleta acha tudo em qualquer modo. No Iniciante o inspetor abre o cartão "Como funciona" da peça (o
+  que é, como funciona, a fórmula e a fórmula com os valores do circuito simulado).
+- **Preferências** (Editar › Preferências…, `Ctrl+,`): roda do mouse (zoom ou rolar a vista; Ctrl+roda dá zoom),
+  arrastar o meio do fio curva por padrão (Ctrl inverte), modo, tema e a tecla de cada ação. A tecla escolhida sai da
+  ação que a tinha; os menus, a paleta e Ajuda › Atalhos de teclado mostram as teclas em uso.
 
 - **Peças** (painel esquerdo, atalho `/` para buscar): os básicos (resistor, capacitor, fonte DC, gerador, terra,
   diodo, LED, transistores, amp-op, 555…) vêm primeiro, agrupados, e depois a biblioteca completa do Fritzing. A

@@ -2,7 +2,7 @@ import { BENCHES } from '../../engine/Bench'
 import { Icon } from '../Icon'
 import { useStore } from '../Store'
 
-const STEPS: [string, string][] = [['Peças', 'escolha à esquerda e clique no quadro (ou arraste)'], ['Fios', 'clique num terminal, clique para dobrar e clique no terminal de destino'], ['Vista', 'arraste o fundo para mover; a roda dá zoom'], ['Medir', 'escolha V, A ou V·A na barra, clique num fio e aperte Simular']]
+const STEPS: [string, string][] = [['Peças', 'escolha à esquerda e clique no quadro (ou arraste)'], ['Fios', 'clique num terminal, clique para dobrar e clique no terminal de destino'], ['Vista', 'arraste o fundo para mover; a roda dá zoom'], ['Medir', 'escolha V, A ou V·A na barra, clique num fio e aperte Simular'], ['Qualquer ação', 'Ctrl+K e o nome dela, em português ou em inglês']]
 
 // QUADRO VAZIO: COMO COMEÇAR, ABRIR UM ARQUIVO, VER OS EXEMPLOS OU ABRIR UM CIRCUITO DE TESTE
 export const Welcome = () => {
