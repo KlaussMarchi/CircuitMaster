@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { keyOf, splitKey } from '../../core/Document'
-import { formatReading, formatSi, getPropertyDefs, parseSi } from '../../core/Properties'
+import { formatReading, formatSi, getPropertyDefs, nameOf, parseSi } from '../../core/Properties'
 import { getNets, getSwitching, switchOf } from '../../core/Spice'
 import { Scene } from '../../engine/Scene'
 import { familyOf } from '../../engine/Simulation'
@@ -14,18 +14,6 @@ import { probeColor } from '../Probe'
 import { useStore } from '../Store'
 
 const HIDDEN = new Set(['family', 'sticky', 'mn', 'mpn', 'part number', 'shape', 'svg', 'lastfilename', 'switch status'])
-
-const NAMES: Record<string, string> = {
-    resistance: 'Resistência', capacitance: 'Capacitância', inductance: 'Indutância', voltage: 'Tensão', current: 'Corrente', power: 'Potência nominal', tolerance: 'Tolerância',
-    package: 'Encapsulamento', 'pin spacing': 'Espaçamento', bands: 'Faixas de cor', color: 'Cor', frequency: 'Frequência', amplitude: 'Amplitude', 'dc offset': 'Nível DC', phase: 'Fase',
-    'internal resistance': 'Resistência interna', 'max current': 'Corrente máxima', 'maximum resistance': 'Resistência máxima', 'input voltage': 'Tensão de entrada',
-    'initial voltage': 'Tensão inicial', 'pulsed voltage': 'Tensão do pulso', 'delay time': 'Atraso', 'rise time': 'Subida', 'fall time': 'Descida', 'pulse width': 'Largura do pulso', period: 'Período',
-    'chip label': 'Rótulo do CI', type: 'Tipo', variant: 'Variante', form: 'Formato', pins: 'Pinos', layer: 'Camada', layers: 'Camadas', size: 'Tamanho', 'hole size': 'Furo', polarity: 'Polaridade',
-    'switching circuit': 'Contatos', function: 'Função', channels: 'Canais', width: 'Largura (mm)', height: 'Altura (mm)', logo: 'Texto', label: 'Rótulo', connect: 'Ligação', 'editable pin labels': 'Rótulos editáveis',
-    'time/div': 'Tempo/div', 'volts/div': 'Volts/div', 'horizontal position': 'Posição horizontal', 'voltage drop': 'Queda de tensão', 'forward current': 'Corrente direta', chip: 'Chip', 'knob status': 'Posição do cursor', 'default state': 'Estado padrão', 'contact resistance': 'Resistência de contato'
-}
-
-export const nameOf = (key: string) => NAMES[key.toLowerCase()] ?? key.charAt(0).toUpperCase() + key.slice(1)
 
 const PADS     = /(Copper0)?PadModuleID$/
 const SIZED    = (part: Part) => part.kind === 'logo' || part.kind === 'blocker' || isResizableBoard(part.moduleId) || PADS.test(part.moduleId)

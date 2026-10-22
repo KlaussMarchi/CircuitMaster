@@ -1,9 +1,8 @@
 import { create } from 'zustand'
-import { strFromU8 } from 'fflate'
 import { Library } from '../../core/Library'
 import { Netlist, loadNetlistWasm, type NetlistWasm } from '../../core/Netlist'
 import { emptyDoc, fromSketch, keyOf, removeInstance, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
-import { exportBinBundle, exportBundle, readBin, readBundle, readSketch, type Bundle, type BundleFile, type Instance } from '../../core/Sketch'
+import { exportBinBundle, readFile, type BundleFile, type Instance } from '../../core/Sketch'
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
@@ -21,10 +20,13 @@ import { Simulation, fromRest, getInitial, joinRuns } from '../../engine/Simulat
 import { BENCHES, BENCH_PARTS, buildBench } from '../../engine/Bench'
 import { FEATURED } from '../../core/Featured'
 import type { BinTab, Found } from '../../workers/Indexer'
-import { Catalog, fetchText, pickSwap, type IndexerStatus } from '../Catalog'
+import { Catalog, fetchBytes, fetchText, pickSwap, type IndexerStatus } from '../Catalog'
 import { Simulator } from '../Simulator'
-import { PcbTools, getConfig, type Progress } from '../Pcb'
+import { createPcbTools, getConfig, type Progress } from '../Pcb'
+import { createSaver } from '../Saver'
 import { boardProblem, download, exportAs, getClipper, type ExportKind } from '../Export'
+import { PARTS, Vault } from '../Vault'
+import { Autosave, type Snapshot, type Version } from '../Autosave'
 import wasmUrl from '../../core/Netlist/netlist.wasm?url'
 
 export type View       = typeof VIEWS[number]
@@ -36,7 +38,7 @@ export type Theme      = 'dark' | 'light'
 export type Side       = 'both' | 'top' | 'bottom'
 export type Readout    = 'measures' | 'response' | 'settings'
 export type UserBin    = { title: string, moduleIds: string[] }
-export type Dialog     = 'shortcuts' | 'about' | null
+export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | null
 export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
 export type Show       = { values: boolean, chart: boolean }
 export type Simulating = { enabled: boolean, transient: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[] }
@@ -80,19 +82,27 @@ type State = {
     simulation: Simulating
     show: Show
     dialog: Dialog
-    pcb: PcbTools
+    pcb: ReturnType<typeof createPcbTools>
+    saver: ReturnType<typeof createSaver>
+    vault: Vault
+    autosave: Autosave
+    recovery: Version[]
     drc: Checked | null
     routing: Progress | null
     setup: () => Promise<void>
     open: (name: string, bytes: Uint8Array) => Promise<void>
-    save: () => void
+    save: () => Promise<void>
     openSample: (file: string) => Promise<void>
     openBench: (id: string) => Promise<void>
+    recover: (version: Version) => Promise<void>
+    dismissRecovery: () => Promise<void>
+    showVersions: () => Promise<void>
     preview: (doc: Doc) => void
     commit: (doc: Doc, origin?: Doc) => void
     edit: (change: (doc: Doc) => Doc) => void
     undo: () => void
     redo: () => void
+    jump: (steps: number) => void
     setView: (view: View) => void
     select: (selection: string[]) => void
     setHover: (hover: string | null) => void
@@ -136,7 +146,7 @@ type State = {
     deleteBin: (index: number) => void
     addToBin: (index: number, moduleIds: string[]) => void
     exportBin: (index: number) => void
-    keepParts: (files: BundleFile[]) => void
+    keepParts: (files: BundleFile[]) => Promise<void>
     editPart: (modelIndex: string | null) => void
     installPart: (files: BundleFile[], replace: string | null) => Promise<void>
     swap: (modelIndex: string, moduleId: string) => Promise<void>
@@ -187,19 +197,6 @@ const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SP
 
 const IDLE: Simulating = { enabled: false, transient: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [] }
 
-const readFile = (name: string, bytes: Uint8Array): Bundle | null => {
-    const lower = name.toLowerCase()
-
-    try {
-        return lower.endsWith('.fz') ? { sketch: readSketch(strFromU8(bytes)), parts: [], svgs: [], others: [], bin: null } : lower.endsWith('.fzb') ? { sketch: null, parts: [], svgs: [], others: [], bin: readBin(strFromU8(bytes)) } : readBundle(bytes)
-    } catch (error) {
-        if (error instanceof Error)
-            return null
-
-        throw error
-    }
-}
-
 const entryOf = (part: Part): Found => ({ moduleId: part.moduleId, root: 'bundle', path: '', title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? part.views.breadboardView?.image ?? '', obsolete: false, properties: part.properties })
 
 const loadFont = async (library: Library, key: string, file: string) => {
@@ -231,6 +228,40 @@ const writeStored = (key: string, value: unknown) => {
 
         throw error
     }
+}
+
+const removeStored = (key: string) => {
+    try {
+        localStorage.removeItem(key)
+    } catch (error) {
+        if (!(error instanceof Error))
+            throw error
+    }
+}
+
+// PEÇAS DO USUÁRIO QUE AINDA ESTÃO NO localStorage (VERSÕES ANTERIORES) PASSAM PARA O INDEXEDDB; SE ELE FALHAR, FICAM ONDE ESTÃO
+const migrateParts = async (vault: Vault) => {
+    const legacy = readStored<BundleFile[]>(PARTS_KEY, [])
+    const failed = legacy.length ? await vault.save(PARTS, legacy.map(file => [file.name, file])) : null
+
+    if (legacy.length && !failed)
+        removeStored(PARTS_KEY)
+
+    return failed ? legacy : vault.load<BundleFile>(PARTS)
+}
+
+// O .fzz DO DOCUMENTO COM AS PEÇAS DE PACOTE, MONTADO NO WORKER; FALHA VOLTA COMO A CAUSA
+const bundleOf = async ({ doc, name, library, saver }: { doc: Doc, name: string, library: Library, saver: ReturnType<typeof createSaver> }) => {
+    const base  = name.replace(/\.(fzz|fz)$/i, '') || 'sem-titulo'
+    const files = library.getBundleFiles(Object.values(doc.instances).map(instance => instance.moduleIdRef))
+    const bytes = await saver.request<Uint8Array>({ doc, name: base, files })
+    return bytes ? { base, files, bytes } : `o .fzz não foi montado (${saver.failure || 'cancelado'})`
+}
+
+// O QUE O SALVAMENTO AUTOMÁTICO GRAVA: O .fzz COMO O SALVAR GRAVARIA
+const snapshotOf = async (state: { doc: Doc, saved: Doc, name: string, library: Library, saver: ReturnType<typeof createSaver> }): Promise<Snapshot | string> => {
+    const bundle = await bundleOf(state)
+    return typeof bundle === 'string' ? bundle : { name: state.name, dirty: state.doc !== state.saved, count: Object.keys(state.doc.instances).length, bytes: bundle.bytes }
 }
 
 const PADS = /(Copper0)?PadModuleID$|SchematicFrameModuleID$/
@@ -268,6 +299,7 @@ export const useStore = create<State>((set, get) => {
 
     const catalog = new Catalog(listen)
     const blank   = emptyDoc()
+    const vault   = new Vault()
 
     return {
         catalog,
@@ -308,28 +340,42 @@ export const useStore = create<State>((set, get) => {
         simulation: IDLE,
         show: readStored<Show>(SHOW_KEY, { values: true, chart: true }),
         dialog: null,
-        pcb: new PcbTools(),
+        pcb: createPcbTools(),
+        saver: createSaver(),
+        vault,
+        autosave: new Autosave(vault, message => set({ message })),
+        recovery: [],
         drc: null,
         routing: null,
 
         setup: async () => {
-            if (get().catalog.worker)
+            if (get().catalog.supervisor.worker)
                 return
 
             const started = get().catalog.start()
+            get().saver.start()    // SALVAR NÃO PODE DEPENDER DA REDE: O WORKER QUE MONTA O .fzz SOBE JÁ NA ABERTURA
             const fonts   = Promise.all(Object.entries(FONT_FILES).map(([key, file]) => loadFont(get().library, key, file)))
             const wasm    = await loadNetlistWasm(await (await fetch(wasmUrl)).arrayBuffer())
             const samples = JSON.parse(await fetchText('/fritzing/sketches.json') ?? '[]')
-            const kept    = readStored<BundleFile[]>(PARTS_KEY, [])
+            const kept    = await migrateParts(get().vault)
             const added   = get().library.addBundle({ sketch: null, parts: kept.filter(file => file.name.startsWith('part.')), svgs: kept.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
             await Promise.all([started, fonts])
             set({ wasm, samples, ready: true, imported: added.flatMap(moduleId => get().library.bundled.get(moduleId) ?? []).map(entryOf) })
             set(withNetlist(get().doc))
+
+            get().autosave.setup()
+            const recovery = await get().autosave.getRecoverable()
+
+            if (recovery.length)
+                set({ recovery, dialog: 'recovery' })
         },
 
         open: async (name, bytes) => {
             const { library } = get()
             const bundle      = readFile(name, bytes)
+
+            if (typeof bundle === 'string')
+                return set({ message: `${name}: ${bundle}` })
 
             if (bundle && !bundle.sketch && (bundle.parts.length || bundle.bin)) {
                 const added  = library.addBundle(bundle)
@@ -349,6 +395,9 @@ export const useStore = create<State>((set, get) => {
             if (!bundle?.sketch)
                 return set({ message: `${name}: arquivo sem sketch legível` })
 
+            if (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)'))
+                return
+
             library.addBundle(bundle)
             const doc = fromSketch(bundle.sketch)
             set({ message: `abrindo ${name}…` })
@@ -358,28 +407,31 @@ export const useStore = create<State>((set, get) => {
             set({ ...withNetlist(doc, null), name, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, message: missing ? `${missing} peças não encontradas no acervo` : `${name} aberto` })
         },
 
-        save: () => {
-            const { doc, library, name } = get()
-            const base                   = name.replace(/\.(fzz|fz)$/i, '') || 'sem-titulo'
-            const files                  = library.getBundleFiles(Object.values(doc.instances).map(instance => instance.moduleIdRef))
-            download(`${base}.fzz`, exportBundle(doc, base, files), 'application/zip')
-            set({ saved: doc, stored: true, message: `${base}.fzz salvo (${Object.keys(doc.instances).length} itens${files.length ? `, ${files.length} arquivos de peça embutidos` : ''})` })
+        save: async () => {
+            const { doc }  = get()
+            const bundle   = await bundleOf(get())
+
+            if (typeof bundle === 'string')
+                return set({ message: `não salvou: ${bundle}` })
+
+            download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
+            set({ saved: doc, stored: true, message: `${bundle.base}.fzz salvo (${Object.keys(doc.instances).length} itens${bundle.files.length ? `, ${bundle.files.length} arquivos de peça embutidos` : ''})` })
         },
 
         openSample: async file => {
-            const response = await fetch(`/fritzing/sketches/${file}`)
+            const bytes = await fetchBytes(`/fritzing/sketches/${file}`)
 
-            if (!response.ok)
-                return set({ message: `${file}: não encontrado` })
+            if (!bytes)
+                return set({ message: `${file}: não encontrado ou sem rede` })
 
-            await get().open(file.split('/').pop() ?? file, new Uint8Array(await response.arrayBuffer()))
+            await get().open(file.split('/').pop() ?? file, bytes)
         },
 
         // CIRCUITO DE TESTE: SKETCH NOVO NO ESQUEMÁTICO COM O SIMULADOR LIGADO NO TRANSITÓRIO DO MODELO DELE (SPEC 04 §8.9)
         openBench: async id => {
             const bench = BENCHES.find(item => item.id === id)
 
-            if (!bench || (get().past.length && !window.confirm('Descartar as alterações do sketch aberto?')))
+            if (!bench || (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)')))
                 return
 
             await get().library.load([...BENCH_PARTS, WIRE])
@@ -387,6 +439,25 @@ export const useStore = create<State>((set, get) => {
             set({ ...withNetlist(doc, null), name: bench.title, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, hover: null, viewports: {}, pasted: 0, view: 'schematicView', message: bench.summary, simulation: { ...IDLE, enabled: true, transient: true } })
             get().setReadout('response')
         },
+
+        // VERSÃO SALVA SOZINHA ABERTA COMO DOCUMENTO NÃO SALVO; AS SESSÕES MORTAS OFERECIDAS DEIXAM DE SER OFERECIDAS
+        recover: async version => {
+            const { recovery, autosave, dialog } = get()
+            set({ dialog: null })
+            await get().open(version.name, version.bytes)
+            set({ saved: emptyDoc(), stored: false, recovery: [], message: `${version.name} recuperado da versão de ${new Date(version.time).toLocaleString('pt-BR')}; salve para guardar o arquivo` })
+
+            if (dialog === 'recovery')
+                await autosave.dismiss(recovery)
+        },
+
+        dismissRecovery: async () => {
+            const { recovery, autosave } = get()
+            const failed                 = await autosave.dismiss(recovery)
+            set({ recovery: [], dialog: null, message: failed ? `versões não descartadas: ${failed}` : 'versões não salvas descartadas' })
+        },
+
+        showVersions: async () => set({ recovery: await get().autosave.getVersions(), dialog: 'versions' }),
 
         preview: doc => set(withNetlist(doc)),
 
@@ -417,6 +488,16 @@ export const useStore = create<State>((set, get) => {
                 return
 
             set({ ...withNetlist(future[0]), past: [...past, doc], future: future.slice(1), hover: null })
+        },
+
+        // VÁRIOS PASSOS DE UMA VEZ PELO HISTÓRICO: NEGATIVO DESFAZ, POSITIVO REFAZ (DOCK UNDO HISTORY DO FRITZING)
+        jump: steps => {
+            const { past, doc, future } = get()
+            const timeline              = [...past, doc, ...future]
+            const target                = Math.max(0, Math.min(timeline.length - 1, past.length + steps))
+
+            if (target !== past.length)
+                set({ ...withNetlist(timeline[target]), past: timeline.slice(0, target), future: timeline.slice(target + 1), hover: null })
         },
 
         setView: view => set({ view, hover: null, tool: view === 'pcbView' && get().tool !== 'area' ? 'select' : get().tool }),
@@ -695,7 +776,7 @@ export const useStore = create<State>((set, get) => {
         },
 
         newSketch: () => {
-            if (get().past.length && !window.confirm('Descartar as alterações do sketch aberto?'))
+            if (get().doc !== get().saved && !window.confirm('Descartar as alterações do sketch aberto? (elas ficam nas versões salvas automaticamente)'))
                 return
 
             const doc = emptyDoc()
@@ -776,8 +857,10 @@ export const useStore = create<State>((set, get) => {
 
             const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, keepout: config.keepout })
 
-            if (violations)
-                set({ drc: { violations, frame: artwork.board.frame, keepout: config.keepout }, message: violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil` })
+            if (!violations)
+                return set({ message: stopped('DRC', get().pcb.failure) })
+
+            set({ drc: { violations, frame: artwork.board.frame, keepout: config.keepout }, message: violations.length ? `DRC: ${violations.length} problemas com folga de ${config.keepout.toFixed(1)} mil` : `DRC: nenhum problema com folga de ${config.keepout.toFixed(1)} mil` })
         },
 
         fillCopper: async mode => {
@@ -800,7 +883,7 @@ export const useStore = create<State>((set, get) => {
             const fragments = await get().pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded, faces: [...faces], mode, keepout: config.fillKeepout })
 
             if (!fragments)
-                return
+                return set({ message: stopped('preenchimento', get().pcb.failure) })
 
             await get().library.load([FILL])
             get().commit(createFills(cleared, fragments, artwork.board.frame, mode))
@@ -819,6 +902,9 @@ export const useStore = create<State>((set, get) => {
             const [x, y]    = apply(artwork.board.frame, point[0], point[1])
             const fragments = await get().pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded: artwork.conductors.map(() => false), faces: [face], mode: 'plain', keepout: config.fillKeepout })
             const hit       = fragments?.find(fragment => contains(fragment.polygons, x, y))
+
+            if (!fragments)
+                return set({ message: stopped('preenchimento', get().pcb.failure) })
 
             if (!hit)
                 return set({ message: 'solte o preenchimento numa área livre da placa' })
@@ -869,7 +955,7 @@ export const useStore = create<State>((set, get) => {
             set({ routing: null })
 
             if (!routed)
-                return set({ message: 'autorouter cancelado' })
+                return set({ message: stopped('autorouter', get().pcb.failure) })
 
             get().commit(applyPlan(cleared, library, 'pcbView', routed.plan, config.traceWidth, config.holeSize), doc)
             set({ message: `autorouter: ${routed.connected} de ${routed.requested} ligações, ${routed.vias} vias` })
@@ -902,7 +988,7 @@ export const useStore = create<State>((set, get) => {
             set({ routing: null })
 
             if (!routed)
-                return set({ message: 'autorouter cancelado' })
+                return set({ message: stopped('autorouter do esquemático', get().pcb.failure) })
 
             get().commit(applyPlan(cleared, library, 'schematicView', routed.plan, WIRE_STYLE.schematicView.mils, config.holeSize), doc)
             set({ message: `autorouter do esquemático: ${routed.connected} de ${routed.requested} ligações` })
@@ -1021,10 +1107,8 @@ export const useStore = create<State>((set, get) => {
         },
 
         // GUARDA NO NAVEGADOR OS ARQUIVOS DE PEÇAS DE PACOTE, PARA MEUS ITENS E OS BINS VOLTAREM NA PRÓXIMA SESSÃO (SPEC 01 §8A.6)
-        keepParts: files => {
-            const kept   = new Map(readStored<BundleFile[]>(PARTS_KEY, []).map(file => [file.name, file]))
-            files.forEach(file => kept.set(file.name, file))
-            const failed = writeStored(PARTS_KEY, [...kept.values()])
+        keepParts: async files => {
+            const failed = await get().vault.save(PARTS, files.map(file => [file.name, file]))
 
             if (failed)
                 set({ message: `peças não guardadas no navegador (${failed}); continuam nesta sessão` })
@@ -1061,6 +1145,9 @@ export const useStore = create<State>((set, get) => {
         }
     }
 })
+
+// PEDIDO AO WORKER QUE VOLTOU SEM RESULTADO: CANCELADO PELO USUÁRIO OU A CAUSA DA FALHA, COM A SAÍDA
+const stopped = (task: string, failure: string) => failure ? `${task}: ${failure}; tente de novo` : `${task} cancelado`
 
 const GROUNDED = new Set(['gnd', 'vss', 'ground'])
 
@@ -1117,6 +1204,12 @@ const getGroundNets = (doc: Doc, library: Library, netlist: Netlist) => {
 }
 
 const signature = (doc: Doc) => [...Object.values(doc.instances).filter(instance => instance.moduleIdRef !== WIRE).map(instance => `${instance.modelIndex}:${instance.moduleIdRef}:${instance.title}:${JSON.stringify(instance.properties)}`), ...doc.probes.map(probe => `${probe.id}:${probe.kind}:${probe.key}:${probe.flip}`), JSON.stringify(doc.projectProperties)].join('|')
+
+// MUDANÇA DO DOCUMENTO, DO NOME OU DO ESTADO SALVO AGENDA O SALVAMENTO AUTOMÁTICO; A FOTO É TIRADA NA HORA DE GRAVAR
+useStore.subscribe((state, previous) => {
+    if (state.ready && (state.doc !== previous.doc || state.saved !== previous.saved || state.name !== previous.name))
+        state.autosave.schedule(() => snapshotOf(useStore.getState()))
+})
 
 let pending: ReturnType<typeof setTimeout> | undefined
 

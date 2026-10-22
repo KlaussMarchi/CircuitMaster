@@ -13,9 +13,12 @@
     "preview": "vite preview",
     "e2e": "npm run wasm && playwright test",
     "perf": "npm run build && playwright test --config playwright.perf.config.ts",
+    "soak": "npm run wasm && playwright test --config playwright.soak.config.ts",
     "verify": "npm run check && npm test && npm run e2e && npm run perf"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/public-sans": "5.3.0",
     "@xmldom/xmldom": "0.9.12",
     "fflate": "0.8.2",
     "react": "19.3.0",
@@ -29,6 +32,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "fast-check": "4.10.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.3.2",

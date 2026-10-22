@@ -34,6 +34,7 @@ test('Painéis: Peças, Projeto e Problemas no trilho; inspetor e exemplos pelo 
     const first = await app.place('Resistor', [-300, -100])
     const other = await app.place('Resistor', [0, 100])
     await app.wire((await app.pins(first))['Pin 1'], (await app.pins(other))['Pin 0'])
+    const count = await app.count()
     await page.getByRole('tab', { name: 'Esquemático' }).click()
 
     await rail.getByRole('button', { name: 'Projeto' }).click()
@@ -50,6 +51,11 @@ test('Painéis: Peças, Projeto e Problemas no trilho; inspetor e exemplos pelo 
 
     await panel.getByRole('tab', { name: 'Documento' }).click()
     await panel.getByRole('searchbox', { name: 'Buscar exemplo' }).fill('Button')
+    await panel.getByRole('button', { name: 'Button', exact: true }).first().click()
+    await expect.poll(() => app.asked).toEqual([expect.stringMatching(/^Descartar as alterações/)])
+    expect(await app.count()).toBe(count)
+
+    app.answers.push(true)
     await panel.getByRole('button', { name: 'Button', exact: true }).first().click()
     await expect.poll(() => app.message()).toBe('Button.fzz aberto')
 })

@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { strFromU8, strToU8, unzipSync, zipSync, type UnzipFileInfo } from 'fflate'
 import { childNamed, childrenNamed, childrenOf, parseXml, tagOf, textOf, type XmlElement } from '../Xml'
 import { VIEWS, type ViewName } from '../Layer'
 import type { Matrix, Point } from '../Geometry'
@@ -137,8 +137,24 @@ export const readSketch = (text: string): Sketch | null => {
     }
 }
 
+const MAX_FILES = 20000                // ARQUIVOS NUM PACOTE; UM PROJETO DO FRITZING TEM DEZENAS
+const MAX_BYTES = 256 * 1024 * 1024    // TOTAL DESCOMPACTADO PELO TAMANHO DECLARADO, QUE O FFLATE NÃO ULTRAPASSA
+
+// PACOTE QUE DESCOMPACTARIA ALÉM DOS LIMITES: ZIP-BOMBA OU ARQUIVO QUE NÃO É PROJETO; O ARQUIVO ABERTO É FRONTEIRA DE CONFIANÇA
+export class OversizedBundle extends Error {}
+
 export const readBundle = (bytes: Uint8Array): Bundle => {
-    const files  = unzipSync(bytes)
+    const sizes  = { files: 0, bytes: 0 }
+    const filter = (file: UnzipFileInfo) => {
+        sizes.files += 1
+        sizes.bytes += file.originalSize
+
+        if (sizes.files > MAX_FILES || sizes.bytes > MAX_BYTES)
+            throw new OversizedBundle(`o pacote passa de ${MAX_FILES} arquivos ou de ${MAX_BYTES / 1024 ** 2} MB descompactados e foi recusado`)
+
+        return true
+    }
+    const files  = unzipSync(bytes, { filter })
     const names  = Object.keys(files)
     const text   = (name: string) => strFromU8(files[name])
     const sketch = names.find(name => name.endsWith('.fz'))
@@ -150,6 +166,23 @@ export const readBundle = (bytes: Uint8Array): Bundle => {
         svgs: pick('svg.', '.svg'),
         others: names.filter(name => name !== sketch && !name.startsWith('part.') && !name.startsWith('svg.')),
         bin: bin ? readBin(text(bin)) : null
+    }
+}
+
+// ARQUIVO ESCOLHIDO PELA PESSOA: ILEGÍVEL VIRA NULO, PACOTE GRANDE DEMAIS VIRA A CAUSA
+export const readFile = (name: string, bytes: Uint8Array): Bundle | string | null => {
+    const lower = name.toLowerCase()
+
+    try {
+        return lower.endsWith('.fz') ? { sketch: readSketch(strFromU8(bytes)), parts: [], svgs: [], others: [], bin: null } : lower.endsWith('.fzb') ? { sketch: null, parts: [], svgs: [], others: [], bin: readBin(strFromU8(bytes)) } : readBundle(bytes)
+    } catch (error) {
+        if (error instanceof OversizedBundle)
+            return error.message
+
+        if (error instanceof Error)
+            return null
+
+        throw error
     }
 }
 

@@ -3,6 +3,7 @@ import { splitKey } from '../../core/Document'
 import { getNets } from '../../core/Spice'
 import { formatReading } from '../../core/Properties'
 import { Scene } from '../../engine/Scene'
+import { describeChange } from '../../engine/History'
 import { useStore } from '../Store'
 
 const LISTED = new Set(['part', 'symbol', 'breadboard', 'board', 'resizableBoard'])
@@ -21,7 +22,7 @@ export const focusPart = (modelIndex: string) => {
         setViewport(view, { x: (box[0] + box[2]) / 2 - size[0] / 2 / zoom, y: (box[1] + box[3]) / 2 - size[1] / 2 / zoom, zoom })
 }
 
-// PAINEL DE PROJETO: AS PEÇAS COM O VALOR PRINCIPAL E OS NÓS DO CIRCUITO, COM A TENSÃO DO PASSO MOSTRADO DURANTE A SIMULAÇÃO
+// PAINEL DE PROJETO: AS PEÇAS COM O VALOR PRINCIPAL, OS NÓS DO CIRCUITO COM A TENSÃO DO PASSO MOSTRADO E O HISTÓRICO DE DESFAZER, ONDE UM CLIQUE VOLTA A QUALQUER PASSO
 export const Outline = () => {
     const doc        = useStore(state => state.doc)
     const library    = useStore(state => state.library)
@@ -29,6 +30,10 @@ export const Outline = () => {
     const name       = useStore(state => state.name)
     const simulation = useStore(state => state.simulation)
     const result     = simulation.enabled ? simulation.result : null
+
+    const past       = useStore(state => state.past)
+    const future     = useStore(state => state.future)
+    const history    = useMemo(() => [...past, doc, ...future].map((state, i, timeline) => i ? describeChange(timeline[i - 1], state) : 'início (sketch aberto ou novo)').map((label, i) => [label, i - past.length] as const).reverse(), [past, doc, future])
 
     const parts = useMemo(() => Object.values(doc.instances).filter(instance => LISTED.has(library.getPart(instance.moduleIdRef)?.kind ?? '')).sort((a, b) => byTitle(a.title, b.title)), [doc, library])
     const nets  = useMemo(() => netlist ? getNets(netlist.doc, library, netlist).filter(net => net.length > 1) : [], [library, netlist])
@@ -80,6 +85,19 @@ export const Outline = () => {
                         </li>
                     ))}
                 </ul>
+                {history.length > 1 && <h3 className="h3">Histórico de desfazer</h3>}
+                {history.length > 1 && (
+                    <ul className="list" aria-label="Histórico de desfazer">
+                        {history.map(([label, steps]) => (
+                            <li key={steps}>
+                                <button className={`row-btn${steps === 0 ? ' current' : ''}`} aria-current={steps === 0 ? 'step' : undefined} title={steps === 0 ? 'estado atual' : steps < 0 ? `desfazer ${-steps} passo(s)` : `refazer ${steps} passo(s)`} onClick={() => useStore.getState().jump(steps)}>
+                                    <span className={`grow${steps > 0 ? ' muted' : ''}`}>{label}</span>
+                                    {steps === 0 && <span className="muted">agora</span>}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
             </div>
         </section>
     )

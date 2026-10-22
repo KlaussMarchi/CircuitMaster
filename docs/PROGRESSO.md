@@ -3,7 +3,7 @@
 Memória do trabalho do plano `FRIZING_KICAD.md` (pasta acima do repositório). Ler ao começar; atualizar ao fim de
 cada item.
 
-**Fase atual: 1 — robustez** (seção no fim do arquivo).
+**Fase atual: 2 — interface direta** (a fase 1 terminou; seções no fim do arquivo).
 
 ## Fase 0 — base de testes e auditoria (fechada em 2026-10-21)
 
@@ -110,6 +110,10 @@ cada item.
     `build/` e só passavam porque outro teste criava a pasta antes. `writeReport` (`tests/Fixtures`) cria a pasta;
     achado pelo `npm run verify` no clone em `build/clean/`.
 
+Fechamento: `npm run verify` verde na pasta de trabalho e num clone limpo em `build/clean/` (`npm ci`,
+`FRITZING_ROOT` apontando para o acervo): Vitest 109 + 2 pulados (ngspice nativo ausente), 122 E2E nos dois
+navegadores, desempenho dentro dos orçamentos. Commits `cd1e153` e `757f3f0`.
+
 ### Desempenho (primeiro relatório, `build/perf-report.txt`)
 
 Build de produção no `vite preview`, Chromium 156, i5-13450HX, 16 GB:
@@ -149,14 +153,72 @@ Build de produção no `vite preview`, Chromium 156, i5-13450HX, 16 GB:
 
 ## Fase 1 — robustez
 
-### A seguir
+Spec `docs/specs/06-ROBUSTNESS-SPEC.md`.
 
-1. Limite de erro por região (quadro, inspetor, painéis, doca) com "recarregar painel" e o documento intacto.
-2. Supervisão comum dos workers (Indexer, Simulator, Pcb): tempo-limite, `onerror`, recriação e cancelamento.
-3. `readBundle`: limite de tamanho descompactado e de número de arquivos (zip-bomba).
-4. Peças do usuário do `localStorage` para o IndexedDB, migrando o que existe.
-5. Autosave no IndexedDB (atraso curto e ao esconder a aba), últimas versões e recuperação ao abrir; abrir arquivo
-   pergunta quando há alterações.
-6. Histórico de desfazer (dock *Undo History* do Fritzing).
-7. Cenários de robustez da seção 6 e fuzzing (`fast-check`) nos leitores e nas edições (aplicar e desfazer devolve
-   o documento idêntico).
+### Feito
+
+- **Supervisor comum dos workers** (`ui/Supervisor`, `workers/Serve`): respostas pelo `id`, vigia de inatividade
+  (indexador 60 s, PCB 60 s, simulador 15 s) zerada por qualquer mensagem, `onerror` e `onmessageerror`, resposta
+  `error` quando o trabalho lança, cancelamento idempotente e recriação no pedido seguinte. Antes, o `PcbTools`
+  esperava para sempre por um WASM abortado e nenhum cliente tratava erro do worker; um `onmessage` assíncrono que
+  lançava deixava o pedido sem resposta. DRC, preenchimento e autorouter dizem a causa e "tente de novo".
+- **Limites de erro** (`ui/Boundary`) nas nove regiões: a falha mostra a causa e "Recarregar painel" no lugar da
+  região; diálogo e editor de peças também têm "Fechar".
+- **Arquivo aberto como fronteira** (`core/Sketch.readFile`): zip com mais de 20.000 arquivos ou mais de 256 MB
+  declarados é recusado antes de descompactar.
+- **IndexedDB do usuário** (`ui/Vault`, banco `circuitmaster-user`): peças de pacote e do editor saem do
+  localStorage, com migração automática; falha de armazenamento vira mensagem.
+- **Salvamento automático e recuperação** (`ui/Autosave`): 1,5 s depois de cada mudança e ao esconder a aba, uma
+  versão por minuto, 20 versões, sessões por aba com Web Locks, diálogo de recuperação ao abrir, Arquivo › Versões
+  salvas automaticamente; Abrir, Novo e circuito de teste perguntam com alterações não salvas.
+- **Histórico de desfazer** (`engine/History`, painel Projeto, Editar › Histórico de desfazer): nome de cada passo
+  pela diferença dos documentos; um clique salta para qualquer passo (`jump`).
+- **Fuzzing** com `fast-check` 4.10.2 (MIT): leitores, geometria e sequências de edição (`tests/fuzz.test.ts`).
+- **Cenários da seção 6** em `e2e/robust.spec.ts` (14 testes nos dois navegadores) e `e2e/soak.spec.ts`
+  (`npm run soak`, meia hora: 872 voltas, heap de 25,2 para 27,5 MB depois do GC, `build/soak-report.txt`).
+- Fontes da interface servidas pelo app (`@fontsource/public-sans` e `@fontsource/jetbrains-mono` 5.3.0, OFL,
+  subconjunto latino, cerca de 100 KB de woff2); o Google Fonts saiu do `index.html`.
+
+### Bugs achados e corrigidos
+
+1. **Vazamento de memória em cadeia no `Canvas`** (achado pela meia hora automatizada: o heap subia uns 3 MB por
+   minuto). `settle` (memorizado por `[view]`) e `finishNote` (por `[doc, commit]`) viviam no escopo do render; como
+   mudam em momentos diferentes, cada escopo guardava um callback de um render mais velho, que guardava outro, e
+   cada um prendia o `drawing` do seu render. A lógica do viewport ao vivo foi para o hook `useLiveViewport`, a nota
+   grava por `saveNote` lendo o store e o `closeMenu` deixou de ser memorizado. Teste: `e2e/soak.spec.ts`
+   (o snapshot de heap já não mostra caminhos de fio repetidos).
+2. **`parseTransform` devolvia NaN** para `matrix(1,0,0,1,NaN,0)` (achado pelo fuzzing): agora o atributo inválido
+   não transforma, como no SVG. Teste: `tests/fuzz.test.ts`.
+3. **Sem rede, colocar uma peça nova ou abrir um exemplo lançava `TypeError` sem dono**: `fetchBytes`/`fetchText`
+   (`ui/Catalog`) voltam nulos e a mensagem diz "não encontrado ou sem rede". Teste: `e2e/robust.spec.ts` "Sem rede".
+4. **Novo perguntava pelo tamanho do histórico, não pelas alterações**: depois de salvar ainda perguntava. Agora
+   pergunta quando o documento difere do salvo, como o Abrir e o circuito de teste.
+5. **O cache do índice só ia para o IndexedDB no fim**: recarregar durante a primeira indexação perdia tudo. Grava a
+   cada 1.000 peças. Teste: `e2e/robust.spec.ts` "primeira indexação".
+6. **Diálogo de versões em monoespaçada**: a tabela `.tbl` põe mono em toda célula; texto e botões voltam à fonte do
+   texto (`td.label`, `td .btn`).
+
+7. **O salvamento automático travava a interface por 300 ms com 1.000 peças** (achado pelo `verify`: tarefa de
+   320 ms no meio do pan). Montar o `.fzz` custa 339 ms de texto e 59 ms de zip; agora o worker `workers/Saver`
+   monta o pacote para o autosave e para o Salvar, e na thread da interface fica só a clonagem (39 ms). Teste:
+   `e2e/perf.spec.ts` (pan sem tarefa longa).
+8. **Sem rede o Salvar não baixava**: o worker do `.fzz` nascia no primeiro uso e, offline, o script dele não
+   carrega. Ele sobe na abertura. Teste: `e2e/robust.spec.ts` "Sem rede".
+### Decisões
+
+- O salvamento automático grava a cada mudança, sem o intervalo configurável do Fritzing: o padrão certo no lugar de
+  uma preferência.
+- O `.fzz` inteiro é a unidade do autosave: a recuperação reusa o mesmo leitor do Abrir.
+- O teste de meia hora fica fora do `verify` (`npm run soak`) e roda ao fechar cada fase.
+
+### Bugs e pendências abertos
+
+- O aviso do React "Cannot update a component (`Rail`) while rendering…" (fase 0) não voltou nas rodadas da fase 1.
+- O JavaScript inicial está em 702 de 710 KB: a fase 2 carrega sob demanda o editor de peças e o que vier de novo.
+
+### A seguir (fase 2)
+
+1. Abrir no Esquemático; Simular única (sem o seletor DC/Transitório); painel único de simulação em três colunas.
+2. Auditoria de cliques de cada fluxo, com o antes e o depois em fotos.
+3. Paleta de comandos (`Ctrl+K`), modos Iniciante/Maker/Profissional, painel de camadas, preferências, abas de
+   sketches, i18n pt-BR e en, atalhos configuráveis, tour e cartões didáticos.

@@ -3,7 +3,7 @@ import { formatSi, getPropertyDefs, parseSi, type PropertyDef } from '../../core
 import type { Point } from '../../core/Geometry'
 import { setProperty } from '../../engine/Edit'
 import { Icon } from '../Icon'
-import { nameOf } from '../Inspector'
+import { nameOf } from '../../core/Properties'
 import { useStore } from '../Store'
 
 const MAIN    = ['resistance', 'capacitance', 'inductance', 'amplitude', 'pulsed voltage', 'voltage', 'maximum resistance']

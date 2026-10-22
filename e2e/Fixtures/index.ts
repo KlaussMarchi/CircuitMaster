@@ -31,6 +31,7 @@ const traceRenderUpdates = () => {
 export class App {
     issues: string[]  = []
     answers: Answer[] = []
+    asked: string[]   = []
     downloads         = new Set<string>()
     navigating        = false
 
@@ -53,6 +54,7 @@ export class App {
 
     answer(dialog: import('@playwright/test').Dialog) {
         const answer = this.answers.shift()
+        this.asked.push(dialog.message())
 
         if (answer === undefined || answer === false)
             return void dialog.dismiss()

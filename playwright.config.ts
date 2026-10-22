@@ -5,7 +5,7 @@ const VIEWPORT = { width: 1920, height: 1080 }
 
 export default defineConfig({
     testDir: 'e2e',
-    testIgnore: /perf\.spec/,
+    testIgnore: /(perf|soak)\.spec/,
     outputDir: 'build/e2e',
     timeout: 180000,
     expect: { timeout: 15000 },

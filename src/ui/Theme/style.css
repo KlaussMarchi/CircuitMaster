@@ -93,6 +93,10 @@ input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(-
 .app input, .app textarea, .app [contenteditable="true"], .modal { user-select: text; -webkit-user-select: text; }
 .app { display: grid; grid-template-rows: 48px minmax(0,1fr) 26px; height: 100dvh; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; min-height: 0; }
+.boundary { display: flex; flex-direction: column; gap: 8px; padding: 16px; overflow: auto; }
+.boundary h2 { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--negative); }
+.boundary-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal > .boundary { width: min(480px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-float); }
 
 /* ───────── Barra superior ───────── */
 .topbar { display: flex; align-items: center; gap: 20px; padding: 0 16px 0 14px; position: relative; min-width: 0; }
@@ -212,6 +216,7 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
 .list li:last-child { border-bottom: 0; }
 .list .row-btn { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 40px; text-align: left; border-radius: 4px; min-width: 0; }
 .list .row-btn:hover .name { color: var(--accent); }
+.list .row-btn.current .grow { text-decoration: underline 1px var(--accent); text-underline-offset: 5px; }
 .name { font-weight: 500; }
 .list .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h3 { font-size: 12px; font-weight: 500; color: var(--muted); padding: 14px 0 4px; }
@@ -328,7 +333,7 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
 .tbl th { text-align: right; font-weight: 400; color: var(--muted); padding: 4px 0 6px 8px; font-size: 12px; white-space: nowrap; }
 .tbl th:first-child, .tbl td:first-child { text-align: left; padding-left: 0; }
 .tbl td { text-align: right; padding: 0 0 0 8px; height: 30px; border-top: 1px solid var(--rule); font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tbl td:first-child { font-family: var(--font); }
+.tbl td:first-child, .tbl td.label, .tbl td .btn { font-family: var(--font); }
 .tbl td.dash { color: var(--muted); }
 .tbl.keys td { text-align: left; font-family: var(--font); white-space: normal; height: auto; padding: 6px 12px 6px 0; color: var(--soft); }
 .tbl.keys td:first-child { white-space: nowrap; }

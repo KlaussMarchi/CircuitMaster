@@ -542,14 +542,10 @@ Cada uma é gravada como `<chave value="…"/>`.
 
 ### 10.2 Protocolo UI ↔ worker
 
-| Mensagem | Conteúdo |
-|---|---|
-| `load` | URL do módulo, code models |
-| `run` | `deck` (texto), `analysis` (`op`/`tran`), lista de vetores desejados |
-| `progress` | passo corrente, tempo simulado |
-| `vectors` | `{nome: Float64Array}` (transferível) |
-| `log` | texto do ngspice |
-| `error` | `{fase: carga|execução|timeout, log, deck}` |
+Pedido `{ id, deck }`; resposta `{ id, result: { vectors, log, error } }` com os vetores `Float64Array` transferidos,
+ou `{ id, error }` quando o trabalho lança (WASM abortado). O cliente é o supervisor comum dos workers (doc 06 §2):
+15 s sem resposta, erro do worker ou resposta de erro encerram o worker, a simulação volta com `error`
+("simulação interrompida: …") e a próxima o recria. Uma simulação por vez.
 
 ### 10.3 Pipeline
 

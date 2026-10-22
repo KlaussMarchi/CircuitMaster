@@ -41,7 +41,8 @@ const fileMenu = (state: State): MenuEntry[] => {
         { label: 'Abrir…', shortcut: 'Ctrl+O', apply: () => document.getElementById('open-file')?.click() },
         { label: 'Exemplos', disabled: !state.samples.length, items: sampleTree(state, state.samples) },
         null,
-        { label: 'Salvar', shortcut: 'Ctrl+S', apply: state.save },
+        { label: 'Salvar', shortcut: 'Ctrl+S', apply: () => void state.save() },
+        { label: 'Versões salvas automaticamente…', apply: () => void state.showVersions() },
         { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: PRODUCTION.map(item) }, null, ...LISTS.map(item)] }
     ]
 }
@@ -49,6 +50,7 @@ const fileMenu = (state: State): MenuEntry[] => {
 const editMenu = (state: State): MenuEntry[] => [
     { label: 'Desfazer', shortcut: 'Ctrl+Z', disabled: !state.past.length, apply: state.undo },
     { label: 'Refazer', shortcut: 'Ctrl+Shift+Z', disabled: !state.future.length, apply: state.redo },
+    { label: 'Histórico de desfazer', disabled: !state.past.length && !state.future.length, apply: () => state.setLeft('project') },
     null,
     { label: 'Recortar', shortcut: 'Ctrl+X', disabled: !state.selection.length, apply: state.cut },
     { label: 'Copiar', shortcut: 'Ctrl+C', disabled: !state.selection.length, apply: state.copy },

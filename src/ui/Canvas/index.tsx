@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { keyOf, removeEdges, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
 import { apply, boxesTouch, distance, invert, lerp, nearestOnCubic, nearestOnSegment, unionBoxes, type Box, type Point } from '../../core/Geometry'
 import { milsToPx } from '../../core/Units'
@@ -201,6 +201,56 @@ const WiringShape = ({ points, color, width, zoom, aimed }: { points: Point[], c
     )
 }
 
+const saveNote = (modelIndex: string, html: string) => {
+    const { doc, commit } = useStore.getState()
+
+    if (html !== (doc.instances[modelIndex]?.text ?? ''))
+        commit(setNoteText(doc, modelIndex, html))
+}
+
+// VIEWPORT AO VIVO: DURANTE O GESTO SÓ O TRANSFORM CSS MUDA (COMPOSITOR) E O viewBox É REFEITO QUANDO O GESTO PARA OU O QUADRO JÁ NÃO COBRE A TELA; FICA FORA DO ESCOPO DO Canvas PARA OS CALLBACKS GUARDADOS NÃO PRENDEREM DESENHOS DE RENDERS ANTIGOS
+const useLiveViewport = (svgRef: RefObject<SVGSVGElement | null>, view: View, vp: Viewport, size: Point) => {
+    const liveRef   = useRef<Viewport | null>(null)
+    const shownRef  = useRef<Viewport>({ x: 0, y: 0, zoom: 1 })
+    const settleRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+    const transformTo = useCallback((next: Viewport | null) => {
+        const [tx, ty, scale] = next ? getShift(shownRef.current, next) : []
+
+        if (svgRef.current)
+            svgRef.current.style.transform = next ? `translate(${tx}px, ${ty}px) scale(${scale})` : ''
+    }, [svgRef])
+
+    useLayoutEffect(() => {
+        shownRef.current = vp
+        transformTo(liveRef.current)
+    }, [vp, transformTo])
+
+    const settle = useCallback(() => {
+        const next = liveRef.current
+        clearTimeout(settleRef.current)
+        liveRef.current = null
+
+        if (next)
+            useStore.getState().setViewport(view, next)
+    }, [view])
+
+    useLayoutEffect(() => settle, [settle])    // TROCA DE VISTA OU DESMONTAGEM NO MEIO DO GESTO FIXA O QUE JÁ FOI MOSTRADO
+
+    const showLive = useCallback((next: Viewport) => {
+        liveRef.current = next
+        clearTimeout(settleRef.current)
+
+        if (!covers(getShift(shownRef.current, next), size))
+            return settle()
+
+        transformTo(next)
+        settleRef.current = setTimeout(settle, SETTLE_MS)
+    }, [transformTo, settle, size])
+
+    return { liveRef, shownRef, settle, showLive }
+}
+
 export const Canvas = () => {
     const doc       = useStore(state => state.doc)
     const view      = useStore(state => state.view)
@@ -221,9 +271,6 @@ export const Canvas = () => {
     const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, getGrid, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing } = useStore.getState()
 
     const svgRef              = useRef<SVGSVGElement>(null)
-    const liveRef             = useRef<Viewport | null>(null)
-    const shownRef            = useRef<Viewport>({ x: 0, y: 0, zoom: 1 })
-    const settleRef           = useRef<ReturnType<typeof setTimeout>>(undefined)
     const spaceRef            = useRef(false)
     const wiringRef           = useRef<Wiring | null>(null)
     const [drag, setDrag]     = useState<Drag | null>(null)
@@ -232,7 +279,6 @@ export const Canvas = () => {
     const [editing, setEditing] = useState<string | null>(null)
     const [pointed, setPointed] = useState<Pointed | null>(null)
     const [focus, setFocus]     = useState(0)
-    const closeMenu           = useCallback(() => setMenu(null), [])
     const scene               = useMemo(() => new Scene(doc, library, view), [doc, library, view])
     const drawing             = useMemo(() => getDrawing(scene, netlist), [scene, netlist])
     const obstacles           = useMemo(() => getObstacles(scene), [scene])
@@ -274,40 +320,7 @@ export const Canvas = () => {
 
     useEffect(() => setWiring(null), [view, tool])
 
-    const transformTo = useCallback((next: Viewport | null) => {
-        const [tx, ty, scale] = next ? getShift(shownRef.current, next) : []
-
-        if (svgRef.current)
-            svgRef.current.style.transform = next ? `translate(${tx}px, ${ty}px) scale(${scale})` : ''
-    }, [])
-
-    useLayoutEffect(() => {
-        shownRef.current = vp
-        transformTo(liveRef.current)
-    }, [vp, transformTo])
-
-    const settle = useCallback(() => {
-        const next = liveRef.current
-        clearTimeout(settleRef.current)
-        liveRef.current = null
-
-        if (next)
-            setViewport(view, next)
-    }, [view, setViewport])
-
-    useLayoutEffect(() => settle, [settle])    // TROCA DE VISTA OU DESMONTAGEM NO MEIO DO GESTO FIXA O QUE JÁ FOI MOSTRADO
-
-    // DURANTE O GESTO SÓ O TRANSFORM CSS MUDA (COMPOSITOR); O viewBox É REFEITO QUANDO O GESTO PARA OU O QUADRO JÁ NÃO COBRE A TELA
-    const showLive = useCallback((next: Viewport) => {
-        liveRef.current = next
-        clearTimeout(settleRef.current)
-
-        if (!covers(getShift(shownRef.current, next), size))
-            return settle()
-
-        transformTo(next)
-        settleRef.current = setTimeout(settle, SETTLE_MS)
-    }, [transformTo, settle, size])
+    const { liveRef, shownRef, settle, showLive } = useLiveViewport(svgRef, view, vp, size)
 
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
@@ -919,13 +932,6 @@ export const Canvas = () => {
         return symbol && bounds && pins.every(pin => pin !== null) ? <SymbolArt kind={symbol[1]} pins={pins as Point[]} center={[(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2]} pressed={known ? pressedAt(item.modelIndex, known.pressed) : false} /> : null
     }
 
-    const finishNote = useCallback((modelIndex: string, html: string) => {
-        setEditing(null)
-
-        if (html !== (doc.instances[modelIndex]?.text ?? ''))
-            commit(setNoteText(doc, modelIndex, html))
-    }, [doc, commit])
-
     const content = useMemo(() => drawing.items.map(item => {
         if (item.type === 'wire' && view === 'pcbView') {
             const layer = scene.getView(item.modelIndex)?.layer ?? ''
@@ -936,7 +942,7 @@ export const Canvas = () => {
             return <WireShape key={item.modelIndex} item={item} />
 
         if (item.type === 'note')
-            return <NoteShape key={item.modelIndex} item={item} editing={editing === item.modelIndex} finish={html => finishNote(item.modelIndex, html)} />
+            return <NoteShape key={item.modelIndex} item={item} editing={editing === item.modelIndex} finish={html => { setEditing(null); saveNote(item.modelIndex, html) }} />
 
         const part   = library.getPart(item.moduleId)
         const effect = effects?.get(item.modelIndex) ?? null
@@ -948,7 +954,7 @@ export const Canvas = () => {
             return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.layer) ? DIMMED : 1}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
 
         return <PartShape key={`${item.modelIndex}|${item.layer}`} item={shown} image={art ? undefined : getImage(library, shown, view, effect?.color ? [['color_', effect.color]] : item.paint)} effect={effect} greyed={greyed} view={view} lab={item.moduleId.includes('LabDCPowerSupply')} art={art} />
-    }), [drawing, effects, running, library, view, editing, finishNote, plans, result, simulated.step, side])
+    }), [drawing, effects, running, library, view, editing, plans, result, simulated.step, side])
 
     const ratsnest = useMemo(() => drawing.ratsnest.map((rat, i) => (
         <g key={`${rat.from}|${rat.to}`} data-rat={i} data-overlay>
@@ -1105,7 +1111,7 @@ export const Canvas = () => {
             </svg>
             {quick && <QuickValue key={quick.index} modelIndex={quick.index} at={quick.at} focus={focus} />}
             <p className="hint" role="status">{hint}</p>
-            {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={closeMenu} />}
+            {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={() => setMenu(null)} />}
         </>
     )
 }

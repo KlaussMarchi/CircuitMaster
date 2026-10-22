@@ -24,6 +24,7 @@ npm test          # testes Vitest; os relatórios vão para build/
 npm run e2e       # fluxos no navegador (Playwright), no Chromium e no Firefox
 npm run perf      # build de produção e medição de desempenho → build/perf-report.txt
 npm run verify    # tipos, Vitest, E2E e desempenho: tem de passar antes de cada commit
+npm run soak      # meia hora de edição automatizada sem a memória crescer → build/soak-report.txt
 npm run build     # verificação de tipos e build de produção em dist/
 npm run preview   # serve o dist/ com o acervo
 ```
@@ -91,6 +92,16 @@ botão do trilho (ou Exibir › Tema), guardado no navegador (`cm-theme`).
   trilhas novas). Sem placa, "Criar placa e rotear" (aba Roteamento) cria uma em volta das peças e traça as trilhas.
 - **PCB com várias placas**: DRC, autorroteador, preenchimento e exportação para fabricação trabalham com a placa
   selecionada (com uma placa só, com ela).
+- **Nada se perde**: o sketch é salvo sozinho no navegador (IndexedDB) 1,5 s depois de cada mudança e ao esconder a
+  aba, guardando as 20 versões mais recentes (Arquivo › Versões salvas automaticamente…). Se a aba fecha ou trava
+  com alterações não salvas, a próxima abertura oferece recuperá-las; outra aba aberta no mesmo navegador não é
+  confundida com trabalho perdido. Abrir, Novo e circuito de teste perguntam antes de descartar alterações.
+- **Histórico de desfazer** (Editar › Histórico de desfazer, no painel Projeto): cada passo com nome ("adicionou
+  R1", "girou R1", "mudou resistência de R1"); um clique volta ou avança até ele.
+- **Falhas contidas**: se um painel falha, ele mostra a causa e "Recarregar painel" no lugar, e o resto do app
+  e o circuito seguem; se o simulador, o roteador ou o indexador param, a ação explica a causa e a próxima os
+  recria. Arquivos abertos têm limite de tamanho e de número de arquivos (zip-bomba é recusada); sem rede, o que
+  já está carregado continua funcionando e as fontes da interface vêm do próprio app.
 
 ## Estrutura
 
@@ -121,5 +132,8 @@ código foi escrito a partir das especificações em `docs/specs`, sem transcrev
   os testes que precisam deles são pulados quando os executáveis não existem.
 - **Clipper2** (Boost 1.0): em `src/core/Clipper`, com a licença ao lado; reconstruível com
   `tools/Clipper2/build.sh`.
+- **Public Sans** e **JetBrains Mono** (SIL OFL 1.1), as fontes da interface, pelos pacotes `@fontsource/*`
+  (subconjunto latino), servidas pelo próprio app.
+- **fast-check** (MIT) nos testes de fuzzing e **Playwright** (Apache-2.0) nos testes E2E; não vão para o build.
 - Peças, gráficos, fontes e exemplos vêm do acervo do Fritzing e seguem as licenças dele. Os gráficos e a
   documentação estão sob CC BY-SA 3.0.

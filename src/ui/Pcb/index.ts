@@ -1,52 +1,14 @@
 import type { PcbRequest } from '../../workers/Pcb'
 import { ROUTE_DEFAULTS, type RouteConfig } from '../../core/Router'
 import { MIL_PER_INCH, toInches } from '../../core/Units'
+import { Supervisor } from '../Supervisor'
 
 export type Progress = { cycle: number, cycles: number, connected: number, requested: number }
 
-// CLIENTE DO WORKER DE PCB: UMA REQUISIÇÃO POR VEZ COM PROGRESSO; CANCELAR ENCERRA O WORKER E DEVOLVE NULO
-export class PcbTools {
-    worker: Worker | null = null
-    next = 0
-    pending = new Map<number, (result: unknown) => void>()
+const PCB_IDLE = 60000    // MS SEM NOTÍCIA DO WORKER DE PCB; O AUTOROUTER AVISA A CADA CICLO, DRC E PREENCHIMENTO SÓ NO FIM
 
-    start() {
-        if (!this.worker)
-            this.worker = new Worker(new URL('../../workers/Pcb/index.ts', import.meta.url), { type: 'module' })
-
-        return this.worker
-    }
-
-    stop() {
-        this.worker?.terminate()
-        this.worker = null
-        this.pending.forEach(resolve => resolve(null))
-        this.pending.clear()
-    }
-
-    request<T>(message: PcbRequest, progress: (progress: Progress) => void = () => {}) {
-        const worker = this.start()
-        const id     = this.next++
-
-        return new Promise<T | null>(resolve => {
-            const listen = ({ data }: MessageEvent) => {
-                if (data.id !== id)
-                    return
-
-                if (data.progress)
-                    return progress(data.progress)
-
-                worker.removeEventListener('message', listen)
-                this.pending.delete(id)
-                resolve(data.result)
-            }
-
-            this.pending.set(id, resolve as (result: unknown) => void)
-            worker.addEventListener('message', listen)
-            worker.postMessage({ ...message, id })
-        })
-    }
-}
+// WORKER DE PCB (DRC, PREENCHIMENTO, AUTOROUTER) VIGIADO; stop() CANCELA E O PEDIDO VOLTA NULO
+export const createPcbTools = () => new Supervisor<PcbRequest>(() => new Worker(new URL('../../workers/Pcb/index.ts', import.meta.url), { type: 'module' }), PCB_IDLE)
 
 export type PcbConfig = RouteConfig & { fillKeepout: number, holeSize: string }
 

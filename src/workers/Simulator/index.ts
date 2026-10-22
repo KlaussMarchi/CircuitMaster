@@ -1,7 +1,6 @@
 import createNgspice from './ngspice/ngspice.js'
-import { Ngspice } from '../../core/Ngspice'
-
-const scope = self as unknown as { postMessage: (message: unknown, transfer: Transferable[]) => void, onmessage: ((event: MessageEvent) => void) | null }
+import { Ngspice, type Run } from '../../core/Ngspice'
+import { serve } from '../Serve'
 
 const session = createNgspice().then(module => {
     const ngspice = new Ngspice(module)
@@ -9,8 +8,6 @@ const session = createNgspice().then(module => {
     return ngspice
 })
 
-scope.onmessage = async ({ data }) => {
-    const ngspice = await session
-    const result  = ngspice.run(data.deck)
-    scope.postMessage({ id: data.id, ...result }, Object.values(result.vectors).map(vector => vector.buffer))
-}
+session.catch(() => {})    // A FALHA AO CARREGAR CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
+
+serve<{ deck: string }>(async ({ deck }) => (await session).run(deck), (run: Run) => Object.values(run.vectors).map(vector => vector.buffer))

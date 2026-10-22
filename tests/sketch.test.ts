@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { strFromU8, unzipSync } from 'fflate'
-import { exportBundle, exportSketch, readBundle, readSketch, type Instance, exportBin, exportBinBundle, readBin } from '../src/core/Sketch'
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
+import { exportBundle, exportSketch, readBundle, readSketch, type Instance, exportBin, exportBinBundle, readBin, OversizedBundle } from '../src/core/Sketch'
 import { fromSketch } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
 import { HAS_FRITZING, listSketches } from './Fixtures'
@@ -67,5 +67,40 @@ describe('bins .fzb/.fzbz (spec 01 §6.3)', () => {
         expect(bin?.entries.map(entry => entry.moduleIdRef)).toEqual(ids)
         expect(bundle.bin?.entries.map(entry => entry.moduleIdRef)).toEqual(ids)
         expect(bundle.parts.map(file => file.name)).toEqual(['part.custom.fzp'])
+    })
+})
+
+// MUDA O TAMANHO DESCOMPACTADO DECLARADO NOS CABEÇALHOS LOCAL E CENTRAL DO ZIP
+const declare = (zip: Uint8Array, size: number) => {
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength)
+
+    for (let i = 0; i < zip.length - 4; i++) {
+        if (view.getUint32(i, true) === 0x04034b50)
+            view.setUint32(i + 22, size, true)
+
+        if (view.getUint32(i, true) === 0x02014b50)
+            view.setUint32(i + 24, size, true)
+    }
+
+    return zip
+}
+
+describe('pacote como fronteira de confiança (fase 1, seção 7)', () => {
+    it('zip que declara mais de 256 MB descompactados é recusado antes de descompactar', () => {
+        const bomb = declare(zipSync({ 'bomba.fz': new Uint8Array(1024) }), 300 * 1024 ** 2)
+        expect(() => readBundle(bomb)).toThrow(OversizedBundle)
+    })
+
+    it('zip com mais de 20.000 arquivos é recusado; o pacote normal passa', () => {
+        const many = zipSync(Object.fromEntries(Array.from({ length: 20001 }, (_, i) => [`svg.${i}.svg`, new Uint8Array(1)])))
+        const fine = zipSync({ 'ok.fz': strToU8('<module/>'), 'part.a.fzp': strToU8('<module moduleId="a"/>') })
+        expect(() => readBundle(many)).toThrow(/20000 arquivos/)
+        expect(readBundle(fine).parts.map(file => file.name)).toEqual(['part.a.fzp'])
+    })
+
+    it('zip que mente o tamanho para menos sai truncado, sem crescer a memória', () => {
+        const liar = declare(zipSync({ 'grande.svg': new Uint8Array(8 * 1024 ** 2) }, { level: 9 }), 10)
+        expect(readBundle(liar).others).toEqual(['grande.svg'])
+        expect(unzipSync(liar)['grande.svg'].length).toBe(10)
     })
 })

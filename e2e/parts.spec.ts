@@ -1,6 +1,8 @@
 import { unzipSync } from 'fflate'
 import { test, expect, type App } from './Fixtures'
 
+const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTICO: A RECARGA SEMPRE OFERECE RECUPERAR
+
 const indexed = (app: App) => expect.poll(() => app.page.evaluate(() => cm.store.getState().indexed.ready), { timeout: 60000 }).toBe(true)
 
 const moduleOf = (app: App, modelIndex: string) => app.page.evaluate(modelIndex => cm.store.getState().doc.instances[modelIndex]?.moduleIdRef, modelIndex)
@@ -20,8 +22,7 @@ test('Busca: / foca, básicos primeiro, Esc limpa; duplo clique põe no centro e
     }
 
     await search.fill('amp op')
-    await expect(panel.locator('.results .t').nth(1)).toBeVisible()
-    expect(await panel.locator('.results .t').evaluateAll(items => items.slice(0, 2).map(item => item.textContent).sort())).toEqual(['Amp. op.', 'LM358'])
+    await expect.poll(() => panel.locator('.results .t').evaluateAll(items => items.slice(0, 2).map(item => item.textContent).sort())).toEqual(['Amp. op.', 'LM358'])
 
     await search.press('Escape')
     await expect(search).toHaveValue('')
@@ -71,7 +72,9 @@ test('Bins: Meus itens, novo bin, renomear, exportar, importar, apagar e manter 
     await panel.getByRole('button', { name: 'Novo bin' }).click()
     await expect(group('Vazio')).toContainText('Vazio. Use')
 
+    await page.waitForTimeout(AUTOSAVE_MS)
     await app.open()
+    await page.getByRole('dialog', { name: 'Recuperar trabalho não salvo' }).getByRole('button', { name: 'Descartar' }).click()
     await panel.getByRole('tab', { name: 'Meus itens' }).click()
     await expect(group('Bin renomeado').locator('.part')).toHaveCount(1)
     await expect(group('Vazio')).toBeVisible()

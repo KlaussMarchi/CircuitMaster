@@ -30,20 +30,24 @@ const TRANSFORMS: Record<string, (v: number[]) => Matrix> = {
     skewY: v => [1, Math.tan(v[0] * Math.PI / 180), 0, 1, 0, 0]
 }
 
+// ATRIBUTO transform DO SVG; NÚMERO INVÁLIDO OU RESULTADO NÃO FINITO INVALIDA O ATRIBUTO INTEIRO, QUE ENTÃO NÃO TRANSFORMA (COMO NO SVG)
 export const parseTransform = (text: string | null | undefined) => {
     let m = IDENTITY
 
     for (const [, name, args] of (text ?? '').matchAll(/(\w+)\s*\(([^)]*)\)/g)) {
-        const build = TRANSFORMS[name]
+        const build  = TRANSFORMS[name]
+        const values = args.trim().split(/[\s,]+/).filter(Boolean).map(Number)
 
         if (!build)
             continue
 
-        const values = args.trim().split(/[\s,]+/).filter(Boolean).map(Number)
+        if (!values.every(Number.isFinite))
+            return IDENTITY
+
         m = multiply(m, build(values))
     }
 
-    return m
+    return m.every(Number.isFinite) ? m : IDENTITY
 }
 
 export const boxOf = (points: Point[]): Box | null => {

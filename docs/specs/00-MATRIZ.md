@@ -11,9 +11,9 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Fritzing | 251 | 133 | 94 | 24 |
+| Fritzing | 251 | 135 | 92 | 24 |
 | KiCad esquemático, comuns e projeto | 404 | 66 | 325 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 25 | 394 | 2 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 26 | 393 | 2 |
 
 ## Fritzing
 
@@ -262,8 +262,8 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-229 | Console de saída da compilação e do envio | Fritzing › aba Código › console (console.cpp) | falta | 14 | — |  |
 | F-230 | Editar da aba Código (Undo, Redo, Cut, Copy, Paste, Select All) | Fritzing › aba Código › Edit | falta | 14 | — |  |
 | F-231 | Programas guardados no .fzz | Fritzing › aba Código › programwindow.cpp | falta | 14 | — | os arquivos de código vão dentro do sketch e voltam ao abrir |
-| F-232 | Histórico de desfazer (Undo History) | Fritzing › Window › Undo History (doca, mainwindow_dock.cpp) | falta | 1 | — | lista as ações e volta a qualquer ponto (FRIZING_KICAD §10) |
-| F-233 | Salvamento automático e recuperação (Autosave) | Fritzing › Preferences › Autosave e recuperação ao abrir (mainwindow.cpp) | falta | 1 | — | autosave no IndexedDB com recuperação ao abrir (FRIZING_KICAD §7) |
+| F-232 | Histórico de desfazer (Undo History) | Fritzing › Window › Undo History (doca, mainwindow_dock.cpp) | feita | 1 | tests/history.test.ts · e2e/robust.spec.ts | no painel Projeto (Editar › Histórico de desfazer): cada passo com nome pela diferença dos documentos; um clique volta ou avança até ele (spec 06 §7) |
+| F-233 | Salvamento automático e recuperação (Autosave) | Fritzing › Preferences › Autosave e recuperação ao abrir (mainwindow.cpp) | feita | 1 | e2e/robust.spec.ts · e2e/soak.spec.ts | IndexedDB 1,5 s depois de cada mudança e ao esconder a aba, 20 versões, recuperação das sessões mortas ao abrir, Arquivo › Versões salvas automaticamente (spec 06 §6); o intervalo do Fritzing nas Preferências não se aplica: grava a cada mudança |
 | F-234 | Idiomas (Language) | Fritzing › Preferences › Language (translations) | falta | 2 | — | só pt-BR; i18n com textos próprios (FRIZING_KICAD §10) |
 | F-235 | Simular (Start Simulator) | Fritzing › barra inferior › Simulate (mainwindow.cpp, simulation/simulator.cpp) | feita | 0 | tests/spice.test.ts · e2e/circuit.spec.ts | botão Simular da barra superior e Simulação › Simular; leituras no circuito, gráfico e Medidas na doca |
 | F-236 | Parar a simulação (Stop Simulator) | Fritzing › barra inferior › Stop | feita | 0 | e2e/circuit.spec.ts | o mesmo botão vira Parar; Simulação › Parar a simulação |
@@ -289,12 +289,12 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 |---|---|---|---|---|
 | Menus da barra | 76 | 34 | 19 | 129 |
 | Menus de contexto | 25 | 18 | 1 | 44 |
-| Bins, editor de peças, aba Código e outros docks | 32 | 42 | 4 | 78 |
-| **Total** | **133** | **94** | **24** | **251** |
+| Bins, editor de peças, aba Código e outros docks | 34 | 40 | 4 | 78 |
+| **Total** | **135** | **92** | **24** | **251** |
 
-Linhas "falta" por fase: fase 1: 2 · fase 2: 7 · fase 3: 69 · fase 8: 1 · fase 14: 15.
+Linhas "falta" por fase: fase 2: 7 · fase 3: 69 · fase 8: 1 · fase 14: 15.
 
-Cobertura de Vitest nas linhas feitas: 49 de 133; as demais dependem só do E2E.
+Cobertura de Vitest nas linhas feitas: 50 de 135; as demais dependem só do E2E.
 
 ### Cobertura E2E necessária
 
@@ -971,7 +971,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | MS-085 | kicad | Using the KiCad project manager › Standalone mode | — | — |
 | MS-086 | kicad | Using the KiCad project manager › Creating a new project | 6 | KM-012, KM-013 |
 | MS-087 | kicad | Using the KiCad project manager › Importing a project from another EDA tool | 16 | — |
-| MS-088 | kicad | Using the KiCad project manager › Project backups and autosave | 1 | — |
+| MS-088 | kicad | Using the KiCad project manager › Project backups and autosave | 1 | F-233, KP-124 |
 | MS-089 | kicad | Using the KiCad project manager › Saving and loading project archives | 6 | KM-002, KM-021 |
 | MS-090 | kicad | Using the KiCad project manager › Git integration | 15 | KM-010 |
 | MS-091 | kicad | KiCad files and folders › Project files | 6 | — |
@@ -1225,7 +1225,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-121 | Travar (Lock) | KiCad › PCB Editor | feita | 0 | e2e/edit.spec.ts | Peça › Travar peça; trava peças, não trilhas |
 | KP-122 | Importar placa de outro programa (Non-KiCad Board File...) | KiCad › PCB Editor | falta | 16 | — | P2 (Eagle, EasyEDA), P3 |
 | KP-123 | Colocar footprints (Place Footprints) | KiCad › PCB Editor | feita | 0 | e2e/circuit.spec.ts | peças do painel Peças entram na PCB; footprints do KiCad na fase 5 |
-| KP-124 | Recuperar o arquivo de resgate (Rescue) | KiCad › PCB Editor | falta | 1 | — | P1; autosave e recuperação; não descrito nos capítulos do manual |
+| KP-124 | Recuperar o arquivo de resgate (Rescue) | KiCad › PCB Editor | feita | 1 | e2e/robust.spec.ts | P1; a recuperação do salvamento automático cobre a PCB, que está no mesmo documento (spec 06 §6.3) |
 | KP-125 | Ir para o editor de esquemático (Switch to Schematic Editor) | KiCad › PCB Editor | feita | 0 | e2e/circuit.spec.ts | aba Esquemático (Ctrl+2) |
 | KP-126 | Mostrar a net no ratsnest (Show Net in Ratsnest) | KiCad › PCB Editor | falta | 10 | — | P2 |
 | KP-127 | Alternar entre as duas últimas nets realçadas (Toggle Last Net Highlight) | KiCad › PCB Editor | falta | 10 | — |  |
@@ -1670,12 +1670,12 @@ Fase = fase do que falta na seção (0 quando todas as linhas estão feitas). "C
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de PCB | 335 | 25 | 308 | 2 |
+| Editor de PCB | 335 | 26 | 307 | 2 |
 | Visualizador 3D | 40 | 0 | 40 | 0 |
 | Comuns só da PCB | 0 | 0 | 0 | 0 |
 | GerbView | 37 | 0 | 37 | 0 |
 | Calculadora | 9 | 0 | 9 | 0 |
-| **Total** | **421** | **25** | **394** | **2** |
+| **Total** | **421** | **26** | **393** | **2** |
 
 | Fase | 0 | 1 | 2 | 3 | 5 | 6 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | — | Total |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

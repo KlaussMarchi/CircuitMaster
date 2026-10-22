@@ -58,7 +58,10 @@ definidas em `tools/Fritzing/index.ts`. Não há backend: o plugin `fritzingPart
 
 Módulos em `src/<camada>/<Nome>/index.ts(x)`. `core` não depende de React nem do DOM e roda no Node dos testes;
 `engine` monta cena, desenho, edição e simulação sobre o `core`; `ui` é o React; `workers` rodam fora da thread da
-interface, cada um com um cliente em `ui/` (`Catalog`, `Simulator`, `Pcb`) que casa as respostas pelo `id`.
+interface, cada um com um cliente em `ui/` (`Catalog`, `Simulator`, `Pcb`) sobre o `ui/Supervisor` comum: respostas
+casadas pelo `id`, vigia de inatividade, erro ou morte do worker resolvem o pedido com nulo e a causa em `failure`, e
+o pedido seguinte recria o worker. Do lado do worker, `workers/Serve` responde todo pedido com `result`, `progress`
+ou `error` (spec 06 §2).
 
 - **Documento imutável.** O circuito é um `Doc` (`core/Document`): instâncias por `modelIndex`, um único conjunto
   de arestas `"<modelIndex>/<connectorId>"` para as três vistas, pontas de prova e `revision`. `fromSketch` unifica
@@ -74,7 +77,8 @@ interface, cada um com um cliente em `ui/` (`Catalog`, `Simulator`, `Pcb`) que c
   Ratsnest, cores de net, DRC, roteador e deck SPICE leem daí.
 - **Library** (`core/Library`): carrega `.fzp` e SVG sob demanda de um `Source` — `ui/Catalog` (fetch em
   `/fritzing` e o worker `Indexer` para busca e bins) no navegador, `tests/Fixtures` no Node. Peças de pacotes e do
-  editor de peças entram por `addBundle` e ficam no `localStorage` (`circuitmaster.*`).
+  editor de peças entram por `addBundle` e ficam no IndexedDB `circuitmaster-user` (`ui/Vault`); o localStorage
+  guarda só o pequeno (tema, Meus itens, bins).
 - **Desenho**: `Scene` (matriz de cada instância e terminal de cada conector numa vista) → `getDrawing` (lista de
   desenho: peças, fios, ratsnest, marcas, rótulos) → `ui/Canvas`, que desenha em SVG.
 - **Simulação**: `core/Spice.buildCircuit` gera o deck pelas nets do esquemático → `ui/Simulator` → worker
@@ -86,10 +90,17 @@ interface, cada um com um cliente em `ui/` (`Catalog`, `Simulator`, `Pcb`) que c
   O roteador devolve um `Plan` que `applyPlan` aplica ao doc (também no esquemático, por `buildSheetGrid`). Gerber,
   Excellon, BOM, IPC-D-356A e PDF saem dos módulos de `core` por `ui/Export`.
 
+- **Robustez** (spec 06): `ui/Boundary` envolve cada região da interface (falha mostra a causa e "Recarregar
+  painel"); `core/Sketch.readFile` é a fronteira dos arquivos abertos (limites de zip-bomba); `ui/Autosave` grava o
+  `.fzz` no IndexedDB 1,5 s depois de cada mudança e oferece recuperar sessões mortas (Web Locks distinguem abas
+  vivas); `engine/History.describeChange` dá nome a cada passo do histórico de desfazer. Callback memorizado do
+  `Canvas` não pode capturar o escopo do render (prende os desenhos antigos em cadeia): ponha-o num hook próprio ou
+  leia o store com `getState()`.
+
 ## Especificação e licença
 
-- `docs/specs/01–04` (formatos e peças; sincronização de vistas e netlist; PCB, DRC e Gerber; SPICE) são o que o
-  código implementa. Os comentários citam a seção (`SPEC 04 §8.3`): leia a seção antes de mudar uma regra e
+- `docs/specs/01–04` e `06` (formatos e peças; sincronização de vistas e netlist; PCB, DRC e Gerber; SPICE;
+  robustez) são o que o código implementa; `00-MATRIZ.md` é o placar das funções do Fritzing e do KiCad. Os comentários citam a seção (`SPEC 04 §8.3`): leia a seção antes de mudar uma regra e
   mantenha a citação. Cada spec termina com o plano de testes que os `describe` seguem.
 - O projeto é GPL-3.0-or-later, como o Fritzing (`../Fritzing/fritzing-app`) e o KiCad (`../KiCad/kicad`), e pode
   portar código dos dois. Módulo com código portado ou adaptado leva a origem na primeira linha

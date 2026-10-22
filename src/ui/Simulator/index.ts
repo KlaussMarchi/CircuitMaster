@@ -1,45 +1,14 @@
 import type { Run } from '../../core/Ngspice'
+import { Supervisor } from '../Supervisor'
 
 const TIMEOUT = 15000    // MS ATÉ CONSIDERAR O NGSPICE TRAVADO (SPEC 04 §6)
 
-// CLIENTE DO WORKER DO NGSPICE: UMA SIMULAÇÃO POR VEZ, COM TEMPO-LIMITE QUE RECRIA O WORKER
+// WORKER DO NGSPICE VIGIADO: UMA SIMULAÇÃO POR VEZ; TEMPO-LIMITE, ERRO OU MORTE DO WORKER VIRAM O ERRO DA SIMULAÇÃO E O PRÓXIMO PEDIDO O RECRIA
 export class Simulator {
-    worker: Worker | null = null
-    next = 0
+    supervisor = new Supervisor<{ deck: string }>(() => new Worker(new URL('../../workers/Simulator/index.ts', import.meta.url), { type: 'module' }), TIMEOUT)
 
-    start() {
-        if (!this.worker)
-            this.worker = new Worker(new URL('../../workers/Simulator/index.ts', import.meta.url), { type: 'module' })
-
-        return this.worker
-    }
-
-    stop() {
-        this.worker?.terminate()
-        this.worker = null
-    }
-
-    run(deck: string) {
-        const worker = this.start()
-        const id     = this.next++
-
-        return new Promise<Run>(resolve => {
-            const timer = setTimeout(() => {
-                this.stop()
-                resolve({ vectors: {}, log: [], error: `a simulação passou de ${TIMEOUT / 1000} s e foi interrompida` })
-            }, TIMEOUT)
-
-            const listen = ({ data }: MessageEvent) => {
-                if (data.id !== id)
-                    return
-
-                clearTimeout(timer)
-                worker.removeEventListener('message', listen)
-                resolve(data)
-            }
-
-            worker.addEventListener('message', listen)
-            worker.postMessage({ id, deck })
-        })
+    async run(deck: string): Promise<Run> {
+        const run = await this.supervisor.request<Run>({ deck })
+        return run ?? { vectors: {}, log: [], error: this.supervisor.failure ? `simulação interrompida: ${this.supervisor.failure}` : 'simulação cancelada' }
     }
 }

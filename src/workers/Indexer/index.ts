@@ -2,6 +2,7 @@ import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
 import { haystackOf, prepare, rankParts, type Words } from '../../core/Search'
 import { GENERATED_ROOT, generateFzp } from '../../core/Generator'
+import { scope, serve } from '../Serve'
 
 type Listing = { root: string, path: string, size: number, mtime: number }
 
@@ -31,10 +32,10 @@ const DB_VERSION   = 3
 const STORE        = 'parts'
 const CONCURRENCY  = 16
 const PROGRESS     = 100
+const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR NO MEIO DA PRIMEIRA INDEXAÇÃO NÃO PERDE O QUE JÁ FOI LIDO
 const SEARCH_MAX   = 300
 const BINS         = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
 const ENGINE_FAULT = 'InternalError'
-const scope = self as unknown as { postMessage: (message: unknown) => void, onmessage: ((event: MessageEvent) => void) | null }
 
 let entries: Entry[] = []
 let byId = new Map<string, Entry>()
@@ -126,6 +127,9 @@ const index = async () => {
 
             if (++done % PROGRESS === 0)
                 scope.postMessage({ type: 'progress', done, total: listings.length })
+
+            if (db && fresh.length >= BATCH)
+                void writeCache(db, fresh.splice(0))
         }
     }
 
@@ -169,18 +173,19 @@ const search = (text: string) => again(() => rankParts(entries.filter(entry => !
 
 const indexed = index()
 
-scope.onmessage = async ({ data }) => {
+indexed.catch(() => {})    // A FALHA DO ÍNDICE CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
+
+serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async data => {
     await indexed
 
     if (data.type === 'search')
-        return scope.postMessage({ id: data.id, result: search(data.text) })
+        return search(data.text)
 
     if (data.type === 'family')
-        return scope.postMessage({ id: data.id, result: entries.filter(entry => !entry.obsolete && entry.family.toLowerCase() === String(data.family).toLowerCase()).map(strip) })
+        return entries.filter(entry => !entry.obsolete && entry.family.toLowerCase() === data.family.toLowerCase()).map(strip)
 
     if (data.type === 'entries')
-        return scope.postMessage({ id: data.id, result: (data.moduleIds as string[]).flatMap(moduleId => byId.has(moduleId) ? [strip(byId.get(moduleId) as Entry)] : []) })
+        return data.moduleIds.flatMap(moduleId => byId.has(moduleId) ? [strip(byId.get(moduleId) as Entry)] : [])
 
-    if (data.type === 'locate')
-        return scope.postMessage({ id: data.id, result: Object.fromEntries((data.moduleIds as string[]).flatMap(id => byId.has(id) && byId.get(id)?.root !== GENERATED_ROOT ? [[id, { root: byId.get(id)?.root, path: byId.get(id)?.path }]] : [])) })
-}
+    return Object.fromEntries(data.moduleIds.flatMap(id => byId.has(id) && byId.get(id)?.root !== GENERATED_ROOT ? [[id, { root: byId.get(id)?.root, path: byId.get(id)?.path }]] : []))
+})

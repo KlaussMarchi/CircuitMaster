@@ -94,3 +94,16 @@ export const formatReading = (value: number, symbol: string) => {
     const [prefix, scale] = x === 0 ? ['', 1] : SHOWN.find(([, factor]) => Math.abs(x) < 999.95 * factor) ?? SHOWN[SHOWN.length - 1]
     return `${(x / scale).toPrecision(4)} ${prefix}${symbol}`
 }
+
+// NOMES EM PORTUGUÊS DAS PROPRIEDADES DO FRITZING, PARA O INSPETOR E O HISTÓRICO
+const NAMES: Record<string, string> = {
+    resistance: 'Resistência', capacitance: 'Capacitância', inductance: 'Indutância', voltage: 'Tensão', current: 'Corrente', power: 'Potência nominal', tolerance: 'Tolerância',
+    package: 'Encapsulamento', 'pin spacing': 'Espaçamento', bands: 'Faixas de cor', color: 'Cor', frequency: 'Frequência', amplitude: 'Amplitude', 'dc offset': 'Nível DC', phase: 'Fase',
+    'internal resistance': 'Resistência interna', 'max current': 'Corrente máxima', 'maximum resistance': 'Resistência máxima', 'input voltage': 'Tensão de entrada',
+    'initial voltage': 'Tensão inicial', 'pulsed voltage': 'Tensão do pulso', 'delay time': 'Atraso', 'rise time': 'Subida', 'fall time': 'Descida', 'pulse width': 'Largura do pulso', period: 'Período',
+    'chip label': 'Rótulo do CI', type: 'Tipo', variant: 'Variante', form: 'Formato', pins: 'Pinos', layer: 'Camada', layers: 'Camadas', size: 'Tamanho', 'hole size': 'Furo', polarity: 'Polaridade',
+    'switching circuit': 'Contatos', function: 'Função', channels: 'Canais', width: 'Largura (mm)', height: 'Altura (mm)', logo: 'Texto', label: 'Rótulo', connect: 'Ligação', 'editable pin labels': 'Rótulos editáveis',
+    'time/div': 'Tempo/div', 'volts/div': 'Volts/div', 'horizontal position': 'Posição horizontal', 'voltage drop': 'Queda de tensão', 'forward current': 'Corrente direta', chip: 'Chip', 'knob status': 'Posição do cursor', 'default state': 'Estado padrão', 'contact resistance': 'Resistência de contato'
+}
+
+export const nameOf = (key: string) => NAMES[key.toLowerCase()] ?? key.charAt(0).toUpperCase() + key.slice(1)

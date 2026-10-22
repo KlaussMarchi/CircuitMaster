@@ -9,6 +9,7 @@ import { SidePanel } from '../SidePanel'
 import { StatusBar } from '../StatusBar'
 import { Dialog } from '../Dialog'
 import { PartEditor } from '../PartEditor'
+import { Boundary } from '../Boundary'
 
 type State = ReturnType<typeof useStore.getState>
 
@@ -24,7 +25,7 @@ const SHORTCUTS: Record<string, (state: State) => void> = {
     'ctrl+n': state => state.newSketch(),
     'ctrl+shift+a': state => void state.autoroute(),
     'ctrl+shift+d': state => void state.checkRules(),
-    'ctrl+s': state => state.save(),
+    'ctrl+s': state => void state.save(),
     'ctrl+o': () => document.getElementById('open-file')?.click(),
     'ctrl+z': state => state.undo(),
     'ctrl+shift+z': state => state.redo(),
@@ -82,6 +83,9 @@ const onKey = (event: KeyboardEvent) => {
     action(useStore.getState())
 }
 
+// ABA ESCONDIDA OU FECHANDO GRAVA JÁ O SALVAMENTO AUTOMÁTICO AGENDADO
+const onHide = () => document.visibilityState === 'hidden' && void useStore.getState().autosave.flush()
+
 const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -95,26 +99,32 @@ export const App = () => {
     useEffect(() => {
         useStore.getState().setup().catch(error => useStore.setState({ message: `falha ao iniciar: ${error}` }))
         window.addEventListener('keydown', onKey)
-        return () => window.removeEventListener('keydown', onKey)
+        document.addEventListener('visibilitychange', onHide)
+        window.addEventListener('pagehide', onHide)
+        return () => {
+            window.removeEventListener('keydown', onKey)
+            document.removeEventListener('visibilitychange', onHide)
+            window.removeEventListener('pagehide', onHide)
+        }
     }, [])
 
     return (
         <div className="app">
-            <Topbar />
+            <Boundary name="Barra superior" className="topbar"><Topbar /></Boundary>
             <div className="shell">
-                <Rail />
-                <LeftPanel />
+                <Boundary name="Trilho" className="rail"><Rail /></Boundary>
+                <Boundary name="Painel lateral" className="left card"><LeftPanel /></Boundary>
                 <main className="center">
-                    <Stage />
-                    <SimulationPanel />
+                    <Boundary name="Quadro" className="stage card"><Stage /></Boundary>
+                    <Boundary name="Simulação" className="dock card"><SimulationPanel /></Boundary>
                 </main>
-                <SidePanel />
+                <Boundary name="Inspetor" className="inspector card"><SidePanel /></Boundary>
                 <button className="sheet-scrim" aria-label="Fechar painel" onClick={() => toggleSheet(null)} />
             </div>
-            <StatusBar />
+            <Boundary name="Barra de status" className="status"><StatusBar /></Boundary>
             <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb" hidden onChange={onFile} />
-            <Dialog />
-            <PartEditor />
+            <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><Dialog /></Boundary>
+            <Boundary name="Editor de peças" className="modal" close={() => useStore.getState().editPart(null)}><PartEditor /></Boundary>
         </div>
     )
 }
