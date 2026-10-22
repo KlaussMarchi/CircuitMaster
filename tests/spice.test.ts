@@ -13,7 +13,7 @@ import { Ngspice, type Vectors } from '../src/core/Ngspice'
 import { Simulation, toDisplay } from '../src/engine/Simulation'
 import { createInstance, createWire } from '../src/engine/Edit'
 import { ROOTS } from '../tools/Fritzing'
-import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
 
 type View = typeof VIEWS[number]
@@ -234,7 +234,7 @@ describe.skipIf(!HAS_FRITZING)('simulação com ngspice em WASM (spec 04)', () =
             expect(result.error, `${file}\n${circuit.deck}\n${result.log.join('\n')}`).toBeNull()
         }
 
-        fs.writeFileSync(path.join(import.meta.dirname, '../build/simulator-report.txt'), report.join('\n'))
+        writeReport('simulator-report.txt', report.join('\n'))
     })
 
     // BIT A BIT NÃO É GARANTIDO: A LIBM DO EMSCRIPTEN (musl) DIFERE DA glibc EM 1–2 ulp EM exp, pow, sin, cos, tanh, atan... (SPEC 04 §11)
@@ -274,6 +274,6 @@ describe.skipIf(!HAS_FRITZING)('simulação com ngspice em WASM (spec 04)', () =
             }
         }
 
-        fs.writeFileSync(path.join(import.meta.dirname, '../build/ngspice-native-report.txt'), report.join('\n'))
+        writeReport('ngspice-native-report.txt', report.join('\n'))
     })
 })

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { readBundle } from '../src/core/Sketch'
 import { fromSketch, keyOf, WIRE_FLAGS } from '../src/core/Document'
 import { Scene } from '../src/engine/Scene'
-import { HAS_FRITZING, listSketches, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, listSketches, makeLibrary, writeReport } from './Fixtures'
 
 const EXACT = 0.01
 const NEAR  = 0.5
@@ -50,7 +50,7 @@ describe.skipIf(!HAS_FRITZING)('ancoragem de pinos nos sketches de exemplo (spec
             }
         }
 
-        fs.writeFileSync(new URL('../build/anchors-report.json', import.meta.url), JSON.stringify(counts))
+        writeReport('anchors-report.json', JSON.stringify(counts))
         expect(counts.breadboardView.exact).toBeGreaterThanOrEqual(2100)
         expect(counts.schematicView.exact).toBeGreaterThanOrEqual(2466)
         expect(counts.schematicView.fail).toBeLessThanOrEqual(5)

@@ -11,7 +11,7 @@ import { checkRules, getGroupOf } from '../src/core/Drc'
 import { buildGrid, buildSheetGrid, getPlan, loadRouterWasm, routeGrid, ROUTE_DEFAULTS } from '../src/core/Router'
 import { applyPlan } from '../src/engine/Edit'
 import type { Library } from '../src/core/Library'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
 const SAMPLES = ['Knock', 'Amplification', 'AnalogInputPot', 'Button', 'Op-amp', 'Relay', 'Timer', 'Shift_Register', 'LCD', 'Stepper_Motor']
@@ -69,7 +69,7 @@ describe.skipIf(!HAS_FRITZING)('autorouter de PCB (spec 03 §8)', () => {
             expect(status.routed, path.basename(file)).toBe(status.nets)
         }
 
-        fs.writeFileSync(new URL('../build/router-report.txt', import.meta.url), report.join('\n'))
+        writeReport('router-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(5)
     })
 
@@ -111,7 +111,7 @@ describe.skipIf(!HAS_FRITZING)('autorouter de PCB (spec 03 §8)', () => {
             expect(status.routed, path.basename(file)).toBe(status.nets)
         }
 
-        fs.writeFileSync(new URL('../build/router-sheet-report.txt', import.meta.url), report.join('\n'))
+        writeReport('router-sheet-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(5)
     })
 })

@@ -106,6 +106,10 @@ cada item.
     cai em `generateFzp`), aparecem no bin e na busca com o ícone gerado. Teste: `e2e/parts.spec.ts` "Peças
     geradas do bin Core". O Core passa de 197 para 200 peças.
 
+13. **No clone limpo os testes de preenchimento e de fontes falhavam com ENOENT.** Vários testes gravam relatórios em
+    `build/` e só passavam porque outro teste criava a pasta antes. `writeReport` (`tests/Fixtures`) cria a pasta;
+    achado pelo `npm run verify` no clone em `build/clean/`.
+
 ### Desempenho (primeiro relatório, `build/perf-report.txt`)
 
 Build de produção no `vite preview`, Chromium 156, i5-13450HX, 16 GB:

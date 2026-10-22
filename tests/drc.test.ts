@@ -8,7 +8,7 @@ import { Scene } from '../src/engine/Scene'
 import { Clipper } from '../src/core/Clipper'
 import { getArtwork, pickBoard, type Artwork, type Conductor } from '../src/core/Cam'
 import { checkRules, getGroupOf } from '../src/core/Drc'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
 const KEEPOUT = 10
@@ -72,7 +72,7 @@ describe('verificação de regras de projeto (spec 03 §7)', () => {
             report.push(`${name}${boards.length > 1 ? ` (${boards.length} placas)` : ''}: ${found.length} violações${found.length ? ` — ${found.slice(0, 4).map(violation => `${violation.rule}/${violation.face ?? '-'} ${titles(violation.owners)}`).join('; ')}` : ''}`)
         }
 
-        fs.writeFileSync(new URL('../build/drc-report.txt', import.meta.url), report.join('\n'))
+        writeReport('drc-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(20)
     })
 })

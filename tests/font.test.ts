@@ -5,7 +5,7 @@ import { FONT_FILES, Font, getTextRuns, pickFont } from '../src/core/Font'
 import { SvgFile } from '../src/core/SvgFile'
 import { parseXml, walk, type XmlElement } from '../src/core/Xml'
 import { ROOTS } from '../tools/Fritzing'
-import { HAS_FRITZING } from './Fixtures'
+import { HAS_FRITZING, writeReport } from './Fixtures'
 
 const loadFonts = () => new Map(Object.entries(FONT_FILES).map(([key, file]) => {
     const font = new Font(new Uint8Array(fs.readFileSync(path.join(ROOTS.fonts, file))))
@@ -26,7 +26,7 @@ describe.skipIf(!HAS_FRITZING)('fontes TrueType do Fritzing', () => {
 
         expect(fonts.get('ocra')?.getWidth('ABCD', 10)).toBeCloseTo(4 * (fonts.get('ocra')?.getWidth('A', 10) ?? 0), 6)
         expect(fonts.get('droidsans')?.getWidth('W', 2048)).toBe(1810)
-        fs.writeFileSync(new URL('../build/fonts.svg', import.meta.url), `<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${50 + 40 * fonts.size}">${lines.join('')}</svg>`)
+        writeReport('fonts.svg', `<svg xmlns="http://www.w3.org/2000/svg" width="560" height="${50 + 40 * fonts.size}">${lines.join('')}</svg>`)
     })
 
     it('resolve família, tamanho, âncora e tspans do SVG', () => {

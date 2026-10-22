@@ -10,7 +10,7 @@ import { exportEtchablePdf, exportFabrication } from '../src/core/Gerber'
 import { exportBomCsv, exportBomPdf, exportPickAndPlace } from '../src/core/Bom'
 import { exportIpc } from '../src/core/Ipc'
 import { Netlist } from '../src/core/Netlist'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
 const SAMPLES = ['Knock', 'Amplification', 'Timer']
@@ -76,16 +76,14 @@ describe.skipIf(!HAS_FRITZING)('manufatura da PCB (spec 03 §2–§5)', () => {
                 const netlist = new Netlist(doc, library, wasm)
                 netlist.update()
 
-                const folder  = new URL(`../build/gerber/${name}/`, import.meta.url)
                 const outputs = { ...files, [`${name}.ipc`]: ipc, [`${name}.xml`]: netlist.export('pcbView', instance => scene.isShown(instance), `${name}.fzz`), [`${name}_bom.pdf`]: exportBomPdf(doc, library, name), ...exportEtchablePdf(artwork, clipper, name) }
-                fs.mkdirSync(folder, { recursive: true })
-                Object.entries(outputs).forEach(([fileName, data]) => fs.writeFileSync(new URL(fileName, folder), data))
+                Object.entries(outputs).forEach(([fileName, data]) => writeReport(`gerber/${name}/${fileName}`, data))
             }
 
             report.push(`${name}: placa ${(artwork.board.width / 1000).toFixed(2)}×${(artwork.board.height / 1000).toFixed(2)} in, ${artwork.board.layers} camadas, cobre ${artwork.copper.top.length}/${artwork.copper.bottom.length}, pads ${artwork.pads.length}, furos ${artwork.holes.length}, peças ${artwork.placed.length}, sem suporte ${artwork.skipped}`)
         }
 
-        fs.writeFileSync(new URL('../build/cam-report.txt', import.meta.url), report.join('\n'))
+        writeReport('cam-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(20)
     })
 })

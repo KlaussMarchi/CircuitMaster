@@ -7,6 +7,14 @@ import { FONT_FILES } from '../../src/core/Font'
 
 export const HAS_FRITZING = fs.existsSync(ROOTS.parts)
 
+const BUILD = path.resolve(import.meta.dirname, '../../build')
+
+// RELATÓRIO EM build/, QUE NÃO EXISTE NUM CLONE NOVO
+export const writeReport = (name: string, data: string | Uint8Array) => {
+    fs.mkdirSync(path.dirname(path.join(BUILD, name)), { recursive: true })
+    fs.writeFileSync(path.join(BUILD, name), data)
+}
+
 export const readText = (root: string, file: string) => fs.readFileSync(path.join(ROOTS[root], file), 'utf8')
 
 export const listParts = () => HAS_FRITZING ? getListings()['fzp.json'] : []

@@ -12,7 +12,7 @@ import { Netlist } from '../src/core/Netlist'
 import { splitKey } from '../src/core/Document'
 import { createFills } from '../src/engine/Edit'
 import { apply } from '../src/core/Geometry'
-import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_FRITZING, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import { ROOTS } from '../tools/Fritzing'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
@@ -69,7 +69,7 @@ describe.skipIf(!HAS_FRITZING)('preenchimento de cobre (spec 03 §6)', () => {
                 expect(Math.max(...extra.map(area)) / areaOf(extra)).toBeGreaterThan(CONCENTRATED)
 
             expect(Object.keys(created.instances).length).toBe(Object.keys(doc.instances).length + fragments.length)
-            fs.writeFileSync(new URL(`../build/fill-${face}.svg`, import.meta.url), fragments[0].svg)
+            writeReport(`fill-${face}.svg`, fragments[0].svg)
         }
     })
 
