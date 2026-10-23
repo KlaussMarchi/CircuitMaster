@@ -691,6 +691,15 @@ que ganhou a linha das bibliotecas). Spec 08 §5–§6. Testes: `tests/category.
   em 705,7 KB com o catálogo novo. Um módulo sob demanda que importa de volta um módulo do JS inicial (o `Library`, o
   `Canvas`) faz o build partir esse módulo em arquivo à parte e o inicial cresce: passar o que precisa por propriedade.
 
+### Pedido do usuário (2026-10-23): tela limpa e minimalista
+
+"A tela tem que ficar limpa e minimalista, não pode ficar cheia de coisa igual a esses aplicativos de IA genéricos;
+intuitivo e didático; robusto e compatível, mas com bom senso, posicionando as coisas de forma inteligente." O painel
+de peças passou de Core, Simulador, Catálogo, Meus itens e um "+" que abria bins em abas extras (a terceira aba já
+aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais peças"), Catálogo (as categorias e, em
+"Coleções", os bins de fabricante e o do simulador) e Meus itens. F-176 (fechar bin) virou "não se aplica". Regra no
+`CLAUDE.md` e na memória: nada novo na tela sem tirar outra coisa ou ir para onde o usuário já olha.
+
 ### Bugs achados e corrigidos (fase 5)
 
 1. **As boas-vindas engoliam o clique de quem escolheu uma peça** no sketch vazio: o cartão cobre o centro do quadro.

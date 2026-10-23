@@ -104,7 +104,8 @@ KiCad só aparecem onde o assunto é compatibilidade de arquivos e nos créditos
 - Família: o nome sem o fabricante na frente ("SparkFun", "Adafruit") nem "IC"/"series" no fim, então o 555 do acervo
   ("Timer IC") e os da biblioteca ("Timer") são uma família só; famílias com menos de 3 peças ficam juntas em
   "Diversos", no fim da categoria. Os fios e as peças obsoletas ficam fora.
-- Aba **Catálogo** do painel de peças: as categorias em seções, as famílias dentro delas e as peças de cada família
+- Aba **Catálogo** do painel de peças (uma das três: Básicos, Catálogo, Meus itens): primeiro "Coleções", com os
+  bins de fabricante e o do simulador recolhidos (em vez de abas extras), depois as categorias em seções, as famílias dentro delas e as peças de cada família
   pedidas ao indexador quando a seção abre. O ícone de um símbolo das bibliotecas é o próprio desenho do esquemático,
   feito quando o item aparece na tela e invertido no tema escuro como no quadro.
 

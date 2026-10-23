@@ -11,7 +11,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Fritzing | 251 | 209 | 17 | 25 |
+| Fritzing | 251 | 208 | 17 | 26 |
 | KiCad esquemático, comuns e projeto | 404 | 122 | 269 | 13 |
 | KiCad PCB, 3D, GerbView e calculadora | 421 | 31 | 388 | 2 |
 
@@ -206,7 +206,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 |---|---|---|---|---|---|---|
 | F-174 | Importar… (Import...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Import... | feita | 0 | tests/sketch.test.ts · e2e/parts.spec.ts | pelo Arquivo › Abrir: .fzpz vai para Meus itens, .fzb/.fzbz vira bin do usuário; guardados no navegador |
 | F-175 | Novo bin… (New Bin...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › New Bin... | feita | 0 | e2e/parts.spec.ts | aba Meus itens › Novo bin e Adicionar ao bin › Novo bin… |
-| F-176 | Fechar bin (Close Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Close Bin (também no contexto da aba do bin) | feita | 3 | e2e/fritzing.spec.ts | o × da aba fecha o bin; o + reabre; os bins abertos ficam gravados |
+| F-176 | Fechar bin (Close Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Close Bin (também no contexto da aba do bin) | não se aplica | 5 | — | as coleções de fábrica ficam no Catálogo, sempre disponíveis e recolhidas: não há bin aberto em aba para fechar (painel limpo, decisão do usuário de 2026-10-23) |
 | F-177 | Apagar bin (Delete Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Delete Bin (também no contexto da aba do bin) | feita | 0 | e2e/parts.spec.ts | pede confirmação; as peças continuam no acervo |
 | F-178 | Salvar bin (Save Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Save Bin (também no contexto da aba do bin) | feita | 0 | e2e/parts.spec.ts | gravação automática no navegador (localStorage circuitmaster.*): o bin volta depois de recarregar |
 | F-179 | Salvar bin como… (Save Bin As...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Save Bin As... (também no contexto da aba do bin) | não se aplica | — | — | no navegador gravar é baixar; Exportar bin (.fzbz) já leva o .fzb e as peças |
@@ -217,7 +217,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-184 | Exportar peça do bin… (Export Part...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Export Part... (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça no bin › Exportar peça… |
 | F-185 | Remover peça do bin (Remove Part) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Remove Part (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça em Meus itens ou num bin do usuário › Remover do bin |
 | F-186 | Localizar a peça do bin no sketch (Find Part in Sketch) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Find Part in Sketch (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça no bin › Localizar no sketch seleciona e centraliza |
-| F-187 | Bins de fábrica em abas (Core, Contrib, Arduino, SparkFun… e o bin Temp) | Fritzing › Parts (binmanager.cpp; fritzing-parts/bins) | feita | 3 | e2e/fritzing.spec.ts | Core e Simulador fixos, Meus itens, os 28 bins de fritzing-parts/bins pelo + e o Temp com as peças do sketch que não são do acervo |
+| F-187 | Bins de fábrica em abas (Core, Contrib, Arduino, SparkFun… e o bin Temp) | Fritzing › Parts (binmanager.cpp; fritzing-parts/bins) | feita | 3 | e2e/fritzing.spec.ts | sem abas: o Core em Básicos, os outros 28 bins (com o do simulador) em Catálogo › Coleções, Meus itens e o Temp com as peças do sketch que não são do acervo |
 | F-188 | Busca de peças (Search) | Fritzing › Parts › Search (searchbinpalettewidget.cpp) | feita | 0 | tests/search.test.ts · e2e/parts.spec.ts | atalho /; português e inglês; básicos primeiro |
 | F-189 | Pôr peça do bin no sketch (arrastar) | Fritzing › Parts (partsbinview.cpp) | feita | 0 | e2e/circuit.spec.ts | arrastar, ou clicar e clicar no quadro, ou duplo clique para o centro |
 | F-190 | Carregar SVG da vista (Load image for view... SVG) | Fritzing › editor de peças › File › Load image for view... | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | Carregar SVG… em cada aba de vista; o SVG é saneado |

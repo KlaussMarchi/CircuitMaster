@@ -103,8 +103,10 @@ guardado no navegador (`cm-theme`).
   (`Ctrl+Z`, `Ctrl+Y`), define todos os conectores como macho, fêmea ou pad, passa de passante a SMD, liga conectores
   por dentro (conexões internas), aceita PNG e JPG, tem zoom, grade e camadas e baixa o SVG de cada vista. Os bins do
   usuário e as peças importadas ou criadas ficam guardados no navegador.
-- **Bins**: Core, Simulador, Meus itens e os bins do Fritzing pelo "+" (em ícones ou em lista); o clique direito numa
-  peça do bin edita, exporta, remove ou localiza no sketch.
+- **Painel de peças**: três abas — Básicos (as peças sugeridas, com o resto das comuns recolhido em "Mais peças"),
+  Catálogo (tudo, em categorias e famílias, e as coleções de fabricante como Arduino, SparkFun, Adafruit e a do
+  simulador) e Meus itens —, em ícones ou em lista; o clique direito numa peça edita, exporta, remove do bin ou
+  localiza no sketch.
 - **Catálogo**: cerca de 25 mil peças numa biblioteca só, com uma busca só e categorias próprias (Passivos, Fontes,
   Semicondutores, CIs, Microcontroladores, Sensores, Saída, Entrada, Comunicação, Conectores…) divididas em famílias;
   a aba Catálogo do painel de peças navega por elas. Toda peça tem esquemático, protoboard e PCB: o símbolo vira o

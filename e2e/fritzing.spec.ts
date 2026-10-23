@@ -163,7 +163,7 @@ test('Exibir: fios da protoboard pelo comprimento, grade de tamanho livre e cor 
     await expect(canvas).toHaveCSS('background-color', themed)
 })
 
-test('Bins: em lista e em ícones, bins de fábrica em abas, menu da peça no bin e o Temp com peça própria', async ({ app, page }) => {
+test('Bins: em lista e em ícones, as coleções de fábrica dentro do Catálogo, menu da peça no bin e o Temp com peça própria', async ({ app, page }) => {
     const parts = page.getByRole('region', { name: 'Peças' })
     await app.menu('Exibir', 'Bin em lista')
     await expect(parts.locator('.result').first()).toBeVisible()
@@ -171,13 +171,12 @@ test('Bins: em lista e em ícones, bins de fábrica em abas, menu da peça no bi
     await app.menu('Exibir', 'Bin em ícones')
     await expect(parts.locator('.parts-grid .part').first()).toBeVisible()
 
-    await parts.getByRole('button', { name: 'Abrir bin' }).click({ timeout: 60000 })
-    await page.getByRole('menuitem').filter({ has: page.getByText('Arduino', { exact: true }) }).click()
-    await expect(parts.getByRole('tab', { name: 'Arduino', exact: true })).toHaveAttribute('aria-selected', 'true')
-    await app.open()
-    await expect(parts.getByRole('tab', { name: 'Arduino', exact: true })).toBeVisible({ timeout: 60000 })
-    await parts.getByRole('button', { name: 'Fechar o bin Arduino' }).click()
-    await expect(parts.getByRole('tab', { name: 'Arduino', exact: true })).toHaveCount(0)
+    await parts.getByRole('tab', { name: 'Catálogo' }).click()
+    await parts.getByRole('button', { name: /^Coleções \d+$/ }).click({ timeout: 60000 })
+    await parts.getByRole('button', { name: /^Arduino \d+$/ }).click()
+    await expect(parts.locator('.parts-grid .part').filter({ hasText: /Arduino Uno/ }).first()).toBeVisible()
+    await expect(parts.getByRole('tab')).toHaveText(['Básicos', 'Catálogo', 'Meus itens'])
+    await parts.getByRole('tab', { name: 'Básicos' }).click()
 
     const resistor = parts.getByRole('button', { name: 'Resistor', exact: true })
     await resistor.click({ button: 'right' })
@@ -199,7 +198,7 @@ test('Bins: em lista e em ícones, bins de fábrica em abas, menu da peça no bi
     await app.choose(['Remover do bin'])
     await expect(mine).toHaveCount(0)
 
-    await parts.getByRole('tab', { name: 'Core' }).click()
+    await parts.getByRole('tab', { name: 'Básicos' }).click()
     const placed = await app.place('Resistor', [-300, -150])
     await page.keyboard.press('Escape')
     expect(await app.selection()).toEqual([])

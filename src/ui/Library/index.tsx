@@ -4,7 +4,7 @@ import { GENERATED_ROOT, generateSvg } from '../../core/Generator'
 import type { Found } from '../../workers/Indexer'
 import { Icon, type IconName } from '../Icon'
 import { promptBin } from '../Menus'
-import { ContextMenu, MenuList, type MenuEntry } from '../ContextMenu'
+import { ContextMenu, type MenuEntry } from '../ContextMenu'
 import { entryOf, useStore } from '../Store'
 import { t } from '../../core/Text'
 import { centerOnSelection } from '../Navigation'
@@ -16,14 +16,12 @@ export const PART_MIME = 'application/x-circuitmaster-part'
 type Tab = string    // ARQUIVO DO BIN DO ACERVO, MEUS ITENS OU O Temp
 
 const CORE     = 'bins/core.fzb'
-const SIM      = 'bins/more/sim.fzb'
 const MINE_TAB = 'mine'
 const CATALOG  = 'catalog'
 const TEMP     = 'temp'
-const FIXED    = [CORE, SIM]
 const MINE     = 'Meus itens'
 
-const TABS: [Tab, string][] = [[CORE, 'Core'], [SIM, 'Simulador'], [CATALOG, 'Catálogo'], [MINE_TAB, MINE]]
+const TABS: [Tab, string][] = [[CORE, 'Básicos'], [CATALOG, 'Catálogo'], [MINE_TAB, MINE]]
 const VIEWS: [boolean, IconName, string][] = [[false, 'grid', 'Bin em ícones'], [true, 'list', 'Bin em lista']]
 
 const icons = new Map<string, string>()
@@ -243,7 +241,6 @@ export const Library = () => {
     const userBins            = useStore(state => state.userBins)
     const imported            = useStore(state => state.imported)
     const list                = useStore(state => state.preferences.binList)
-    const openBins            = useStore(state => state.preferences.openBins)
     const temp                = useStore(tempIds)
     const input               = useRef<HTMLInputElement>(null)
     const [text, setText]     = useState('')
@@ -251,7 +248,6 @@ export const Library = () => {
     const [owned, setOwned]   = useState<Found[]>([])
     const [tab, setTab]       = useState<Tab>(CORE)
     const [opened, setOpened] = useState<string[]>([])
-    const [more, setMore]     = useState(false)
     const [menu, setMenu]     = useState<Menu | null>(null)
     const [tree, setTree]     = useState<[string, [string, number][]][]>([])
     const [limit, setLimit]   = useState(RESULTS)
@@ -306,12 +302,11 @@ export const Library = () => {
         }
     }, [kept, catalog, ready])
 
-    const extra      = bins.filter(bin => !FIXED.includes(bin.file))
-    const shown      = extra.filter(bin => openBins.includes(bin.file))
+    const collections = bins.filter(other => other.file !== CORE)    // O BIN DO SIMULADOR E OS DE FABRICANTE: NO CATÁLOGO, EM VEZ DE ABAS
     const tempParts  = useMemo(() => temp ? temp.split('\n').flatMap(moduleId => library.bundled.get(moduleId) ?? []).map(entryOf) : [], [temp, library])
     const current    = tab === TEMP && !tempParts.length ? CORE : tab
     const bin        = bins.find(other => other.file === current)
-    const featured   = current === CORE || current === SIM ? FEATURED.filter(item => current === CORE || !item.nosim) : []
+    const featured   = current === CORE ? FEATURED : []
     const sections   = bin?.sections ?? []
     const members    = (ids: string[]) => ids.flatMap(moduleId => owned.find(entry => entry.moduleId === moduleId) ?? imported.find(entry => entry.moduleId === moduleId) ?? [])
     const mineGroups = [[MINE, mine, -1] as const, ...userBins.map((bin, i) => [bin.title, bin.moduleIds, i] as const)]
@@ -321,16 +316,6 @@ export const Library = () => {
     const choose     = (id: Tab) => {
         setTab(id)
         setText('')
-    }
-    const openBin    = (file: string) => {
-        useStore.getState().setPreferences({ openBins: [...new Set([...openBins, file])] })
-        choose(file)
-    }
-    const closeBin   = (file: string) => {
-        useStore.getState().setPreferences({ openBins: openBins.filter(other => other !== file) })
-
-        if (current === file)
-            choose(CORE)
     }
     const tabs: [Tab, string][] = [...TABS, ...tempParts.length ? [[TEMP, 'Temp'] as [Tab, string]] : []]
 
@@ -345,19 +330,7 @@ export const Library = () => {
                 <div className="bin-tabs">
                     <div className="tabs" role="tablist">
                         {tabs.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={!query && current === id} title={id === TEMP ? t('peças do sketch que não estão no acervo') : undefined} onClick={() => choose(id)}>{t(label)}</button>)}
-                        {shown.map(other => (
-                            <span key={other.file} className="bin-tab">
-                                <button className="tab" role="tab" aria-selected={!query && current === other.file} onClick={() => choose(other.file)}>{other.title}</button>
-                                <button className="x" aria-label={t('Fechar o bin {0}', other.title)} onClick={() => closeBin(other.file)}><Icon name="close" /></button>
-                            </span>
-                        ))}
                     </div>
-                    {extra.length > 0 && (
-                        <div className="relative">
-                            <button className="icon-btn" aria-label={t('Abrir bin')} aria-expanded={more} title={t('Abrir bin')} onClick={() => setMore(!more)}><Icon name="plus" /></button>
-                            {more && <div className="absolute right-0 top-8 z-[60]"><MenuList items={extra.map((other): MenuEntry => ({ label: other.title, checked: openBins.includes(other.file), apply: () => openBins.includes(other.file) ? closeBin(other.file) : openBin(other.file) }))} close={() => setMore(false)} left /></div>}
-                        </div>
-                    )}
                 </div>
                 <p className="count">
                     {query ? t(results.length === 1 ? '{0} resultado' : '{0} resultados', results.length) : t('{0} peças', total)}
@@ -375,13 +348,22 @@ export const Library = () => {
                         const items = featured.filter(item => item.group === group).map(item => <FeaturedItem key={item.moduleId} item={item} list={list} />)
                         return items.length > 0 && <div key={group} className="parts-group"><h3>{t(group)}</h3>{list ? <ul className="results">{items}</ul> : <div className="parts-grid">{items}</div>}</div>
                     })}
-                    {!query && featured.length > 0 && sections.length > 0 && <h3 className="h3">{current === CORE ? t('Biblioteca completa') : t('Biblioteca do simulador')}</h3>}
+                    {!query && featured.length > 0 && sections.length > 0 && <h3 className="h3">{t('Mais peças')}</h3>}
                     {!query && sections.map(section => section.title ? (
                         <Section key={section.title} title={section.title} count={section.entries.length} open={opened.includes(`${current}/${section.title}`)} flip={() => flip(`${current}/${section.title}`)}>
                             <Parts entries={section.entries} list={list} />
                         </Section>
                     ) : <Parts key="" entries={section.entries} list={list} />)}
                     {!query && current === TEMP && <Parts entries={tempParts} list={list} />}
+                    {!query && current === CATALOG && collections.length > 0 && (
+                        <Section title={t('Coleções')} count={collections.length} open={opened.includes(`${CATALOG}/bins`)} flip={() => flip(`${CATALOG}/bins`)}>
+                            <div className="families">{collections.map(other => (
+                                <Section key={other.file} title={other.title} count={other.sections.reduce((sum, section) => sum + section.entries.length, 0)} open={opened.includes(`${CATALOG}/bins/${other.file}`)} flip={() => flip(`${CATALOG}/bins/${other.file}`)}>
+                                    {other.sections.map(section => <Parts key={section.title} entries={section.entries} list={list} />)}
+                                </Section>
+                            ))}</div>
+                        </Section>
+                    )}
                     {!query && current === CATALOG && tree.map(([category, families]) => (
                         <Section key={category} title={t(category)} count={families.reduce((sum, [, count]) => sum + count, 0)} open={opened.includes(`${CATALOG}/${category}`)} flip={() => flip(`${CATALOG}/${category}`)}>
                             <div className="families">{families.map(([family, count]) => <Family key={family} category={category} family={family} count={count} open={opened.includes(`${CATALOG}/${category}/${family}`)} flip={() => flip(`${CATALOG}/${category}/${family}`)} list={list} />)}</div>

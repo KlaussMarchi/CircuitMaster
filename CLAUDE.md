@@ -136,6 +136,9 @@ ou `error` (spec 06 §2).
 **Um produto só** (decisão do usuário): o CircuitMaster é concorrente do Fritzing e do KiCad, compatível com os dois.
 Nada na interface separa ou rotula a origem das peças ou dos dados (abas, subtítulos, campos, mensagens); os nomes
 Fritzing e KiCad só aparecem onde o assunto é abrir ou gravar os arquivos deles e nos créditos (Ajuda › Sobre).
+**Tela limpa** (pedido do usuário): intuitiva e didática, sem encher de abas, botões e textos; uma função nova vai para
+onde o usuário já olha (inspetor da seleção, busca, menu de contexto, uma lista que já existe) ou substitui algo, e o
+resto fica alcançável por menus, paleta e clique direito.
 
 Estilo "data terminal": tokens dos dois temas em `src/ui/Theme/style.css` (cor nova vira token nos dois), cor só em
 dados, seleção como linha de 1px em `--accent`, vão de 8px, monoespaçada só em números, sem gradiente nem sombra
