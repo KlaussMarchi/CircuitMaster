@@ -676,6 +676,21 @@ e gerenciadores de bibliotecas, assistente e verificadores); vai em commits parc
   do Fritzing (até 100, busca simples para caber nos 50 ms).
 - Teste: `tests/kicad.test.ts` (21), `e2e/kicad.spec.ts` "Busca unificada" (busca, põe, três vistas, `.fzz`).
 
+### Decisão do usuário (2026-10-23): um produto só
+
+"Não é para ficar dividindo em KiCad e Fritzing: é CircuitMaster, independente dos dois mas compatível com os dois,
+como um concorrente." Saíram o rótulo "KiCad · Timer" dos resultados, o campo "Símbolo do KiCad" do inspetor, a
+mensagem "nas bibliotecas do KiCad", o autor "KiCad" da peça gerada e o prefixo `kicad:` do identificador (agora `cm:`, que o rodapé do inspetor mostra); a aba "KiCad" planejada para o painel virou a
+aba **Catálogo**, com todas as peças em categorias próprias (`core/Category`) e famílias que juntam as duas origens;
+a busca passou a ter uma ordenação só. Fritzing e KiCad ficam onde o assunto é arquivo e nos créditos (Ajuda › Sobre,
+que ganhou a linha das bibliotecas). Spec 08 §5–§6. Testes: `tests/category.test.ts`, `e2e/kicad.spec.ts` (nenhum
+"KiCad"/"Fritzing" no painel de peças; o 555 do acervo e o NE555P na mesma família).
+
+- O painel desenha 60 resultados da busca por vez, com "Mostrar mais (N)" no fim: desenhar até 300 a cada tecla pesava
+  na primeira busca. O valor rápido do quadro e o ícone dos símbolos carregam sob demanda (`ui/SymbolIcon`): JS inicial
+  em 705,7 KB com o catálogo novo. Um módulo sob demanda que importa de volta um módulo do JS inicial (o `Library`, o
+  `Canvas`) faz o build partir esse módulo em arquivo à parte e o inicial cresce: passar o que precisa por propriedade.
+
 ### Bugs achados e corrigidos (fase 5)
 
 1. **As boas-vindas engoliam o clique de quem escolheu uma peça** no sketch vazio: o cartão cobre o centro do quadro.

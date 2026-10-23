@@ -23,7 +23,7 @@ export const FootprintField = ({ modelIndex, part }: { modelIndex: string, part:
         const field = text.trim()
 
         if (!all.includes(field))
-            return useStore.setState({ message: t('{0}: footprint não encontrado nas bibliotecas do KiCad', field) })
+            return useStore.setState({ message: t('{0}: footprint não encontrado na biblioteca', field) })
 
         void useStore.getState().swap(modelIndex, `${part.moduleId.replace(/@.*$/, '')}@${field}`)
     }

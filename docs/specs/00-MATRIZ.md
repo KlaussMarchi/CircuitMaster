@@ -12,7 +12,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
 | Fritzing | 251 | 209 | 17 | 25 |
-| KiCad esquemático, comuns e projeto | 404 | 121 | 270 | 13 |
+| KiCad esquemático, comuns e projeto | 404 | 122 | 269 | 13 |
 | KiCad PCB, 3D, GerbView e calculadora | 421 | 31 | 388 | 2 |
 
 ## Fritzing
@@ -767,7 +767,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-074 | Árvore de bibliotecas (Library Tree) | KiCad › Common | feita | 0 | e2e/ui.spec.ts | painel Peças pelo trilho |
 | KC-075 | Ir para o gerenciador de projeto (Switch to Project Manager) | KiCad › Common | falta | 6 | — | — |
 | KC-076 | Painel de propriedades (Properties) | KiCad › Common | feita | 0 | e2e/ui.spec.ts | inspetor à direita |
-| KC-077 | Navegador de bibliotecas de símbolos (Symbol Library Browser) | KiCad › Common | falta | 5 | — | P1; parcial: o painel Peças navega o acervo do Fritzing e a busca acha os 22.905 símbolos do KiCad (spec 08 §5), sem a árvore de bibliotecas |
+| KC-077 | Navegador de bibliotecas de símbolos (Symbol Library Browser) | KiCad › Common | feita | 5 | e2e/kicad.spec.ts | aba Catálogo do painel de peças: as 25 mil peças em categorias e famílias próprias, sem separar a origem, com o desenho do símbolo como ícone; e a busca única (spec 08 §5–§6) |
 | KC-078 | Editor de símbolos (Symbol Editor) | KiCad › Common | falta | 5 | — | P1; parcial: editor de peças do Fritzing (.fzp) |
 | KC-079 | Desenhar caixas delimitadoras (Draw Bounding Boxes) | KiCad › Common | não se aplica | — | — | auxílio de depuração do KiCad |
 | KC-080 | Sempre mostrar o cursor em cruz (Always Show Crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › Sempre mostrar o cursor em cruz (sem isso, aparece com o cursor do teclado) |

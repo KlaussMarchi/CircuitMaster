@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { keyOf, removeEdges, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
 import { apply, boxesTouch, distance, insidePolygon, invert, lerp, nearestOnCubic, nearestOnSegment, unionBoxes, type Box, type Point } from '../../core/Geometry'
 import { milsToPx } from '../../core/Units'
@@ -16,7 +16,6 @@ import { useStore, type View, type Viewport } from '../Store'
 import { ALTIUM, LABEL_PLANE, RAT_PLANE, hiddenPlanes } from '../Layers'
 import { PART_MIME } from '../Library'
 import { NoteShape } from '../Note'
-import { QuickValue } from '../QuickValue'
 import { SymbolArt, symbolOf } from '../Symbol'
 import { ProbeShape, getProbeOffset, getProbeSize, probeColor } from '../Probe'
 import { FEATURED } from '../../core/Featured'
@@ -25,6 +24,8 @@ import { switchText } from '../Inspector'
 import { t } from '../../core/Text'
 import { VIEW_BACKGROUNDS, getLayerZ } from '../../core/Layer'
 import { clampZoom as clamp, fit, useCursor } from '../Navigation'
+
+const QuickValue = lazy(() => import('../QuickValue').then(module => ({ default: module.QuickValue })))    // SÓ COM UMA PEÇA ESCOLHIDA: FORA DO JAVASCRIPT INICIAL
 
 type Drag =
     { type: 'pan', client: Point, viewport: Viewport, moved: boolean, clear: boolean } |
@@ -1243,7 +1244,7 @@ export const Canvas = () => {
                 </svg>
                 <Crosshair />
             </div>
-            {quick && <QuickValue key={quick.index} modelIndex={quick.index} at={quick.at} focus={focus} />}
+            {quick && <Suspense fallback={null}><QuickValue key={quick.index} modelIndex={quick.index} at={quick.at} focus={focus} /></Suspense>}
             <p className="hint" role="status">{hint}</p>
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={() => setMenu(null)} />}
         </>

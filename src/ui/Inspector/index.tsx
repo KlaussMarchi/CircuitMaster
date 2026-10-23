@@ -20,7 +20,7 @@ const LessonCard = lazy(() => import('../Lesson').then(module => ({ default: mod
 const FootprintField = lazy(() => import('../FootprintField').then(module => ({ default: module.FootprintField })))    // SÓ NAS PEÇAS DO KICAD
 const Measures       = lazy(() => import('../Measures').then(module => ({ default: module.Measures })))                   // SÓ DEPOIS DE SIMULAR, NA PONTA ESCOLHIDA
 
-const HIDDEN = new Set(['family', 'sticky', 'mn', 'mpn', 'part number', 'shape', 'svg', 'lastfilename', 'switch status', 'footprint filters'])
+const HIDDEN = new Set(['family', 'sticky', 'mn', 'mpn', 'part number', 'shape', 'svg', 'lastfilename', 'switch status', 'footprint filters', 'kicad symbol'])
 
 const PADS     = /(Copper0)?PadModuleID$/
 const SIZED    = (part: Part) => part.kind === 'logo' || part.kind === 'blocker' || isResizableBoard(part.moduleId) || PADS.test(part.moduleId)

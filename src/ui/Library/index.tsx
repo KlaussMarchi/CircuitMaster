@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { FEATURED, FEATURED_GROUPS, normalize, type Featured } from '../../core/Featured'
 import { GENERATED_ROOT, generateSvg } from '../../core/Generator'
 import type { Found } from '../../workers/Indexer'
@@ -8,6 +8,8 @@ import { ContextMenu, MenuList, type MenuEntry } from '../ContextMenu'
 import { entryOf, useStore } from '../Store'
 import { t } from '../../core/Text'
 import { centerOnSelection } from '../Navigation'
+import { isKicad } from '../../core/Library'
+import { INVERTED } from '../Canvas'
 
 export const PART_MIME = 'application/x-circuitmaster-part'
 
@@ -16,11 +18,12 @@ type Tab = string    // ARQUIVO DO BIN DO ACERVO, MEUS ITENS OU O Temp
 const CORE     = 'bins/core.fzb'
 const SIM      = 'bins/more/sim.fzb'
 const MINE_TAB = 'mine'
+const CATALOG  = 'catalog'
 const TEMP     = 'temp'
 const FIXED    = [CORE, SIM]
 const MINE     = 'Meus itens'
 
-const TABS: [Tab, string][] = [[CORE, 'Core'], [SIM, 'Simulador'], [MINE_TAB, MINE]]
+const TABS: [Tab, string][] = [[CORE, 'Core'], [SIM, 'Simulador'], [CATALOG, 'Catálogo'], [MINE_TAB, MINE]]
 const VIEWS: [boolean, IconName, string][] = [[false, 'grid', 'Bin em ícones'], [true, 'list', 'Bin em lista']]
 
 const icons = new Map<string, string>()
@@ -36,6 +39,8 @@ const ownIcon = (entry: Found) => {
 }
 
 const iconOf = (entry: Found) => useStore.getState().catalog.getIcon(entry) ?? ownIcon(entry)
+
+const SymbolIcon = lazy(() => import('../SymbolIcon').then(module => ({ default: module.SymbolIcon })))    // SÓ COM PEÇAS DAS BIBLIOTECAS DE SÍMBOLOS NA TELA
 
 const Glyph = ({ item }: { item: Featured }) => (
     <svg viewBox="0 0 64 64" aria-hidden>
@@ -107,7 +112,10 @@ const Item = ({ moduleId, art, name, sub, list, owner }: { moduleId: string, art
 }
 
 const artOf = (entry: Found, featured: Featured | undefined, list: boolean) => {
-    const icon = featured ? null : iconOf(entry)
+    const icon = featured || isKicad(entry.moduleId) ? null : iconOf(entry)
+
+    if (isKicad(entry.moduleId))
+        return <Suspense fallback={<span className="glyph" />}><SymbolIcon moduleId={entry.moduleId} filter={useStore.getState().theme === 'dark' ? INVERTED : undefined} /></Suspense>
 
     if (featured)
         return list ? <span className="glyph"><Glyph item={featured} /></span> : <Glyph item={featured} />
@@ -133,7 +141,8 @@ const Parts = ({ entries, list, owner = null }: { entries: Found[], list: boolea
     return list ? <ul className="results">{items}</ul> : <div className="parts-grid">{items}</div>
 }
 
-const SKETCH_HITS = 8    // PEÇAS DO SKETCH MOSTRADAS NA BUSCA
+const SKETCH_HITS = 8     // PEÇAS DO SKETCH MOSTRADAS NA BUSCA
+const RESULTS     = 60    // RESULTADOS DESENHADOS POR VEZ: DESENHAR AS CENTENAS A CADA TECLA PESA NA PRIMEIRA BUSCA; O RESTO VEM EM "Mostrar mais"
 
 const locate = (modelIndex: string) => {
     useStore.getState().select([modelIndex])
@@ -181,6 +190,24 @@ const Section = ({ title, count, open, flip, children }: { title: string, count:
     </div>
 )
 
+// UMA FAMÍLIA DO CATÁLOGO: AS PEÇAS CHEGAM AO ABRIR (O CATÁLOGO TEM 25 MIL)
+const Family = ({ category, family, count, open, flip, list }: { category: string, family: string, count: number, open: boolean, flip: () => void, list: boolean }) => {
+    const [entries, setEntries] = useState<Found[]>([])
+
+    useEffect(() => {
+        let live = true
+
+        if (open)
+            void useStore.getState().catalog.members(category, family).then(found => live && setEntries(found))
+
+        return () => {
+            live = false
+        }
+    }, [open, category, family])
+
+    return <Section title={t(family || 'Sem família')} count={count} open={open} flip={flip}><Parts entries={entries} list={list} /></Section>
+}
+
 const renameBin = (index: number) => {
     const title = window.prompt(t('Novo nome do bin'), useStore.getState().userBins[index]?.title)
 
@@ -226,6 +253,8 @@ export const Library = () => {
     const [opened, setOpened] = useState<string[]>([])
     const [more, setMore]     = useState(false)
     const [menu, setMenu]     = useState<Menu | null>(null)
+    const [tree, setTree]     = useState<[string, [string, number][]][]>([])
+    const [limit, setLimit]   = useState(RESULTS)
     const query               = text.trim()
 
     useEffect(() => {
@@ -243,6 +272,8 @@ export const Library = () => {
     useEffect(() => {
         let live = true
 
+        setLimit(RESULTS)
+
         if (ready && query)
             catalog.search(query).then(result => live && setFound(result))
 
@@ -250,6 +281,17 @@ export const Library = () => {
             live = false
         }
     }, [query, catalog, ready, symbols])
+
+    useEffect(() => {
+        let live = true
+
+        if (tab === CATALOG && ready && !tree.length)
+            void catalog.tree().then(found => live && setTree(found))
+
+        return () => {
+            live = false
+        }
+    }, [tab, ready, tree.length, catalog])
 
     const kept = useMemo(() => [...new Set([...mine, ...userBins.flatMap(bin => bin.moduleIds)])], [mine, userBins])
 
@@ -273,7 +315,7 @@ export const Library = () => {
     const sections   = bin?.sections ?? []
     const members    = (ids: string[]) => ids.flatMap(moduleId => owned.find(entry => entry.moduleId === moduleId) ?? imported.find(entry => entry.moduleId === moduleId) ?? [])
     const mineGroups = [[MINE, mine, -1] as const, ...userBins.map((bin, i) => [bin.title, bin.moduleIds, i] as const)]
-    const total      = current === MINE_TAB ? kept.length : current === TEMP ? tempParts.length : featured.length + sections.reduce((sum, section) => sum + section.entries.length, 0)
+    const total      = current === MINE_TAB ? kept.length : current === TEMP ? tempParts.length : current === CATALOG ? tree.reduce((sum, [, families]) => sum + families.reduce((part, [, count]) => part + count, 0), 0) : featured.length + sections.reduce((sum, section) => sum + section.entries.length, 0)
     const flip       = (key: string) => setOpened(opened.includes(key) ? opened.filter(other => other !== key) : [...opened, key])
     const results    = query ? found : []
     const choose     = (id: Tab) => {
@@ -327,7 +369,8 @@ export const Library = () => {
             <MenuContext value={setMenu}>
                 <div className="lp-body">
                     {query && <InSketch query={query} />}
-                    {query && (results.length ? <Parts entries={results} list /> : <div className="empty">{t('Nenhuma peça para “{0}”. Tente “resistor”, “fonte”, “LED” ou “555”.', query)}</div>)}
+                    {query && (results.length ? <Parts entries={results.slice(0, limit)} list /> : <div className="empty">{t('Nenhuma peça para “{0}”. Tente “resistor”, “fonte”, “LED” ou “555”.', query)}</div>)}
+                    {query && results.length > limit && <button className="btn sm full" onClick={() => setLimit(limit + RESULTS)}>{t('Mostrar mais ({0})', results.length - limit)}</button>}
                     {!query && FEATURED_GROUPS.map(group => {
                         const items = featured.filter(item => item.group === group).map(item => <FeaturedItem key={item.moduleId} item={item} list={list} />)
                         return items.length > 0 && <div key={group} className="parts-group"><h3>{t(group)}</h3>{list ? <ul className="results">{items}</ul> : <div className="parts-grid">{items}</div>}</div>
@@ -339,6 +382,11 @@ export const Library = () => {
                         </Section>
                     ) : <Parts key="" entries={section.entries} list={list} />)}
                     {!query && current === TEMP && <Parts entries={tempParts} list={list} />}
+                    {!query && current === CATALOG && tree.map(([category, families]) => (
+                        <Section key={category} title={t(category)} count={families.reduce((sum, [, count]) => sum + count, 0)} open={opened.includes(`${CATALOG}/${category}`)} flip={() => flip(`${CATALOG}/${category}`)}>
+                            <div className="families">{families.map(([family, count]) => <Family key={family} category={category} family={family} count={count} open={opened.includes(`${CATALOG}/${category}/${family}`)} flip={() => flip(`${CATALOG}/${category}/${family}`)} list={list} />)}</div>
+                        </Section>
+                    ))}
                     {!query && current === MINE_TAB && mineGroups.map(([title, ids, index]) => (
                         <div key={`${title}-${index}`} className="parts-group">
                             <h3>{index < 0 ? t(title) : title}<span className="n muted">{ids.length}</span></h3>

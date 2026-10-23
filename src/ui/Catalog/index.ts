@@ -54,6 +54,10 @@ export class Catalog implements Source {
 
     family = (family: string) => this.request<Found[]>({ type: 'family', family }, [])
 
+    tree = () => this.request<[string, [string, number][]][]>({ type: 'catalog' }, [])
+
+    members = (category: string, family: string) => this.request<Found[]>({ type: 'catalog-family', category, family }, [])
+
     locate = (moduleIds: string[]) => this.request<Record<string, PartLocation>>({ type: 'locate', moduleIds }, {})
 
     footprintList: Promise<string[]> | null = null

@@ -23,6 +23,11 @@ const SYNONYMS: Record<string, string[]> = {
 
 const split = (text: string) => text.split(/[^a-z0-9µ+]+/).filter(Boolean)
 
+export const termsOf = (text: string) => split(normalize(text))
+
+// O TERMO E OS SINÔNIMOS DELE: QUALQUER UM SERVE
+export const alternativesOf = (term: string) => [term, ...SYNONYMS[term] ?? []]
+
 // TEXTO ONDE A BUSCA PROCURA: TÍTULO, DESCRIÇÃO SEM HTML, URL, AUTOR, moduleId, TAGS E PROPRIEDADES
 export const haystackOf = (part: Part) => [part.title, part.description.replace(/<[^>]*>/g, ' '), part.url, part.author, part.moduleId, ...part.tags, ...Object.entries(part.properties).flat()].join('\n').toLowerCase()
 
@@ -35,11 +40,11 @@ export const prepare = (entry: Searchable): Words => {
 const fieldScore = (list: string[], text: string, term: string) => list.includes(term) ? 3 : list.some(word => word.startsWith(term)) ? 2 : term.length >= 3 && text.includes(term) ? 1 : 0
 
 // MELHOR NOTA DO TERMO (OU DE UM SINÔNIMO) PONDERADA POR CAMPO; ZERO SE NÃO APARECE
-const termScore = (found: Words, term: string) => Math.max(...[term, ...SYNONYMS[term] ?? []].map(alternative => WEIGHTS[0] * fieldScore(found.title, found.titleText, alternative) + WEIGHTS[1] * fieldScore(found.family, found.familyText, alternative) + WEIGHTS[2] * fieldScore(found.rest, found.restText, alternative)))
+const termScore = (found: Words, term: string) => Math.max(...alternativesOf(term).map(alternative => WEIGHTS[0] * fieldScore(found.title, found.titleText, alternative) + WEIGHTS[1] * fieldScore(found.family, found.familyText, alternative) + WEIGHTS[2] * fieldScore(found.rest, found.restText, alternative)))
 
 // BUSCA SEM ACENTO E COM SINÔNIMOS: TODO TERMO TEM DE APARECER (NA SUGERIDA, BASTA CASAR COM AS PALAVRAS DELA); AS SUGERIDAS QUE CASAM VÊM PRIMEIRO, DEPOIS A NOTA (TÍTULO > FAMÍLIA > RESTO) E QUEM ESTÁ NOS BINS CORE E SIMULADOR (SPEC 01 §7)
 export const rankParts = <T extends Searchable>(list: T[], words: Map<string, Words>, text: string, bins: Set<string>[]) => {
-    const terms  = split(normalize(text))
+    const terms  = termsOf(text)
     const scored = list.flatMap(entry => {
         const found  = words.get(entry.moduleId)
         const scores = found ? terms.map(term => termScore(found, term)) : []

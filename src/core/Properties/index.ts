@@ -79,7 +79,7 @@ export const KICAD_EQUIVALENTS: Record<string, string> = {
     'Device:D': '3254CBFC44diode', 'Device:D_Small': '3254CBFC44diode'
 }
 
-export const equivalentOf = (moduleId: string) => KICAD_EQUIVALENTS[moduleId.replace(/^kicad:/, '').replace(/@.*$/, '')] ?? moduleId
+export const equivalentOf = (moduleId: string) => KICAD_EQUIVALENTS[moduleId.replace(/^cm:/, '').replace(/@.*$/, '')] ?? moduleId
 
 export const getPropertyDefs = (moduleId: string) => PROPERTY_DEFS.filter(item => item.suffixes.some(suffix => equivalentOf(moduleId).toLowerCase().endsWith(suffix.toLowerCase())))
 
@@ -118,7 +118,7 @@ const NAMES: Record<string, string> = {
     'chip label': 'Rótulo do CI', type: 'Tipo', variant: 'Variante', form: 'Formato', pins: 'Pinos', layer: 'Camada', layers: 'Camadas', size: 'Tamanho', 'hole size': 'Furo', polarity: 'Polaridade',
     'switching circuit': 'Contatos', function: 'Função', channels: 'Canais', width: 'Largura (mm)', height: 'Altura (mm)', logo: 'Texto', label: 'Rótulo', connect: 'Ligação', 'editable pin labels': 'Rótulos editáveis',
     'time/div': 'Tempo/div', 'volts/div': 'Volts/div', 'horizontal position': 'Posição horizontal', 'voltage drop': 'Queda de tensão', 'forward current': 'Corrente direta', chip: 'Chip', 'knob status': 'Posição do cursor', 'default state': 'Estado padrão', 'contact resistance': 'Resistência de contato',
-    'kicad symbol': 'Símbolo do KiCad', description: 'Descrição', footprint: 'Footprint', datasheet: 'Folha de dados'
+    description: 'Descrição', footprint: 'Footprint', datasheet: 'Folha de dados'
 }
 
 export const nameOf = (key: string) => NAMES[key.toLowerCase()] ? t(NAMES[key.toLowerCase()]) : key.charAt(0).toUpperCase() + key.slice(1)

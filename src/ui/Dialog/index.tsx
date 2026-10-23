@@ -117,6 +117,7 @@ const Preferences = () => {
 
 const CREDITS: [string, string][] = [
     ['Peças e exemplos', 'fritzing-parts e sketches do Fritzing, lidos como dados (CC-BY-SA 3.0)'],
+    ['Símbolos e footprints', 'bibliotecas do KiCad, lidas como dados (CC-BY-SA 4.0 com a exceção para projetos)'],
     ['Simulação', 'ngspice compilado para WebAssembly (BSD modificada, ver COPYING)'],
     ['Polígonos', 'Clipper2 de Angus Johnson em WebAssembly (Boost 1.0)'],
     ['Fontes', 'Public Sans e JetBrains Mono na interface; Droid Sans (Apache 2.0), Noto Sans e OCR-A nas peças (OFL e domínio público)'],
@@ -187,7 +188,7 @@ const Guide = () => (
     </table>
 )
 
-const About = () => <><p className="soft" style={{ marginBottom: 12 }}>{t('Editor de circuitos compatível com o Fritzing 1.0.8: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM).')}</p><Table rows={CREDITS} /></>
+const About = () => <><p className="soft" style={{ marginBottom: 12 }}>{t('Editor de circuitos: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM); abre e grava os arquivos do Fritzing.')}</p><Table rows={CREDITS} /></>
 
 // SEMENTES DO PREENCHIMENTO DE TERRA: CADA CAIXA MARCA OU DESMARCA NA HORA, COM DESFAZER; O BOTÃO PREENCHE (GroundFillSeedDialog DO FRITZING)
 const Seeds = () => {

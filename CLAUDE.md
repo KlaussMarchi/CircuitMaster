@@ -46,11 +46,12 @@ os arquivos S-expression (`.kicad_sch`, `.kicad_pcb`, `.kicad_sym`, `.kicad_mod`
 crus e o `Prettify` portado do KiCad (spec 07). Os testes do oráculo usam o `kicad-cli` do `PATH` (ou `KICAD_CLI`),
 gravando em `build/kicad/`, e são pulados sem ele.
 
-Símbolo e footprint viram peça de três vistas (spec 08): `moduleId` `kicad:<Biblioteca>:<Símbolo>[@<Lib>:<Footprint>]`;
+Símbolo e footprint viram peça de três vistas (spec 08): `moduleId` `cm:<Biblioteca>:<Símbolo>[@<Lib>:<Footprint>]`;
 a `Library` vê só o prefixo e chama `core/KicadPart.readKicadPart` por import dinâmico (fora do JavaScript inicial),
 que monta o `.fzp` e os SVG (`core/KicadSymbol`, `core/KicadFootprint`) como pacote. O `Source` lê as raízes
-`kicad-symbols` e `kicad-footprints` (em `/kicad/symbols` e `/kicad/footprints` no navegador). O indexador busca os
-símbolos no `symbols-index.json` que o servidor de dados monta, depois das peças do Fritzing.
+`kicad-symbols` e `kicad-footprints` (em `/kicad/symbols` e `/kicad/footprints` no navegador). O indexador lê os
+símbolos do `symbols-index.json` que o servidor de dados monta e os põe na mesma busca e no mesmo catálogo das outras
+peças (`core/Category`: categorias e famílias próprias).
 
 ## Testes
 
@@ -131,6 +132,10 @@ ou `error` (spec 06 §2).
   fica como módulo WASM separado.
 
 ## Interface
+
+**Um produto só** (decisão do usuário): o CircuitMaster é concorrente do Fritzing e do KiCad, compatível com os dois.
+Nada na interface separa ou rotula a origem das peças ou dos dados (abas, subtítulos, campos, mensagens); os nomes
+Fritzing e KiCad só aparecem onde o assunto é abrir ou gravar os arquivos deles e nos créditos (Ajuda › Sobre).
 
 Estilo "data terminal": tokens dos dois temas em `src/ui/Theme/style.css` (cor nova vira token nos dois), cor só em
 dados, seleção como linha de 1px em `--accent`, vão de 8px, monoespaçada só em números, sem gradiente nem sombra

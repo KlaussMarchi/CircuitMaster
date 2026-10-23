@@ -171,7 +171,7 @@ describe.skipIf(!HAS_CLI)('oráculo kicad-cli: pads e furos batem com o fp expor
 const everywhere = (point: Point) => Object.fromEntries(VIEWS.map(view => [view, point])) as Record<typeof VIEWS[number], Point>
 
 describe.skipIf(!HAS_KICAD)('símbolo e footprint do KiCad como peça de três vistas (spec 08 §4)', () => {
-    it('a Library monta a peça pelo moduleId kicad:Biblioteca:Símbolo, com pinos nas três vistas e o pacote para o .fzz', async () => {
+    it('a Library monta a peça pelo moduleId cm:Biblioteca:Símbolo, com pinos nas três vistas e o pacote para o .fzz', async () => {
         const library = makeLibrary()
         const r       = kicadId('Device', 'R')
         const timer   = kicadId('Timer', 'NE555P')
@@ -191,7 +191,7 @@ describe.skipIf(!HAS_KICAD)('símbolo e footprint do KiCad como peça de três v
                 library.getPart(moduleId)?.connectors.forEach(connector => expect(library.getPins(moduleId, view, layer).get(connector.id), `${moduleId} ${connector.id} ${layer}`).toBeDefined())
 
         expect(Object.keys(library.getPart(ground)?.views ?? {}).sort()).toEqual(['iconView', 'schematicView'])
-        expect(library.getBundleFiles([r]).map(file => file.name).sort()).toEqual(['part.kicad_Device_R.fzp', 'svg.breadboard.kicad_Device_R_bread.svg', 'svg.pcb.kicad_Device_R_pcb.svg', 'svg.schematic.kicad_Device_R_schem.svg'])
+        expect(library.getBundleFiles([r]).map(file => file.name).sort()).toEqual(['part.cm_Device_R.fzp', 'svg.breadboard.cm_Device_R_bread.svg', 'svg.pcb.cm_Device_R_pcb.svg', 'svg.schematic.cm_Device_R_schem.svg'])
         expect(await library.load([kicadId('Device', 'NaoExiste')])).toBe(0)
     })
 

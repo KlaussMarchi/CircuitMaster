@@ -17,7 +17,9 @@ export type Source = {
 }
 
 const ROOTS   = ['parts', 'app']
-const KICAD   = 'kicad:'    // PEÇAS DO KICAD: MONTADAS SOB DEMANDA POR core/KicadPart, FORA DO JAVASCRIPT INICIAL (SPEC 08 §4)
+const KICAD   = 'cm:'       // PEÇAS DAS BIBLIOTECAS DE SÍMBOLOS (cm:Biblioteca:Símbolo): MONTADAS SOB DEMANDA POR core/KicadPart, FORA DO JAVASCRIPT INICIAL (SPEC 08 §4)
+
+export const isKicad = (moduleId: string) => moduleId.startsWith(KICAD)
 const FOLDERS = ['core', 'obsolete', 'contrib', 'user']
 
 type Loaded = { part: Part, svgs: Partial<Record<ViewName, SvgFile>>, complete: boolean }
@@ -79,7 +81,7 @@ export class Library {
 
     async load(moduleIds: string[]) {
         const missing  = [...new Set(moduleIds)].filter(id => !this.parts.has(id))
-        const kicad    = missing.filter(id => id.startsWith(KICAD))
+        const kicad    = missing.filter(isKicad)
         const bundles  = kicad.some(id => !this.bundled.has(id)) ? await import('../KicadPart').then(module => Promise.all(kicad.filter(id => !this.bundled.has(id)).map(id => module.readKicadPart(id, (root, path) => this.source.read(root, path), equivalentOf(id))))) : []
         bundles.forEach(bundle => bundle && this.addBundle(bundle))
         const located  = missing.length > kicad.length ? await this.source.locate(missing.filter(id => !kicad.includes(id))) : {}

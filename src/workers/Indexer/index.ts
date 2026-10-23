@@ -1,8 +1,8 @@
 import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
-import { haystackOf, prepare, rankParts, type Words } from '../../core/Search'
+import { alternativesOf, haystackOf, prepare, rankParts, termsOf, type Words } from '../../core/Search'
 import { GENERATED_ROOT, generateFzp } from '../../core/Generator'
-import { normalize } from '../../core/Featured'
+import { CATEGORIES, MISC, OTHERS, categoryOf, familyName } from '../../core/Category'
 import { KICAD_SYMBOLS, kicadId, symbolPath } from '../../core/KicadPart'
 import { scope, serve } from '../Serve'
 
@@ -36,8 +36,9 @@ const CONCURRENCY  = 4       // LEITURAS AO MESMO TEMPO: O NAVEGADOR ABRE 6 CONE
 const PROGRESS     = 100
 const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR NO MEIO DA PRIMEIRA INDEXAÇÃO NÃO PERDE O QUE JÁ FOI LIDO
 const SEARCH_MAX   = 300
-const KICAD_MAX    = 100     // SÍMBOLOS DO KICAD NO FIM DE CADA BUSCA
+const CANDIDATES   = 300     // SÍMBOLOS QUE PASSAM PELO FILTRO SIMPLES E ENTRAM NA NOTA, OS DE NOME MAIS PARECIDO PRIMEIRO
 const KICAD_BATCH  = 2000    // SÍMBOLOS MONTADOS POR VEZ: ENTRE UM LOTE E OUTRO O WORKER ATENDE A BUSCA EM CURSO
+const FEW          = 3       // FAMÍLIA COM MENOS PEÇAS QUE ISSO VAI PARA "Diversos" DA CATEGORIA: SEM UMA LISTA DE GRUPOS DE UMA PEÇA SÓ
 const KICAD_DELAY  = 1500    // ms DEPOIS DO ACERVO PRONTO: A PRIMEIRA BUSCA DE QUEM ACABOU DE ABRIR NÃO DIVIDE O WORKER COM A CARGA DOS SÍMBOLOS
 const BINS         = [['Core', 'bins/core.fzb'], ['Simulador', 'bins/more/sim.fzb']]    // À FRENTE, NESTA ORDEM; OS OUTROS BINS DO ACERVO SEGUEM PELO TÍTULO
 const ENGINE_FAULT = 'InternalError'
@@ -198,13 +199,14 @@ const readBins = async () => {
 }
 
 const kicad: Entry[] = []
+let symbols: Promise<void> | null = null
 
 const kicadEntry = (row: string): Entry => {
     const [library, name, description, keywords] = row.split('\t')
-    return { moduleId: kicadId(library, name), root: KICAD_SYMBOLS, path: symbolPath(library, name), title: name, family: `KiCad · ${library}`, label: '', kind: 'part', icon: '', obsolete: false, properties: { description, keywords }, haystack: `${library} ${name} ${description} ${keywords}`.toLowerCase() }
+    return { moduleId: kicadId(library, name), root: KICAD_SYMBOLS, path: symbolPath(library, name), title: name, family: library.replaceAll('_', ' '), label: '', kind: 'part', icon: '', obsolete: false, properties: { description, keywords }, haystack: `${library} ${name} ${description} ${keywords}`.toLowerCase() }
 }
 
-// SÍMBOLOS DO KICAD NA BUSCA UNIFICADA: O RESUMO QUE O SERVIDOR MONTA, EM LOTES (SPEC 08 §5)
+// SÍMBOLOS DAS BIBLIOTECAS DO KICAD NO CATÁLOGO: O RESUMO QUE O SERVIDOR MONTA, EM LOTES (SPEC 08 §5)
 const readKicad = async () => {
     const rows: string[] = JSON.parse(await fetchText('/kicad/symbols-index.json') ?? '[]')
 
@@ -214,21 +216,60 @@ const readKicad = async () => {
     }
 }
 
-// SÍMBOLOS COM TODOS OS TERMOS: O NOME IGUAL AO PRIMEIRO TERMO, DEPOIS O QUE COMEÇA POR ELE, NOMES CURTOS ANTES; SEM A NOTA DO ACERVO, QUE NÃO CABE NO ORÇAMENTO COM 23 MIL SÍMBOLOS
-const searchKicad = (text: string) => {
-    const terms = normalize(text).split(/\s+/).filter(Boolean)
-    const rank  = (entry: Entry) => entry.title.toLowerCase() === terms[0] ? 0 : entry.title.toLowerCase().startsWith(terms[0]) ? 1 : 2
-    return terms.length ? kicad.filter(entry => terms.every(term => entry.haystack.includes(term))).sort((a, b) => rank(a) - rank(b) || a.title.length - b.title.length || a.title.localeCompare(b.title)).slice(0, KICAD_MAX) : []
+// SÍMBOLOS COM TODOS OS TERMOS (OU UM SINÔNIMO): O FILTRO SIMPLES QUE CABE NOS 22.905; OS DE NOME IGUAL AO PRIMEIRO TERMO E OS QUE COMEÇAM POR ELE FICAM, SE PASSAREM DO LIMITE
+const candidatesOf = (terms: string[]) => {
+    const options = terms.map(alternativesOf)
+    const rank    = (entry: Entry) => entry.title.toLowerCase() === terms[0] ? 0 : entry.title.toLowerCase().startsWith(terms[0]) ? 1 : 2
+    const found   = terms.length ? kicad.filter(entry => options.every(list => list.some(option => entry.haystack.includes(option)))) : []
+    return found.length > CANDIDATES ? found.sort((a, b) => rank(a) - rank(b) || a.title.length - b.title.length).slice(0, CANDIDATES) : found
 }
 
-// BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR, E OS SÍMBOLOS DO KICAD DEPOIS
-const search = (text: string) => [...again(() => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins)).slice(0, SEARCH_MAX), ...searchKicad(text)].map(strip)
+type Family = { name: string, entries: Entry[] }
+
+let catalog: Map<string, Map<string, Family>> | null = null
+
+// CATÁLOGO COM TODAS AS PEÇAS, DE QUALQUER ORIGEM, EM CATEGORIAS E FAMÍLIAS: FAMÍLIA DE MESMO NOME É UM GRUPO SÓ; OS FIOS FICAM DE FORA (SPEC 08 §6)
+const getCatalog = async () => {
+    await loadKicad()
+    if (catalog)
+        return catalog
+
+    catalog = [...entries.filter(entry => !entry.obsolete && entry.kind !== 'wire'), ...kicad].reduce((table, entry) => {
+        const category = categoryOf(entry.family, `${entry.title} ${entry.properties.description ?? ''}`)
+        const families = table.get(category) ?? new Map<string, Family>()
+        const key      = familyName(entry.family).toLowerCase()
+        const family   = families.get(key) ?? { name: familyName(entry.family), entries: [] }
+        family.entries.push(entry)
+        return table.set(category, families.set(key, family))
+    }, new Map<string, Map<string, Family>>())
+    catalog.forEach(families => {
+        const few = [...families].filter(([, family]) => family.entries.length < FEW)
+        few.forEach(([key]) => families.delete(key))
+
+        if (few.length)
+            families.set(MISC.toLowerCase(), { name: MISC, entries: few.flatMap(([, family]) => family.entries) })
+    })
+    return catalog
+}
+
+// AS CATEGORIAS NA ORDEM DA TABELA, CADA UMA COM AS FAMÍLIAS EM ORDEM ALFABÉTICA E QUANTAS PEÇAS TÊM
+const getTree = (table: Map<string, Map<string, Family>>) => [...CATEGORIES.map(([name]) => name), OTHERS].flatMap(name => table.has(name) ? [[name, [...table.get(name)?.values() ?? []].map(family => [family.name, family.entries.length]).sort((a, b) => Number(a[0] === MISC) - Number(b[0] === MISC) || String(a[0]).localeCompare(String(b[0])))]] : [])
+
+// BUSCA NUMA LISTA SÓ: TODA PEÇA DO CATÁLOGO PELA MESMA NOTA DE core/Search (AS SUGERIDAS E AS DOS BINS CORE E SIMULADOR À FRENTE)
+const search = (text: string) => {
+    const candidates = candidatesOf(termsOf(text))
+    candidates.forEach(entry => words.has(entry.moduleId) || words.set(entry.moduleId, prepare(entry)))
+    return again(() => rankParts([...entries.filter(entry => !entry.obsolete), ...candidates], words, text, inBins)).slice(0, SEARCH_MAX).map(strip)
+}
 
 const indexed = index()
 
 indexed.catch(() => {})    // A FALHA DO ÍNDICE CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
 indexed.then(readBins).catch(() => {})
-indexed.then(() => new Promise(resolve => setTimeout(resolve, KICAD_DELAY))).then(readKicad).then(() => scope.postMessage({ type: 'symbols', count: kicad.length })).catch(() => {})    // A BUSCA NÃO ESPERA OS SÍMBOLOS: QUANDO CHEGAM, O PAINEL REFAZ A BUSCA EM CURSO
+// CARGA DOS SÍMBOLOS, UMA VEZ: PELO RELÓGIO DEPOIS DO ACERVO PRONTO OU NA HORA, SE O CATÁLOGO PEDE ANTES; A BUSCA NÃO A ESPERA E, QUANDO TERMINA, O PAINEL REFAZ A BUSCA EM CURSO
+const loadKicad = () => symbols ??= readKicad().then(() => scope.postMessage({ type: 'symbols', count: kicad.length })).catch(() => {})
+
+indexed.then(() => setTimeout(loadKicad, KICAD_DELAY)).catch(() => {})
 
 // PEDIDO QUE ESPERA AS PEÇAS APARECEREM NA LEITURA; O ÍNDICE PRONTO TAMBÉM O LIBERA (PEÇA GERADA OU INEXISTENTE)
 const arrival = (moduleIds: string[]) => new Promise<void>(resolve => {
@@ -238,7 +279,7 @@ const arrival = (moduleIds: string[]) => new Promise<void>(resolve => {
 
 const locations = (moduleIds: string[], table: Map<string, Entry>) => Object.fromEntries(moduleIds.flatMap(id => table.has(id) && table.get(id)?.root !== GENERATED_ROOT ? [[id, { root: table.get(id)?.root, path: table.get(id)?.path }]] : []))
 
-serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async data => {
+serve<{ type: string, text: string, category: string, family: string, moduleIds: string[] }>(async data => {
     if (data.type === 'locate') {
         await Promise.race([arrival(data.moduleIds), indexed])
         return locations(data.moduleIds, byId.size ? byId : early)
@@ -248,6 +289,12 @@ serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async
 
     if (data.type === 'search')
         return search(data.text)
+
+    if (data.type === 'catalog')
+        return getTree(await getCatalog())
+
+    if (data.type === 'catalog-family')
+        return [...(await getCatalog()).get(data.category)?.get(familyName(data.family).toLowerCase())?.entries ?? []].sort((a, b) => a.title.localeCompare(b.title)).map(strip)
 
     if (data.type === 'family')
         return entries.filter(entry => !entry.obsolete && entry.family.toLowerCase() === data.family.toLowerCase()).map(strip)

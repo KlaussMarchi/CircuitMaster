@@ -3,7 +3,7 @@ import { escapeXml, fitsFilters } from '../KicadDraw'
 import { parentOf, pinsOf, readSymbol, symbolSvg, type KicadSymbol } from '../KicadSymbol'
 import { breadboardSvg, footprintSvg, padsOf, readFootprint, type KicadFootprint } from '../KicadFootprint'
 
-export const KICAD_ID         = /^kicad:([^:@]+):([^@]+)(?:@(.+))?$/    // kicad:Biblioteca:Símbolo, COM @BibliotecaFp:Footprint QUANDO O FOOTPRINT É ESCOLHIDO
+export const KICAD_ID         = /^cm:([^:@]+):([^@]+)(?:@(.+))?$/    // cm:Biblioteca:Símbolo, COM @BibliotecaFp:Footprint QUANDO O FOOTPRINT É ESCOLHIDO
 export const KICAD_SYMBOLS    = 'kicad-symbols'       // RAIZES DO ACERVO DO KICAD NO Source (SERVIDAS EM /kicad/symbols E /kicad/footprints)
 export const KICAD_FOOTPRINTS = 'kicad-footprints'
 
@@ -20,7 +20,7 @@ const DEFAULT_FOOTPRINTS = [
     'Package_TO_SOT_THT:TO-92_Inline'
 ]
 
-export const kicadId = (library: string, name: string, footprint = '') => `kicad:${library}:${name}${footprint ? `@${footprint}` : ''}`
+export const kicadId = (library: string, name: string, footprint = '') => `cm:${library}:${name}${footprint ? `@${footprint}` : ''}`
 
 // FOOTPRINT DO SÍMBOLO: O DO CAMPO Footprint, SENÃO O PADRÃO QUE CASA COM OS FILTROS (O NOME OU Biblioteca:Nome)
 export const footprintOf = (symbol: KicadSymbol) => symbol.properties.Footprint || DEFAULT_FOOTPRINTS.find(field => fitsFilters(field, symbol.properties.ki_fp_filters ?? '')) || ''
@@ -56,7 +56,7 @@ const property = (name: string, value: string) => `<property name="${escapeXml(n
 // PEÇA DO FRITZING A PARTIR DO SÍMBOLO E DO FOOTPRINT DO KICAD: O .fzp E OS SVG DAS VISTAS COMO UM PACOTE; CADA PINO É UM CONECTOR, LIGADO NA PCB AO PAD DE MESMO NÚMERO; SEM FOOTPRINT A PEÇA SÓ EXISTE NO ESQUEMÁTICO (SPEC 08 §4)
 export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: KicadFootprint | null, field = '', equivalent = ''): Bundle => {
     const [, library, name, chosen] = moduleId.match(KICAD_ID) ?? ['', '', symbol.name]
-    const base     = `kicad_${library}_${name}${chosen ? `_${footprint?.name ?? ''}` : ''}`.replace(/[^\w.-]+/g, '_')
+    const base     = `cm_${library}_${name}${chosen ? `_${footprint?.name ?? ''}` : ''}`.replace(/[^\w.-]+/g, '_')
     const pins     = pinsOf(symbol)
     const ids      = new Map(pins.map((pin, i) => [pin.number || pin.name, i]))
     const behavior = BEHAVIORS[equivalent]
@@ -76,20 +76,30 @@ export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: Ki
     const fields   = { family: library, ...behavior?.properties, 'kicad symbol': `${library}:${name}`, ...Object.fromEntries(SHOWN.flatMap(key => symbol.properties[key] && symbol.properties[key] !== '~' ? [[key.toLowerCase(), symbol.properties[key]]] : [])), ...footprint ? { footprint: field, package: footprint.name } : {}, 'footprint filters': symbol.properties.ki_fp_filters ?? '' }
     const spice    = behavior ? `<spice><line>${escapeXml(behavior.line.replace(/#(\w+)/g, (_, pin: string) => `connector${ids.get(pin)}`))}</line>${behavior.model ? `<model>${escapeXml(behavior.model)}</model>` : ''}</spice>\n` : ''
     const label    = (symbol.properties.Reference ?? 'U').replace(/[?#]+$/, '') || 'U'
-    const fzp      = `<?xml version="1.0" encoding="UTF-8"?>\n<module moduleId="${escapeXml(moduleId)}">\n<version>1</version><author>KiCad (CC BY-SA 4.0)</author><title>${escapeXml(name)}</title><label>${escapeXml(label)}</label><description>${escapeXml(symbol.properties.Description ?? '')}</description>\n<properties>${Object.entries(fields).map(([key, value]) => property(key, value)).join('')}</properties>\n${spice}<views>${views.join('')}</views>\n<connectors>${connectors.join('\n')}</connectors>\n</module>\n`
+    const fzp      = `<?xml version="1.0" encoding="UTF-8"?>\n<module moduleId="${escapeXml(moduleId)}">\n<version>1</version><author>CircuitMaster</author><title>${escapeXml(name)}</title><label>${escapeXml(label)}</label><description>${escapeXml(symbol.properties.Description ?? '')}</description>\n<properties>${Object.entries(fields).map(([key, value]) => property(key, value)).join('')}</properties>\n${spice}<views>${views.join('')}</views>\n<connectors>${connectors.join('\n')}</connectors>\n</module>\n`
     return { sketch: null, parts: [{ name: `part.${base}.fzp`, text: fzp }], svgs, others: [], bin: null }
 }
 
-// PACOTE DA PEÇA DO KICAD LIDO DO ACERVO: O SÍMBOLO (E O PAI, SE DERIVADO) E O FOOTPRINT DO CAMPO Footprint; NULO SEM O SÍMBOLO. A EQUIVALENTE DO FRITZING (core/Properties) DIZ COMO SIMULA
-export const readKicadPart = async (moduleId: string, read: (root: string, path: string) => Promise<string | null>, equivalent = '') => {
-    const [, library, name, chosen] = moduleId.match(KICAD_ID) ?? []
+type Read = (root: string, path: string) => Promise<string | null>
 
-    if (!library)
-        return null
-
-    const text   = await read(KICAD_SYMBOLS, symbolPath(library, name))
+// SÍMBOLO DO moduleId LIDO DO ACERVO, COM O PAI SE FOR DERIVADO; NULO SEM ELE
+const readKicadSymbol = async (moduleId: string, read: Read) => {
+    const [, library, name] = moduleId.match(KICAD_ID) ?? []
+    const text   = library ? await read(KICAD_SYMBOLS, symbolPath(library, name)) : null
     const parent = text ? parentOf(text) : ''
-    const symbol = text ? readSymbol(text, parent ? readSymbol(await read(KICAD_SYMBOLS, symbolPath(library, parent)) ?? '') : null) : null
+    return text ? readSymbol(text, parent ? readSymbol(await read(KICAD_SYMBOLS, symbolPath(library, parent)) ?? '') : null) : null
+}
+
+// DESENHO DO ESQUEMÁTICO PARA O ÍCONE DA PEÇA NO PAINEL
+export const readSymbolSvg = async (moduleId: string, read: Read) => {
+    const symbol = await readKicadSymbol(moduleId, read)
+    return symbol ? symbolSvg(symbol) : null
+}
+
+// PACOTE DA PEÇA LIDO DO ACERVO: O SÍMBOLO E O FOOTPRINT DO CAMPO Footprint; NULO SEM O SÍMBOLO. A EQUIVALENTE DO ACERVO DO FRITZING (core/Properties) DIZ COMO SIMULA
+export const readKicadPart = async (moduleId: string, read: Read, equivalent = '') => {
+    const [, , , chosen] = moduleId.match(KICAD_ID) ?? []
+    const symbol         = await readKicadSymbol(moduleId, read)
 
     if (!symbol)
         return null
