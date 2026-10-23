@@ -56,6 +56,7 @@ const SUPPLY = 10      // V EM QUE A CORRENTE QUIESCENTE iq VALE
 // AMP-OPS DO ACERVO SEM SUBCIRCUITO: GANHO EM MALHA ABERTA, PRODUTO GANHO-BANDA (Hz), SLEW RATE (V/s), FOLGA AOS TRILHOS (V), SAÍDA (Ω) E CORRENTE QUIESCENTE (A) DAS FOLHAS DE DADOS (SPEC 04 §1.1)
 const OPAMPS: Record<string, Opamp> = {
     CM_LM358: { a0: 1e5, gbw: 1e6, sr: 0.3e6, vh: 1.5, vl: 0.02, rout: 50, iq: 0.35e-3 },
+    CM_OPAMP: { a0: 2e5, gbw: 1e6, sr: 0.5e6, vh: 2, vl: 2, rout: 75, iq: 1.7e-3 },    // GENÉRICO, O µA741 DA FOLHA DE DADOS
     OP27G: { a0: 1.8e6, gbw: 8e6, sr: 2.8e6, vh: 1.5, vl: 1.5, rout: 70, iq: 3e-3 },
     OP37G: { a0: 1.8e6, gbw: 63e6, sr: 17e6, vh: 1.5, vl: 1.5, rout: 70, iq: 3e-3 },
     AD8541: { a0: 1e5, gbw: 1e6, sr: 0.92e6, vh: 0.02, vl: 0.02, rout: 50, iq: 45e-6 },

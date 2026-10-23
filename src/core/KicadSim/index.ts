@@ -1,5 +1,5 @@
 // PORTADO DE kicad/eeschema/sim/sim_model.cpp (InferSimModel, createPins), spice_generator.cpp, sim_model_source.cpp E sim_model_switch.cpp (GPL-3.0-or-later)
-import { pinsOf, type KicadSymbol } from '../KicadSymbol'
+import { pinsOf, type KicadPin, type KicadSymbol } from '../KicadSymbol'
 
 type Model = { pins: string[], model: string, order?: number[] }
 
@@ -34,6 +34,8 @@ const SOURCES: Record<string, string[]> = {
 }
 
 const PASSIVES = ['R', 'C', 'L']
+const OPAMPS: [RegExp, string][] = [[/^(LM358|LM2904|LM324|LM2902)/, 'CM_LM358'], [/^TL0[78]/, 'ADTL082']]    // MACRO-MODELOS DO SIMULADOR (core/Spice) PELO NOME; OS OUTROS AMP-OPS PELO GENÉRICO
+const OPAMP    = 'CM_OPAMP'
 const NUMBER   = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(Meg|MEG|meg|[afpnuµμmkKMGT])?[A-Za-zΩ]*$/
 
 // VALOR DO KICAD (PREFIXO SI: M É MEGA) NA NOTAÇÃO DO SPICE (M É MILI): M → Meg, µ → u, SEM A UNIDADE; O QUE NÃO É NÚMERO PASSA COMO ESTÁ
@@ -101,6 +103,21 @@ export const libraryOf = (symbol: KicadSymbol) => {
     return /^\$\{KICAD\d*_SYMBOL_DIR\}\//.test(field) ? field.replace(/^\$\{[^}]+\}\//, '') : null
 }
 
+// AMP-OP SEM CAMPOS Sim.*, RECONHECIDO PELA DESCRIÇÃO E PELOS PINOS (+, − E A SAÍDA DE CADA UNIDADE; V+ E V− DA ALIMENTAÇÃO): UMA LINHA POR UNIDADE COM O MACRO-MODELO DO SIMULADOR (O KICAD PEDE QUE O USUÁRIO ESCOLHA O MODELO)
+const opampOf = (symbol: KicadSymbol, ids: Map<string, number>) => {
+    const pins   = pinsOf(symbol)
+    const supply = ['V+', 'V-'].map(name => pins.find(pin => pin.name === name))
+    const units  = [...new Set(pins.filter(pin => pin.name === '+').map(pin => pin.unit))]
+    const halves = units.map(unit => [pins.find(pin => pin.unit === unit && pin.name === '+'), pins.find(pin => pin.unit === unit && pin.name === '-'), pins.find(pin => pin.unit === unit && pin.type === 'output')])
+    const model  = OPAMPS.find(([pattern]) => pattern.test(symbol.name))?.[1] ?? OPAMP
+    const net    = (pin: KicadPin | undefined) => `{net connector${ids.get(pin?.number ?? '')}}`
+
+    if (!/\bopamp\b|operational amplifier/i.test(`${symbol.properties.ki_keywords ?? ''} ${symbol.properties.Description ?? ''}`) || supply.some(pin => !pin) || !units.length || halves.some(half => half.some(pin => !pin)))
+        return null
+
+    return { lines: halves.map(([inp, inn, out], i) => `X{instanceTitle}${units.length > 1 ? 'ABCD'[i] : ''} ${[inp, inn, ...supply, out].map(net).join(' ')} ${model}`), models: [] }
+}
+
 // LINHAS E MODELOS SPICE DA PEÇA PELOS CAMPOS Sim.*, COM OS PINOS DO SÍMBOLO PELO connectorN; NULO PARA O QUE NÃO SIMULA AQUI (XSPICE, IBIS, LINHA DE TRANSMISSÃO, COMPORTAMENTAL, BIBLIOTECA DE FORA, VALOR QUE NÃO É NÚMERO, PINO OBRIGATÓRIO SEM LIGAÇÃO)
 export const simulate = (symbol: KicadSymbol, name: string, library = '') => {
     const { device, type, params, pins } = fieldsOf(symbol)
@@ -136,6 +153,9 @@ export const simulate = (symbol: KicadSymbol, name: string, library = '') => {
         const native = subckt && !subckt.texts.some(text => /^\s*a\S*\s/im.test(text))    // SEM XSPICE NO NGSPICE DO NAVEGADOR: O SUBCIRCUITO COM ELEMENTO A NÃO RODA
         return subckt && ends && native ? { lines: [`X{instanceTitle} ${ends.join(' ')} ${subckt.name}${Object.entries(params).map(([key, value]) => ` ${key}=${toSpice(value)}`).join('')}`], models: subckt.texts } : null
     }
+
+    if (!device)
+        return opampOf(symbol, ids)
 
     const model = DEVICES[device]?.types[type]
     const ends  = model && nets(model.pins)

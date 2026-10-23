@@ -332,6 +332,21 @@ describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (
         expect(sim.getVoltage('4/connector4', sim.steps - 1)).toBeCloseTo(2.5, 1)
     })
 
+    it('amp-ops das bibliotecas sem campos Sim.* pelos macro-modelos: TL072 seguidor copia o meio do divisor; LM358 e LM324 pelo do LM358', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'R'), kicadId('Amplifier_Operational', 'TL072'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const pin   = (n: string) => `4/connector${pinsOf(load('Amplifier_Operational', 'TL072') as KicadSymbol).findIndex(item => item.number === n)}`
+        const wires: [string, string][] = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector0'], ['3/connector1', '5/connector0'], ['1/connector0', '5/connector0'], ['2/connector1', pin('3')], [pin('1'), pin('2')], ['1/connector1', pin('8')], [pin('4'), '5/connector0']]
+        const { circuit, sim } = await series(library, parts, wires)
+        expect(circuit.deck).toMatch(/^X\S+A .* ADTL082$/m)
+        expect(sim.getVoltage(pin('1'), sim.steps - 1)).toBeCloseTo(2.5, 1)
+        expect(simulate(load('Amplifier_Operational', 'LM358') as KicadSymbol, 'M1')?.lines.map(line => line.split(' ').pop())).toEqual(['CM_LM358', 'CM_LM358'])
+        expect(simulate(load('Amplifier_Operational', 'LM324') as KicadSymbol, 'M1')?.lines).toHaveLength(4)
+        expect(simulate(load('Timer', 'NE555P') as KicadSymbol, 'M1')).toBeNull()
+    })
+
     it('bateria e potenciômetro: o cursor divide a tensão da bateria pelo botão, ambos editáveis no inspetor', async () => {
         const library = makeLibrary()
         const parts   = [kicadId('Device', 'Battery'), kicadId('Device', 'R_Potentiometer'), 'GroundModuleID']

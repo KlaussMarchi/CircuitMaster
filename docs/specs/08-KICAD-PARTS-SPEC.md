@@ -82,6 +82,10 @@ inicial.
   derrubar o circuito: XSPICE (o ngspice do navegador não tem; o potenciômetro duplo), IBIS, linha de transmissão,
   fontes de ruído e aleatórias, SPICE cru, modelo comportamental, biblioteca fora do acervo, valor que não é número e
   pino obrigatório sem ligação (o voltímetro diferencial).
+- **Amp-ops sem `Sim.*`** (além do KiCad, que pede o modelo ao usuário): reconhecidos pela descrição (`opamp`,
+  `operational amplifier`) e pelos pinos `+`, `-` e saída de cada unidade, com `V+`/`V-`; uma linha por unidade com o
+  macro-modelo do simulador: LM358/LM2904/LM324/LM2902 pelo do LM358, TL07x/TL08x pelo do TL082 e os outros pelo
+  genérico `CM_OPAMP` (µA741 da folha de dados).
 - Mais equivalentes: as variantes de LED e de diodo da `Device`, os potenciômetros da `Device` e da
   `Simulation_SPICE` (o botão e a resistência no inspetor, como o trimpot do acervo) e a bateria, a pilha e a `VDC` (a tensão editável e o sinal da fonte, como a
   fonte DC do acervo).

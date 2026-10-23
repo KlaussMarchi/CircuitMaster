@@ -744,8 +744,8 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
 
 ### Próximo
 
-- CIs das bibliotecas sem `Sim.*` na simulação: o LM358 pelo macro-modelo do simulador e o NE555 pelo `UA555` do
-  acervo; MOSFETs de `Transistor_FET`, que não trazem os campos.
+- Amp-ops das bibliotecas sem `Sim.*` já simulam pelos macro-modelos (pinos `+`, `-`, `V+`, `V-`). Falta o NE555 pelo
+  `UA555` do acervo (plano em `../CONTINUAR.md`) e os MOSFETs de `Transistor_FET`, que não trazem os campos.
 - Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
   `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
 - Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.
