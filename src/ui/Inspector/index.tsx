@@ -310,7 +310,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
     const generated = getParametric(part.moduleId)
     const policy = label && (label.style === 'left') === label.left ? 'connector' : 'outside'
     const kicad  = merged['kicad symbol'] ? ['footprint'] : []    // A PEÇA DO KICAD SEMPRE MOSTRA O FOOTPRINT, MESMO SEM NENHUM: ESCOLHER UM DÁ A PROTOBOARD E A PCB
-    const keys   = [...new Set([...Object.keys(merged), ...free.map(([key]) => key), ...kicad])].filter(key => !HIDDEN.has(key) && !key.startsWith('circuitmaster_') && !(label && key === 'style') && (merged[key] || kicad.includes(key) || defs.some(item => item.name === key) || free.some(([item]) => item === key)))
+    const keys   = [...new Set([...Object.keys(merged), ...free.map(([key]) => key), ...kicad])].filter(key => !HIDDEN.has(key) && !key.startsWith('circuitmaster_') && !(label && key === 'style') && !(kicad.length && key === 'package') && (merged[key] || kicad.includes(key) || defs.some(item => item.name === key) || free.some(([item]) => item === key)))    // COM O CAMPO FOOTPRINT, O ENCAPSULAMENTO SÓ REPETIRIA (FICA NA LINHA DO CABEÇALHO)
     const netOf  = (key: string) => {
         const index = netIndex.get(key) ?? -1
         const others = index >= 0 ? nets[index].filter(other => other !== key && splitKey(other)[0] !== modelIndex) : []

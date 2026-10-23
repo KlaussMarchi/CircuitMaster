@@ -10,7 +10,8 @@ import type { Box, Point } from '../src/core/Geometry'
 import { emptyDoc, keyOf } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
 import { Netlist } from '../src/core/Netlist'
-import { kicadId } from '../src/core/KicadPart'
+import { footprintOf, footprintPath, kicadBundle, kicadId } from '../src/core/KicadPart'
+import { listFiles } from '../tools/Fritzing'
 import { createInstance, createWire, setProperty } from '../src/engine/Edit'
 import { SIGNAL_KEY, buildCircuit } from '../src/core/Spice'
 import { Ngspice } from '../src/core/Ngspice'
@@ -20,7 +21,7 @@ import { getPropertyDefs } from '../src/core/Properties'
 import type { Doc } from '../src/core/Document'
 import type { Library } from '../src/core/Library'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
-import { loadWasm, makeLibrary } from './Fixtures'
+import { loadWasm, makeLibrary, writeReport } from './Fixtures'
 import { ROOTS } from '../tools/KiCad'
 
 const HAS_KICAD = fs.existsSync(ROOTS.symbols)
@@ -263,5 +264,51 @@ describe.skipIf(!HAS_KICAD)('peças básicas do KiCad simulam como as do Fritzin
         expect(step?.tau).toBeGreaterThan(0.097)
         expect(step?.tau).toBeLessThan(0.103)
         expect(Array.from({ length: sim.steps }, (_, i) => sim.getEffect('3', i).smoke).some(Boolean)).toBe(false)
+    })
+})
+
+const GRID = PX_PER_INCH / 10    // px ENTRE DOIS FUROS DA PROTOBOARD
+
+// SEÇÃO 12 DO PLANO: TODO SÍMBOLO COM PINOS ENTRA NA PROTOBOARD, PELO FOOTPRINT PASSANTE DE 0,1 in OU PELA PLACA ADAPTADORA
+describe.skipIf(!HAS_KICAD)('toda peça das bibliotecas entra na protoboard (spec 08 §3, seção 12 do plano)', () => {
+    it('em todos os símbolos, cada pino tem lugar na protoboard e os pinos caem na grade de 0,1 in', () => {
+        const failures: string[] = []
+        const counts   = { footprint: 0, adapter: 0, schematic: 0 }
+
+        for (const file of listFiles(ROOTS.symbols, '', '.kicad_sym')) {
+            const [folder, base] = file.split('/')
+            const [library, name] = [folder.replace('.kicad_symdir', ''), base.replace('.kicad_sym', '')]
+            const symbol = load(library, name)
+
+            if (!symbol || symbol.power || !pinsOf(symbol).length) {
+                counts.schematic++
+                continue
+            }
+
+            const field     = footprintOf(symbol)
+            const where     = footprintPath(field)
+            const footprint = where && fs.existsSync(path.join(ROOTS.footprints, where)) ? readFootprint(fs.readFileSync(path.join(ROOTS.footprints, where), 'utf8')) : null
+            const bundle    = kicadBundle(kicadId(library, name), symbol, footprint, field)
+            const plugs     = [...bundle.parts[0].text.matchAll(/<breadboardView><p layer="breadboard" svgId="(connector\d+pin)"/g)].map(match => match[1])
+            const text      = bundle.svgs.find(item => item.name.startsWith('svg.breadboard.'))?.text ?? ''
+            counts[text.includes('fill="#2d5a3d"') ? 'adapter' : 'footprint']++
+
+            if (plugs.length !== pinsOf(symbol).length) {
+                failures.push(`${library}:${name}: ${plugs.length} de ${pinsOf(symbol).length} pinos na protoboard`)
+                continue
+            }
+
+            const svg     = new SvgFile(text)
+            svg.update()
+            const centers = plugs.map(id => svg.getBox(id)).map(box => box ? [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2] : [NaN, NaN])
+            const off     = centers.filter(([x, y]) => [x - centers[0][0], y - centers[0][1]].some(delta => !(Math.abs(delta / GRID - Math.round(delta / GRID)) < 0.05)))
+
+            if (off.length)
+                failures.push(`${library}:${name}: ${off.length} pinos fora da grade`)
+        }
+
+        writeReport('kicad-breadboard-report.txt', `footprint passante: ${counts.footprint}\nplaca adaptadora: ${counts.adapter}\nsó esquemático (alimentação ou sem pinos): ${counts.schematic}\n${failures.join('\n')}\n`)
+        expect(failures.slice(0, 20)).toEqual([])
+        expect(counts.footprint + counts.adapter).toBeGreaterThan(20000)
     })
 })

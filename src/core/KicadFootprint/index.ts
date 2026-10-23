@@ -9,7 +9,9 @@ const COPPER  = '#F7BD13'
 const SILK    = '#ffffff'
 const FAB     = '#404040'
 const METAL   = '#9a9a9a'
+const HOLE    = '#3c3c3c'
 const MARGIN  = 20     // MIL EM VOLTA DO DESENHO
+const PITCH   = 2.54   // mm, PASSO DOS FUROS DA PROTOBOARD
 const DRAWN   = ['F.SilkS', 'B.SilkS', 'F.Fab', 'F.CrtYd']
 
 // PAD DO FOOTPRINT: NÚMERO, TIPO (thru_hole, smd, np_thru_hole, connect), FORMA, CENTRO, GIRO, TAMANHO, FURO (OVAL: LARGURA E ALTURA) E CAMADAS
@@ -50,6 +52,13 @@ const wired = (pad: KicadPad) => pad.number !== '' && isTop(pad) && pad.type !==
 
 // PADS QUE VIRAM CONECTOR: OS DE COBRE NA FACE DE CIMA (OU PASSANTES) COM NÚMERO; O PRIMEIRO DE CADA NÚMERO
 export const padsOf = (footprint: KicadFootprint) => footprint.pads.filter((pad, i, list) => wired(pad) && list.findIndex(other => wired(other) && other.number === pad.number) === i)
+
+// O FOOTPRINT ENCAIXA NA PROTOBOARD: TODO PAD DE CONECTOR É PASSANTE E CAI NA GRADE DE 0,1 in CONTADA A PARTIR DO PRIMEIRO
+export const fitsBreadboard = (footprint: KicadFootprint) => {
+    const pads  = padsOf(footprint)
+    const steps = (value: number) => Math.abs(value / PITCH - Math.round(value / PITCH)) < 0.02
+    return pads.length > 0 && pads.every(pad => pad.drill && steps(pad.at[0] - pads[0].at[0]) && steps(pad.at[1] - pads[0].at[1]))
+}
 
 const rotate = ([x, y]: Point, degrees: number): Point => {
     const angle = -degrees * Math.PI / 180    // GIRO DO KICAD É ANTI-HORÁRIO NA TELA, COM y PARA BAIXO
@@ -157,13 +166,17 @@ export const footprintSvg = (footprint: KicadFootprint, ids: Map<string, number>
     return svgOf(w, h, `<g id="silkscreen">${silk('F.SilkS')}</g>\n<g id="silkscreen0">${silk('B.SilkS')}</g>\n<g id="copper1">${smd.join('')}<g id="copper0">${tht.join('')}${holes.join('')}</g></g>`)
 }
 
-// PROTOBOARD DA PEÇA: O CONTORNO DE FABRICAÇÃO (F.Fab) E OS PADS EM METAL, CADA UM O connectorNpin NO MESMO LUGAR DA PCB (AS PEÇAS PASSANTES DE 0,1 in ENCAIXAM NOS FUROS)
+// PROTOBOARD DA PEÇA: O CONTORNO DE FABRICAÇÃO (F.Fab), OS PADS EM METAL E, NOS DE CONECTOR, O FURO COMO connectorNpin: O FURO FICA NO (at) DO PAD E O COBRE PODE ESTAR DESLOCADO DELE (offset), E É O FURO QUE ENCAIXA NA PROTOBOARD
 export const breadboardSvg = (footprint: KicadFootprint, ids: Map<string, number>) => {
     const frame  = frameOf(footprint)
     const place  = placer(frame)
     const owned  = new Set(padsOf(footprint).filter(pad => ids.has(pad.number)))
     const fab    = footprint.graphics.filter(node => layerOf(node) === 'F.Fab').map(node => drawGraphic(node, place, FAB)?.[1] ?? '').join('')
-    const pads   = footprint.pads.filter(pad => isTop(pad) && pad.type !== 'np_thru_hole').map(pad => padShape(pad, place, METAL, owned.has(pad) ? ` id="connector${ids.get(pad.number)}pin"` : ''))
+    const hole   = (pad: KicadPad) => {
+        const [x, y] = place(pad.at)
+        return `<circle id="connector${ids.get(pad.number)}pin" cx="${x}" cy="${y}" r="${Math.min(...pad.drill ?? pad.size) * MIL / 2}" fill="${HOLE}"/>`
+    }
+    const pads   = footprint.pads.filter(pad => isTop(pad) && pad.type !== 'np_thru_hole').map(pad => padShape(pad, place, METAL) + (owned.has(pad) ? hole(pad) : ''))
     const [w, h] = [(frame[2] - frame[0]) * MIL, (frame[3] - frame[1]) * MIL]
     return svgOf(w, h, `<g id="breadboard">${fab}${pads.join('')}</g>`)
 }

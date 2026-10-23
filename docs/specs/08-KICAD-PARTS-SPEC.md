@@ -39,8 +39,13 @@ inicial.
   `connectorNpin`. O corpo do pad é círculo ou retângulo com canto (oval: metade do lado menor; `roundrect`: a
   razão), girado; o furo metalizado é o anel do Fritzing, de diâmetro `2r − largura` e largura até o lado menor do
   pad, de onde o CAM tira o furo (spec 03 §2.3); furo sem metal é círculo sem traço.
-- Protoboard: o contorno de fabricação (F.Fab) e os pads em metal no mesmo lugar, cada um o `connectorNpin`; as peças
-  passantes de 0,1 in encaixam nos furos.
+- Protoboard: quando todo pino tem pad e os pads são passantes na grade de 0,1 in, o contorno de fabricação (F.Fab) e
+  os pads em metal, com o furo de cada conector como `connectorNpin` (o furo fica no `(at)` do pad; o cobre pode estar
+  deslocado dele); senão (SMD, passo fora de 0,1 in, pad com outro nome ou sem footprint), uma **placa adaptadora**
+  gerada: os pinos a 0,1 in em duas fileiras numeradas como um CI DIP (uma fileira até 3 pinos; fileiras a 300 mil, ou
+  600 acima de 28 pinos) e o nome no meio. Os símbolos de alimentação (GND, VCC) só existem no esquemático. Dos 22.905
+  símbolos, 2.924 entram pelo footprint, 19.815 pela placa adaptadora e 166 ficam só no esquemático; todo pino tem lugar
+  na protoboard e cai na grade (`build/kicad-breadboard-report.txt`).
 - Quadro: pads, serigrafia, fabricação e cerca, com 20 mil de folga.
 - Oráculo: a caixa de cada pad do cobre de cima e cada furo, transladados ao canto, são os do `kicad-cli fp export
   svg --layers F.Cu` (até 0,02 mm, a aproximação dos arcos), e cada conector do nosso SVG ocupa a caixa do pad.
@@ -117,6 +122,7 @@ KiCad só aparecem onde o assunto é compatibilidade de arquivos e nos créditos
 | Oráculo dos símbolos: traços dos pinos iguais ao `sym export svg` | `tests/kicad.test.ts` |
 | Footprint: pads, furos, giro e camadas; cada conector do SVG ocupa a caixa do pad | `tests/kicad.test.ts` |
 | Oráculo dos footprints: pads e furos iguais ao `fp export svg` em 9 footprints (passante, SMD, oval, girado, furo oblongo, sem metal) | `tests/kicad.test.ts` |
+| Todos os símbolos: cada pino tem lugar na protoboard e cai na grade de 0,1 in (footprint ou placa adaptadora) | `tests/kicad.test.ts` |
 | Peça de três vistas pela `Library`: pinos nas três vistas, pacote do `.fzz`, footprint padrão e escolhido | `tests/kicad.test.ts` |
 | Fio no esquemático liga as mesmas portas na protoboard e na PCB | `tests/kicad.test.ts` |
 | Busca: o símbolo sai na mesma lista, sem rótulo de origem; pôr no quadro, as três vistas e o `.fzz` com a peça | `e2e/kicad.spec.ts` |

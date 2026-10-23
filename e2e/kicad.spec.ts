@@ -67,6 +67,12 @@ test('Footprint da peça do KiCad: o inspetor oferece os que casam com o símbol
     await expect.poll(() => page.evaluate(() => cm.store.getState().doc.instances['1']?.moduleIdRef)).toBe('cm:Device:R@Resistor_SMD:R_0805_2012Metric')
     expect(await page.evaluate(() => cm.store.getState().netlist?.getNet('pcbView', '1/connector1'))).toContain('2/connector0')
     await expect(panel.getByText('R_0805_2012Metric').first()).toBeVisible()
+    expect(await page.evaluate(() => cm.store.getState().library.getPins('cm:Device:R@Resistor_SMD:R_0805_2012Metric', 'breadboardView', 'breadboard').size)).toBe(2)
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
+    await page.keyboard.press('Control+0')
+    await app.paint()
+    await app.shoot('placa-adaptadora')
+    await page.getByRole('tab', { name: 'Esquemático' }).click()
 
     await field.fill('Nada:Inexistente')
     await field.press('Enter')

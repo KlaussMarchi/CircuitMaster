@@ -1,7 +1,8 @@
 import type { Bundle } from '../Sketch'
-import { escapeXml, fitsFilters } from '../KicadDraw'
+import type { Point } from '../Geometry'
+import { escapeXml, fitsFilters, svgOf } from '../KicadDraw'
 import { parentOf, pinsOf, readSymbol, symbolSvg, type KicadSymbol } from '../KicadSymbol'
-import { breadboardSvg, footprintSvg, padsOf, readFootprint, type KicadFootprint } from '../KicadFootprint'
+import { breadboardSvg, fitsBreadboard, footprintSvg, padsOf, readFootprint, type KicadFootprint } from '../KicadFootprint'
 
 export const KICAD_ID         = /^cm:([^:@]+):([^@]+)(?:@(.+))?$/    // cm:Biblioteca:Símbolo, COM @BibliotecaFp:Footprint QUANDO O FOOTPRINT É ESCOLHIDO
 export const KICAD_SYMBOLS    = 'kicad-symbols'       // RAIZES DO ACERVO DO KICAD NO Source (SERVIDAS EM /kicad/symbols E /kicad/footprints)
@@ -51,6 +52,21 @@ const BEHAVIORS: Record<string, Behavior> = {
     '3254CBFC44diode': { properties: { family: 'Diode', power: '1W' }, names: { 1: 'cathode', 2: 'anode' }, line: 'D{instanceTitle} {net #2} {net #1} DI_1N4001', model: DIODE_MODEL }
 }
 
+const BOARD  = '#2d5a3d'    // PLACA ADAPTADORA, VERDE DE PCB
+const HEADER = '#8c8c8c'    // PINOS DA BARRA
+
+// PLACA ADAPTADORA DA PROTOBOARD PARA A PEÇA QUE NÃO ENCAIXA NOS FUROS (SMD, PASSO FORA DE 0,1 in, PAD COM OUTRO NOME OU SEM FOOTPRINT): OS PINOS NA ORDEM DOS CONECTORES EM DUAS FILEIRAS A 0,1 in, NUMERADOS COMO UM CI DIP (UMA FILEIRA ATÉ 3 PINOS), E O NOME NO MEIO (SEÇÃO 12 DO PLANO)
+const adapterSvg = (name: string, count: number) => {
+    const rows   = count > 3 ? 2 : 1
+    const across = Math.ceil(count / rows)
+    const gap    = count > 28 ? 600 : 300    // mil ENTRE AS FILEIRAS, COMO OS CIs DIP ESTREITOS E LARGOS
+    const [w, h] = [100 * across + 100, rows === 2 ? gap + 100 : 200]
+    const at     = (i: number): Point => i < across ? [100 + 100 * i, h - 50] : [100 + 100 * (count - 1 - i), 50]
+    const pins   = Array.from({ length: count }, (_, i) => at(i)).map(([x, y], i) => `<rect id="connector${i}pin" x="${x - 15}" y="${y - 15}" width="30" height="30" fill="${HEADER}"/>`)
+    const size   = Math.min(60, 1.6 * (w - 60) / Math.max(1, name.length))
+    return svgOf(w, h, `<g id="breadboard"><rect width="${w}" height="${h}" rx="12" fill="${BOARD}"/><text x="${w / 2}" y="${h / 2}" font-family="Droid Sans" font-size="${size}" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${escapeXml(name)}</text>${pins.join('')}</g>`)
+}
+
 const property = (name: string, value: string) => `<property name="${escapeXml(name)}">${escapeXml(value)}</property>`
 
 // PEÇA DO FRITZING A PARTIR DO SÍMBOLO E DO FOOTPRINT DO KICAD: O .fzp E OS SVG DAS VISTAS COMO UM PACOTE; CADA PINO É UM CONECTOR, LIGADO NA PCB AO PAD DE MESMO NÚMERO; SEM FOOTPRINT A PEÇA SÓ EXISTE NO ESQUEMÁTICO (SPEC 08 §4)
@@ -62,16 +78,18 @@ export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: Ki
     const behavior = BEHAVIORS[equivalent]
     const pads     = new Map((footprint ? padsOf(footprint) : []).map(pad => [pad.number, pad]))
     const tht      = [...pads.values()].some(pad => pad.drill)
+    const fits     = footprint !== null && fitsBreadboard(footprint) && pins.every(pin => pads.has(pin.number))
+    const bread    = symbol.power || !pins.length ? '' : footprint && fits ? breadboardSvg(footprint, ids) : adapterSvg(name, pins.length)    // OS SÍMBOLOS DE ALIMENTAÇÃO (GND, VCC) SÓ EXISTEM NO ESQUEMÁTICO
     const images   = { schematic: `schematic/${base}_schem.svg`, breadboard: `breadboard/${base}_bread.svg`, pcb: `pcb/${base}_pcb.svg` }
-    const svgs     = [{ name: `svg.${images.schematic.replace('/', '.')}`, text: symbolSvg(symbol) }, ...footprint ? [{ name: `svg.${images.breadboard.replace('/', '.')}`, text: breadboardSvg(footprint, ids) }, { name: `svg.${images.pcb.replace('/', '.')}`, text: footprintSvg(footprint, ids) }] : []]
+    const svgs     = [{ name: `svg.${images.schematic.replace('/', '.')}`, text: symbolSvg(symbol) }, ...bread ? [{ name: `svg.${images.breadboard.replace('/', '.')}`, text: bread }] : [], ...footprint ? [{ name: `svg.${images.pcb.replace('/', '.')}`, text: footprintSvg(footprint, ids) }] : []]
     const copper   = tht ? ['copper0', 'silkscreen', 'copper1'] : ['silkscreen', 'copper1']
-    const views    = [`<iconView><layers image="${images.schematic}"><layer layerId="icon"/></layers></iconView>`, `<schematicView><layers image="${images.schematic}"><layer layerId="schematic"/></layers></schematicView>`, ...footprint ? [`<breadboardView><layers image="${images.breadboard}"><layer layerId="breadboard"/></layers></breadboardView>`, `<pcbView><layers image="${images.pcb}">${copper.map(layer => `<layer layerId="${layer}"/>`).join('')}</layers></pcbView>`] : []]
+    const views    = [`<iconView><layers image="${images.schematic}"><layer layerId="icon"/></layers></iconView>`, `<schematicView><layers image="${images.schematic}"><layer layerId="schematic"/></layers></schematicView>`, ...bread ? [`<breadboardView><layers image="${images.breadboard}"><layer layerId="breadboard"/></layers></breadboardView>`] : [], ...footprint ? [`<pcbView><layers image="${images.pcb}">${copper.map(layer => `<layer layerId="${layer}"/>`).join('')}</layers></pcbView>`] : []]
     const connectors = pins.map((pin, i) => {
         const pad   = pads.get(pin.number)
         const board = !pad ? '' : pad.drill ? `<pcbView><p layer="copper0" svgId="connector${i}pin"/><p layer="copper1" svgId="connector${i}pin"/></pcbView>` : `<pcbView><p layer="copper1" svgId="connector${i}pad"/></pcbView>`
-        const bread = footprint && pad ? `<breadboardView><p layer="breadboard" svgId="connector${i}pin"/></breadboardView>` : ''
+        const plug  = bread && (pad || !fits) ? `<breadboardView><p layer="breadboard" svgId="connector${i}pin"/></breadboardView>` : ''
         const label = behavior?.names[pin.number] ?? (pin.name && pin.name !== '~' ? pin.name : pin.number)
-        return `<connector id="connector${i}" name="${escapeXml(label)}" type="${pad && !pad.drill ? 'pad' : 'male'}"><description>${escapeXml(`${pin.number} ${label} (${pin.type})`)}</description><views>${bread}<schematicView><p layer="schematic" svgId="connector${i}pin" terminalId="connector${i}terminal"/></schematicView>${board}</views></connector>`
+        return `<connector id="connector${i}" name="${escapeXml(label)}" type="${pad && !pad.drill ? 'pad' : 'male'}"><description>${escapeXml(`${pin.number} ${label} (${pin.type})`)}</description><views>${plug}<schematicView><p layer="schematic" svgId="connector${i}pin" terminalId="connector${i}terminal"/></schematicView>${board}</views></connector>`
     })
     const fields   = { family: library, ...behavior?.properties, 'kicad symbol': `${library}:${name}`, ...Object.fromEntries(SHOWN.flatMap(key => symbol.properties[key] && symbol.properties[key] !== '~' ? [[key.toLowerCase(), symbol.properties[key]]] : [])), ...footprint ? { footprint: field, package: footprint.name } : {}, 'footprint filters': symbol.properties.ki_fp_filters ?? '' }
     const spice    = behavior ? `<spice><line>${escapeXml(behavior.line.replace(/#(\w+)/g, (_, pin: string) => `connector${ids.get(pin)}`))}</line>${behavior.model ? `<model>${escapeXml(behavior.model)}</model>` : ''}</spice>\n` : ''

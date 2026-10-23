@@ -691,6 +691,12 @@ que ganhou a linha das bibliotecas). Spec 08 §5–§6. Testes: `tests/category.
   em 705,7 KB com o catálogo novo. Um módulo sob demanda que importa de volta um módulo do JS inicial (o `Library`, o
   `Canvas`) faz o build partir esse módulo em arquivo à parte e o inicial cresce: passar o que precisa por propriedade.
 
+- **Toda peça das bibliotecas entra na protoboard** (seção 12 do plano): a de footprint passante na grade de 0,1 in
+  pelo próprio desenho (com o furo como conector, já que o cobre pode estar deslocado do furo), as outras numa placa
+  adaptadora gerada (pinos a 0,1 in em duas fileiras, como um DIP, e o nome no meio). Dos 22.905 símbolos, 2.924 pelo
+  footprint e 19.815 pelo adaptador, todo pino na grade; 166 (alimentação, sem pinos) só no esquemático. Teste:
+  `tests/kicad.test.ts` (todos os símbolos) e `e2e/kicad.spec.ts` (o resistor que vira SMD ganha a placa).
+
 ### Pedido do usuário (2026-10-23): tela limpa e minimalista
 
 "A tela tem que ficar limpa e minimalista, não pode ficar cheia de coisa igual a esses aplicativos de IA genéricos;
