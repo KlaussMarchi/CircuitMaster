@@ -724,6 +724,12 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
   arquivo); um footprint avulso ganha um símbolo gerado, um pino por pad. Teste: `tests/kicad.test.ts` e
   `e2e/kicad.spec.ts`, que achou o caso do derivado aberto sozinho (o `NE555P.kicad_sym` de uma `.kicad_symdir` sem o
   `NE555D`): fica fora, como no KiCad, e o arquivo sem símbolos com pinos dá a causa.
+- **As peças das bibliotecas simulam pelos campos `Sim.*`** (`core/KicadSim`, porte do `eeschema/sim`): transistores
+  (173 de `Transistor_BJT` herdam o modelo do pai), diodos (126 de `Diode`), JFET, MOSFET, chave, fontes SIN/PULSE/EXP/AM/SFFM/PWL e
+  os amp-ops e o varistor de `Simulation_SPICE.sp`; sem os campos, R/C/L/fonte de 2 pinos pelo `Value`, como o KiCad.
+  Potenciômetros, bateria, pilha e `VDC` ganham a equivalente do acervo (botão e tensão no inspetor). O que não roda no
+  ngspice do navegador (XSPICE, IBIS, biblioteca de fora) fica sem simular, sem derrubar o circuito. Teste:
+  `tests/kicad.test.ts` (BC547 como chave acende o LED; seguidor com amp-op; bateria e potenciômetro).
 
 3. **A busca do KiCad pesava na primeira busca depois de abrir** (achado pelo `perf`: 54 a 82 ms contra 50): o
    resumo de 3,4 MB era montado de uma vez no worker. Agora começa 1,5 s depois do acervo pronto, em lotes, a busca
@@ -738,7 +744,8 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
 
 ### Próximo
 
-- Transistores e CIs do KiCad com modelo (os de biblioteca com `Sim.*`) na simulação.
+- CIs das bibliotecas sem `Sim.*` na simulação: o LM358 pelo macro-modelo do simulador e o NE555 pelo `UA555` do
+  acervo; MOSFETs de `Transistor_FET`, que não trazem os campos.
 - Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
   `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
 - Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.

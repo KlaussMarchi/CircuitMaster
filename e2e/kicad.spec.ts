@@ -12,6 +12,7 @@ test('Acervo do KiCad em /kicad: listagens, um símbolo, um footprint e um demo,
     expect(demos.some(file => file.endsWith('.kicad_pcb'))).toBe(true)
     expect(await (await page.request.get(`/kicad/symbols/${symbols.find(file => file.endsWith('Device.kicad_symdir/R.kicad_sym'))}`)).text()).toMatch(/^\(kicad_symbol_lib/)
     expect(await (await page.request.get(`/kicad/footprints/${footprints[0]}`)).text()).toMatch(/^\(footprint/)
+    expect(await (await page.request.get('/kicad/symbols/Simulation_SPICE.sp')).text()).toContain('.subckt kicad_builtin_opamp ')
     expect(await (await page.request.get('/kicad/demos/%2E%2E/LICENSE.GPLv3')).text()).not.toContain('GNU GENERAL PUBLIC LICENSE')
 })
 

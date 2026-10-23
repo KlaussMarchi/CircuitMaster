@@ -7,7 +7,7 @@ import path from 'node:path'
 import * as Fritzing from './tools/Fritzing/index.ts'
 import * as KiCad from './tools/KiCad/index.ts'
 
-const TYPES: Record<string, string> = { '.svg': 'image/svg+xml', '.json': 'application/json', '.fzp': 'application/xml', '.fzb': 'application/xml', '.fzz': 'application/zip', '.png': 'image/png', '.ttf': 'font/ttf', '.kicad_pro': 'application/json', '.step': 'model/step' }
+const TYPES: Record<string, string> = { '.sp': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.fzp': 'application/xml', '.fzb': 'application/xml', '.fzz': 'application/zip', '.png': 'image/png', '.ttf': 'font/ttf', '.kicad_pro': 'application/json', '.step': 'model/step' }
 const KICAD_TEXT = /\.(kicad_(sch|pcb|sym|mod|wks)|.*-lib-table)$/    // S-EXPRESSION DO KICAD: TEXTO UTF-8
 
 // SERVE UM ACERVO COMO DADOS EM /<nome> (LISTAGENS JSON E ARQUIVOS), SEM SAIR DAS RAÍZES, NO dev E NO preview

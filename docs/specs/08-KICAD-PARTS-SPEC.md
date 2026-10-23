@@ -70,6 +70,21 @@ inicial.
   família, que liga os efeitos da simulação (fumaça, brilho), e o `<spice>`: os mesmos modelos do LED de 5 mm e do
   1N4001 do acervo do Fritzing, com os pinos citados pelo número do KiCad (`#1`, `#2`; no diodo e no LED o pino 1 é o
   catodo), e os pinos ganham os nomes que os efeitos procuram (`Pin 0`, `+`, `anode`…).
+- **As outras simulam pelos campos `Sim.*`** (`core/KicadSim`, porte do `eeschema/sim` do KiCad): `Sim.Device`,
+  `Sim.Type`, `Sim.Params` e `Sim.Pins` dão o elemento e o `.model`, com os pinos do modelo ligados aos do símbolo como
+  o KiCad liga (sem `Sim.Pins`, na ordem dos números) e o derivado herdando os campos do pai — por isso 173 transistores
+  de `Transistor_BJT` simulam pelo `Q_NPN_*`/`Q_PNP_*` de que derivam e 126 diodos de `Diode` pelo `1N4001` e afins. Cobertos: diodo, NPN e PNP
+  (Gummel-Poon, VBIC), JFET, MOSFET (VDMOS, MOS1–3), chave por tensão, fontes de tensão e corrente (DC, SIN, PULSE, EXP,
+  AM, SFFM, PWL; o PULSE sem período vira um pulso só, como o KiCad força no ngspice 46+) e subcircuito de
+  `Simulation_SPICE.sp` (amp-ops, varistor), cada `.subckt` com os que ele chama, um por modelo. Sem os campos, o
+  resistor, capacitor, indutor ou fonte de 2 pinos sai do prefixo da referência e do `Value` (`4k7`, `3,3u`, `DC 5`),
+  como o `InferSimModel`; o valor vai para a notação do SPICE (`M` → `Meg`, `µ` → `u`). Fica sem simular, em vez de
+  derrubar o circuito: XSPICE (o ngspice do navegador não tem; o potenciômetro duplo), IBIS, linha de transmissão,
+  fontes de ruído e aleatórias, SPICE cru, modelo comportamental, biblioteca fora do acervo, valor que não é número e
+  pino obrigatório sem ligação (o voltímetro diferencial).
+- Mais equivalentes: as variantes de LED e de diodo da `Device`, os potenciômetros da `Device` e da
+  `Simulation_SPICE` (o botão e a resistência no inspetor, como o trimpot do acervo) e a bateria, a pilha e a `VDC` (a tensão editável e o sinal da fonte, como a
+  fonte DC do acervo).
 - **Trocar o footprint** (KP-146): o `.fzp` guarda o footprint em uso (`footprint`, "Biblioteca:Nome") e os filtros do
   símbolo; o inspetor oferece os footprints da listagem que casam com os filtros, e escolher um troca a instância
   pela peça `…@Biblioteca:Nome`, que mantém os fios (os conectores são os mesmos pinos). Nome que não existe nas
@@ -136,4 +151,6 @@ KiCad só aparecem onde o assunto é compatibilidade de arquivos e nos créditos
 | Catálogo: 25 mil peças em categorias e famílias, o 555 do acervo e o NE555P na mesma família, pôr no quadro | `e2e/kicad.spec.ts` |
 | Resistor e LED do KiCad acendem o LED com a fonte DC; eletrolítico do KiCad carrega com τ = RC | `tests/kicad.test.ts` |
 | Footprint no inspetor: as opções do filtro, a troca mantém os fios, nome inexistente avisa | `e2e/kicad.spec.ts` |
+| Campos `Sim.*`: transistor herdado, fontes, chave, diodo, subcircuito com dependências; inferência pelo `Value`; notação | `tests/kicad.test.ts` |
+| Simulação: BC547 como chave acende o LED, amp-op seguidor, bateria e potenciômetro dividem pelo botão, fonte senoidal roda | `tests/kicad.test.ts` |
 | Abrir `.kicad_sym` (vários símbolos, derivado) e `.kicad_mod` (símbolo gerado): peças em Meus itens com as três vistas; arquivo ruim dá a causa | `tests/kicad.test.ts` · `e2e/kicad.spec.ts` |

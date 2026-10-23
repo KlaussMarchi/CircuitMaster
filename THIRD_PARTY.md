@@ -8,6 +8,7 @@ adaptação; o módulo de destino traz a origem na primeira linha.
 |---|---|---|---|
 | `fritzing-app/src/items/dip.cpp`, `mysterypart.cpp`, `screwterminal.cpp`; `src/utils/textutils.cpp` (`incrementTemplateString`); `resources/templates/generic_sip_bread_template.txt`, `screw_terminal_bread_template.txt` | `src/core/Parametric` | Fritzing GmbH e colaboradores do Fritzing | 2026-10-22 |
 | `kicad/common/io/kicad/kicad_io_utils.cpp` (`KICAD_FORMAT::Prettify`) | `src/core/Sexpr` | The KiCad Developers | 2026-10-22 |
+| `kicad/eeschema/sim/sim_model.cpp` (`InferSimModel`, `createPins`, tabelas de dispositivos e tipos), `spice_generator.cpp`, `sim_model_source.cpp`, `sim_model_switch.cpp` | `src/core/KicadSim` | The KiCad Developers | 2026-10-23 |
 
 Comportamentos conferidos no código do Fritzing e reescritos sem
 transcrever (citados no comentário ou na spec): placa nova sticky (`applyBoardCreationDefaults`, `engine/Edit`), cadeia do

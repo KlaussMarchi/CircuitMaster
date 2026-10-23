@@ -18,6 +18,7 @@ import { Ngspice } from '../src/core/Ngspice'
 import { Simulation } from '../src/engine/Simulation'
 import { getStepResponse } from '../src/engine/Response'
 import { getPropertyDefs } from '../src/core/Properties'
+import { fieldsOf, simulate, toSpice } from '../src/core/KicadSim'
 import type { Doc } from '../src/core/Document'
 import type { Library } from '../src/core/Library'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
@@ -264,6 +265,95 @@ describe.skipIf(!HAS_KICAD)('peças básicas do KiCad simulam como as do Fritzin
         expect(step?.tau).toBeGreaterThan(0.097)
         expect(step?.tau).toBeLessThan(0.103)
         expect(Array.from({ length: sim.steps }, (_, i) => sim.getEffect('3', i).smoke).some(Boolean)).toBe(false)
+    })
+})
+
+const SPICE_LIBRARY = HAS_KICAD ? fs.readFileSync(path.join(ROOTS.symbols, 'Simulation_SPICE.sp'), 'utf8') : ''
+
+describe.skipIf(!HAS_KICAD)('campos Sim.* das bibliotecas: o SPICE que o KiCad gera (spec 08 §4)', () => {
+    it('transistor herdado do pai, fontes, chave, diodo com parâmetros e subcircuito da biblioteca SPICE com os que ele chama', () => {
+        const spiceOf = (library: string, name: string) => simulate(load(library, name) as KicadSymbol, 'M1', SPICE_LIBRARY)
+
+        expect(spiceOf('Transistor_BJT', 'BC547')).toEqual({ lines: ['Q{instanceTitle} {net connector0} {net connector1} {net connector2} M1'], models: ['.model M1 NPN'] })
+        expect(spiceOf('Transistor_BJT', 'Q_PNP_BCE')?.lines).toEqual(['Q{instanceTitle} {net connector1} {net connector0} {net connector2} M1'])
+        expect(spiceOf('Simulation_SPICE', 'VSIN')?.lines).toEqual(['V{instanceTitle} {net connector0} {net connector1} DC 0 SIN( 0 1 1k ) AC 1'])
+        expect(spiceOf('Simulation_SPICE', 'VPULSE')?.lines).toEqual(['V{instanceTitle} {net connector0} {net connector1} PULSE( 0 1 2n 2n 2n 50n 100n )'])
+        expect(spiceOf('Simulation_SPICE', 'SWITCH')).toEqual({ lines: ['S{instanceTitle} {net connector0} {net connector1} {net connector2} {net connector3} M1'], models: ['.model M1 SW vt=0 ron=1'] })
+        expect(spiceOf('Simulation_SPICE', 'D')).toEqual({ lines: ['D{instanceTitle} {net connector1} {net connector0} M1'], models: ['.model M1 D rs=50m cjo=10p'] })
+        expect(spiceOf('Simulation_SPICE', 'NMOS')?.models).toEqual(['.model M1 VDMOS NCHAN'])
+
+        const dual = spiceOf('Amplifier_Operational', 'Opamp_Dual')
+        expect(dual?.lines).toEqual(['X{instanceTitle} {net connector0} {net connector1} {net connector2} {net connector6} {net connector3} {net connector4} {net connector5} {net connector7} kicad_builtin_opamp_dual'])
+        expect(dual?.models.map(model => model.split(' ')[1])).toEqual(['kicad_builtin_opamp', 'kicad_builtin_opamp_dual'])
+        expect(spiceOf('Device', 'R_Potentiometer_Dual')).toBeNull()
+        expect(spiceOf('Transistor_FET', '2N7000')).toBeNull()
+    })
+
+    it('sem os campos, o resistor, o capacitor e a fonte de 2 pinos saem da referência e do Value; o valor do KiCad na notação do SPICE', () => {
+        const two   = load('Device', 'R') as KicadSymbol
+        const fake  = (Reference: string, Value: string) => ({ ...two, properties: { Reference, Value } })
+        const lines = (Reference: string, Value: string) => simulate(fake(Reference, Value), 'M1')?.lines[0] ?? null
+
+        expect(lines('R', '4k7')).toBe('R{instanceTitle} {net connector0} {net connector1} 4.7k')
+        expect(lines('C', '3,3u')).toBe('C{instanceTitle} {net connector0} {net connector1} 3.3u')
+        expect(lines('R', '3,300')).toBe('R{instanceTitle} {net connector0} {net connector1} 3300')
+        expect(lines('R', '1M')).toBe('R{instanceTitle} {net connector0} {net connector1} 1Meg')
+        expect(lines('V', 'DC 5')).toBe('V{instanceTitle} {net connector0} {net connector1} DC 5')
+        expect(fieldsOf(fake('R', 'R')).type).toBe('=')
+        expect(lines('R', 'R')).toBeNull()
+        expect(lines('U', '10k')).toBeNull()
+        expect(['1M', '2.2µ', '1m', '10kHz', '1F', '100MEG', 'x+1'].map(toSpice)).toEqual(['1Meg', '2.2u', '1m', '10k', '1', '100Meg', 'x+1'])
+    })
+})
+
+describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (spec 08 §4)', () => {
+    it('transistor como chave: a base pelo resistor satura o BC547 e acende o LED do coletor', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Transistor_BJT', 'BC547'), kicadId('Device', 'R'), kicadId('Device', 'LED'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const wires: [string, string][] = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector1'], ['3/connector2', '6/connector0'], ['1/connector0', '6/connector0'], ['1/connector1', '4/connector0'], ['4/connector1', '5/connector1'], ['5/connector0', '3/connector0']]
+        const { circuit, sim } = await series(library, parts, wires, doc => setProperty(setProperty(doc, '2', 'resistance', '10kΩ'), '4', 'resistance', '220Ω'))
+        const last = sim.steps - 1
+        expect(circuit.deck).toMatch(/^Q\S+ \S+ \S+ \S+ cm_Transistor_BJT_BC547$/m)
+        expect(sim.getCurrent('5', last)).toBeGreaterThan(0.010)
+        expect(sim.getVoltage('3/connector0', last)).toBeLessThan(2.5)
+        expect(sim.getEffect('5', last).light).toBeGreaterThan(0)
+    })
+
+    it('amp-op da biblioteca SPICE como seguidor: a saída copia o meio do divisor', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'R'), kicadId('Simulation_SPICE', 'OPAMP'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const wires: [string, string][] = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector0'], ['3/connector1', '5/connector0'], ['1/connector0', '5/connector0'], ['2/connector1', '4/connector0'], ['4/connector1', '4/connector4'], ['1/connector1', '4/connector2'], ['4/connector3', '5/connector0']]
+        const { circuit, sim } = await series(library, parts, wires)
+        expect(circuit.deck).toMatch(/^\.subckt kicad_builtin_opamp /m)
+        expect(sim.getVoltage('4/connector4', sim.steps - 1)).toBeCloseTo(2.5, 1)
+    })
+
+    it('bateria e potenciômetro: o cursor divide a tensão da bateria pelo botão, ambos editáveis no inspetor', async () => {
+        const library = makeLibrary()
+        const parts   = [kicadId('Device', 'Battery'), kicadId('Device', 'R_Potentiometer'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        expect(getPropertyDefs(kicadId('Device', 'Battery')).map(item => item.name)).toContain('voltage')
+        expect(getPropertyDefs(kicadId('Device', 'R_Potentiometer')).map(item => item.name)).toContain('knob status')
+
+        const wires: [string, string][] = [['1/connector0', '2/connector0'], ['2/connector2', '1/connector1'], ['1/connector1', '3/connector0']]
+        const { sim } = await series(library, parts, wires, doc => setProperty(setProperty(doc, '1', 'voltage', '9V'), '2', 'knob status', '25%'))
+        expect(sim.getVoltage('2/connector1', sim.steps - 1)).toBeCloseTo(6.75, 2)
+        expect(sim.getEffect('2', sim.steps - 1).smoke).toBe(false)
+    })
+
+    it('fonte senoidal da biblioteca SPICE num resistor: o deck leva o SIN e roda', async () => {
+        const library = makeLibrary()
+        const parts   = [kicadId('Simulation_SPICE', 'VSIN'), kicadId('Device', 'R'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const wires: [string, string][] = [['1/connector0', '2/connector0'], ['2/connector1', '1/connector1'], ['1/connector1', '3/connector0']]
+        const { circuit } = await series(library, parts, wires)
+        expect(circuit.deck).toMatch(/^V\S+ \S+ \S+ DC 0 SIN\( 0 1 1k \) AC 1$/m)
     })
 })
 

@@ -75,8 +75,10 @@ export const KICAD_EQUIVALENTS: Record<string, string> = {
     'Device:C': '100milCeramicCapacitorModuleID', 'Device:C_Small': '100milCeramicCapacitorModuleID',
     'Device:C_Polarized': 'SmallElectrolyticCapacitorModuleID', 'Device:C_Polarized_Small': 'SmallElectrolyticCapacitorModuleID', 'Device:C_Polarized_US': 'SmallElectrolyticCapacitorModuleID',
     'Device:L': '56bed03878064b8286b71d5240035138InductorModuleID', 'Device:L_Small': '56bed03878064b8286b71d5240035138InductorModuleID',
-    'Device:LED': '5mmColorLEDModuleID', 'Device:LED_Small': '5mmColorLEDModuleID',
-    'Device:D': '3254CBFC44diode', 'Device:D_Small': '3254CBFC44diode'
+    ...Object.fromEntries(['LED', 'LED_Small', 'LED_Filled', 'LED_Small_Filled', 'LED_45deg', 'LED_45deg_Filled'].map(name => [`Device:${name}`, '5mmColorLEDModuleID'])),
+    ...Object.fromEntries(['D', 'D_Small', 'D_Filled', 'D_Small_Filled', 'D_45deg', 'D_45deg_Filled'].map(name => [`Device:${name}`, '3254CBFC44diode'])),
+    ...Object.fromEntries(['R_Potentiometer', 'R_Potentiometer_US', 'R_Potentiometer_Small', 'R_Potentiometer_Trim', 'R_Potentiometer_Trim_US', 'R_Potentiometer_MountingPin'].map(name => [`Device:${name}`, 'potentiometer_trimmer_6mm_5_PotentiometerModuleID'])), 'Simulation_SPICE:Potentiometer': 'potentiometer_trimmer_6mm_5_PotentiometerModuleID',
+    'Device:Battery': '5_DCPowerSupplyModuleID', 'Device:Battery_Cell': '5_DCPowerSupplyModuleID', 'Simulation_SPICE:VDC': '5_DCPowerSupplyModuleID'
 }
 
 export const equivalentOf = (moduleId: string) => KICAD_EQUIVALENTS[moduleId.replace(/^cm:/, '').replace(/@.*$/, '')] ?? moduleId

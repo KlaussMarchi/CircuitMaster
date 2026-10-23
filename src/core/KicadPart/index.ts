@@ -3,6 +3,7 @@ import type { Point } from '../Geometry'
 import { escapeXml, fitsFilters, svgOf } from '../KicadDraw'
 import { parentOf, pinsOf, readSymbol, readSymbols, symbolSvg, type KicadPin, type KicadSymbol } from '../KicadSymbol'
 import { breadboardSvg, fitsBreadboard, footprintSvg, padsOf, readFootprint, type KicadFootprint } from '../KicadFootprint'
+import { libraryOf, simulate } from '../KicadSim'
 
 export const KICAD_ID         = /^cm:([^:@]+):([^@]+)(?:@(.+))?$/    // cm:Biblioteca:Símbolo, COM @BibliotecaFp:Footprint QUANDO O FOOTPRINT É ESCOLHIDO
 export const KICAD_SYMBOLS    = 'kicad-symbols'       // RAIZES DO ACERVO DO KICAD NO Source (SERVIDAS EM /kicad/symbols E /kicad/footprints)
@@ -36,20 +37,22 @@ export const footprintPath = (field: string) => {
 
 const SHOWN = ['Description', 'Datasheet']    // CAMPOS DO SÍMBOLO QUE O INSPETOR MOSTRA
 
-type Behavior = { properties: Record<string, string>, names: Record<string, string>, line: string, model: string }
+type Behavior = { properties: Record<string, string>, names: Record<string, string>, lines: string[], model: string }
 
-const RLC_LINE    = (letter: string, value: string) => `${letter}{instanceTitle} {net #1} {net #2} {${value}}`
+const RLC_LINE    = (letter: string, value: string) => [`${letter}{instanceTitle} {net #1} {net #2} {${value}}`]
 const LED_MODEL   = '.MODEL LED_GENERIC D (IS=93.1P RS=42M N=4.61 BV=9 IBV=10U CJO=2.97P VJ=.75 M=.333 TT=4.32U)'          // O DO LED DE 5 mm DO ACERVO DO FRITZING
 const DIODE_MODEL = '.MODEL DI_1N4001 D  ( IS=76.9p RS=42.0m BV=50.0 IBV=5.00u CJO=39.8p  M=0.333 N=1.45 TT=4.32u )'    // O DO 1N4001 DO ACERVO DO FRITZING
 
-// COMO SIMULA CADA PEÇA EQUIVALENTE DO FRITZING: FAMÍLIA E VALORES PADRÃO, O NOME DE CADA PINO DO KICAD (OS EFEITOS DA SIMULAÇÃO PROCURAM Pin 0, +, anode…) E O <spice> COM OS PINOS PELO NÚMERO (#1, #2); NO DIODO E NO LED O PINO 1 É O CATODO
+// COMO SIMULA CADA PEÇA EQUIVALENTE DO FRITZING: FAMÍLIA E VALORES PADRÃO, O NOME DE CADA PINO DO KICAD (OS EFEITOS DA SIMULAÇÃO PROCURAM Pin 0, +, anode…) E O <spice> COM OS PINOS PELO NÚMERO (#1, #2); NO DIODO E NO LED O PINO 1 É O CATODO, NO POTENCIÔMETRO O 2 É O CURSOR
 const BEHAVIORS: Record<string, Behavior> = {
-    ResistorModuleID: { properties: { family: 'Resistor', resistance: '1kΩ', power: '0.25W' }, names: { 1: 'Pin 0', 2: 'Pin 1' }, line: RLC_LINE('R', 'resistance'), model: '' },
-    '100milCeramicCapacitorModuleID': { properties: { family: 'Capacitor [bidirectional]', capacitance: '100nF', voltage: '50V' }, names: { 1: '+', 2: '-' }, line: RLC_LINE('C', 'capacitance'), model: '' },
-    SmallElectrolyticCapacitorModuleID: { properties: { family: 'Capacitor [unidirectional]', capacitance: '10µF', voltage: '25V' }, names: { 1: '+', 2: '-' }, line: RLC_LINE('C', 'capacitance'), model: '' },
-    '56bed03878064b8286b71d5240035138InductorModuleID': { properties: { family: 'Inductor', inductance: '10µH' }, names: {}, line: RLC_LINE('L', 'inductance'), model: '' },
-    '5mmColorLEDModuleID': { properties: { family: 'LED', color: 'Red (633nm)', current: '0.030A' }, names: { 1: 'cathode', 2: 'anode' }, line: 'D{instanceTitle} {net #2} {net #1} LED_GENERIC', model: LED_MODEL },
-    '3254CBFC44diode': { properties: { family: 'Diode', power: '1W' }, names: { 1: 'cathode', 2: 'anode' }, line: 'D{instanceTitle} {net #2} {net #1} DI_1N4001', model: DIODE_MODEL }
+    ResistorModuleID: { properties: { family: 'Resistor', resistance: '1kΩ', power: '0.25W' }, names: { 1: 'Pin 0', 2: 'Pin 1' }, lines: RLC_LINE('R', 'resistance'), model: '' },
+    '100milCeramicCapacitorModuleID': { properties: { family: 'Capacitor [bidirectional]', capacitance: '100nF', voltage: '50V' }, names: { 1: '+', 2: '-' }, lines: RLC_LINE('C', 'capacitance'), model: '' },
+    SmallElectrolyticCapacitorModuleID: { properties: { family: 'Capacitor [unidirectional]', capacitance: '10µF', voltage: '25V' }, names: { 1: '+', 2: '-' }, lines: RLC_LINE('C', 'capacitance'), model: '' },
+    '56bed03878064b8286b71d5240035138InductorModuleID': { properties: { family: 'Inductor', inductance: '10µH' }, names: {}, lines: RLC_LINE('L', 'inductance'), model: '' },
+    '5mmColorLEDModuleID': { properties: { family: 'LED', color: 'Red (633nm)', current: '0.030A' }, names: { 1: 'cathode', 2: 'anode' }, lines: ['D{instanceTitle} {net #2} {net #1} LED_GENERIC'], model: LED_MODEL },
+    '3254CBFC44diode': { properties: { family: 'Diode', power: '1W' }, names: { 1: 'cathode', 2: 'anode' }, lines: ['D{instanceTitle} {net #2} {net #1} DI_1N4001'], model: DIODE_MODEL },
+    potentiometer_trimmer_6mm_5_PotentiometerModuleID: { properties: { family: 'Potentiometer', 'maximum resistance': '10kΩ', 'knob status': '50%', power: '0.5W' }, names: { 1: 'leg1', 2: 'wiper', 3: 'leg2' }, lines: ['R{instanceTitle}A {net #1} {net #2} {{knob status}/100*{maximum resistance}}', 'R{instanceTitle}B {net #3} {net #2} {{maximum resistance}-{knob status}/100*{maximum resistance}}'], model: '' },
+    '5_DCPowerSupplyModuleID': { properties: { family: 'voltage source', voltage: '5V', 'internal resistance': '0.1Ω' }, names: { 1: '+', 2: '-' }, lines: ['V{instanceTitle} {net #1}_{instanceTitle}_aux {net #2} DC {voltage}', 'R{instanceTitle} {net #1}_{instanceTitle}_aux {net #1} {internal resistance}'], model: '' }
 }
 
 const BOARD  = '#2d5a3d'    // PLACA ADAPTADORA, VERDE DE PCB
@@ -69,8 +72,8 @@ const adapterSvg = (name: string, count: number) => {
 
 const property = (name: string, value: string) => `<property name="${escapeXml(name)}">${escapeXml(value)}</property>`
 
-// PEÇA DO FRITZING A PARTIR DO SÍMBOLO E DO FOOTPRINT DO KICAD: O .fzp E OS SVG DAS VISTAS COMO UM PACOTE; CADA PINO É UM CONECTOR, LIGADO NA PCB AO PAD DE MESMO NÚMERO; SEM FOOTPRINT A PEÇA SÓ EXISTE NO ESQUEMÁTICO (SPEC 08 §4)
-export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: KicadFootprint | null, field = '', equivalent = ''): Bundle => {
+// PEÇA DO FRITZING A PARTIR DO SÍMBOLO E DO FOOTPRINT DO KICAD: O .fzp E OS SVG DAS VISTAS COMO UM PACOTE; CADA PINO É UM CONECTOR, LIGADO NA PCB AO PAD DE MESMO NÚMERO; SEM FOOTPRINT A PEÇA SÓ EXISTE NO ESQUEMÁTICO; O <spice> VEM DA EQUIVALENTE, SENÃO DOS CAMPOS Sim.* (spice É O TEXTO DA BIBLIOTECA SPICE QUE ELES CITAM) (SPEC 08 §4)
+export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: KicadFootprint | null, field = '', equivalent = '', spice = ''): Bundle => {
     const [, library, name, chosen] = moduleId.match(KICAD_ID) ?? ['', '', symbol.name]
     const base     = `cm_${library}_${name}${chosen ? `_${footprint?.name ?? ''}` : ''}`.replace(/[^\w.-]+/g, '_')
     const pins     = pinsOf(symbol)
@@ -92,13 +95,20 @@ export const kicadBundle = (moduleId: string, symbol: KicadSymbol, footprint: Ki
         return `<connector id="connector${i}" name="${escapeXml(label)}" type="${pad && !pad.drill ? 'pad' : 'male'}"><description>${escapeXml(`${pin.number} ${label} (${pin.type})`)}</description><views>${plug}<schematicView><p layer="schematic" svgId="connector${i}pin" terminalId="connector${i}terminal"/></schematicView>${board}</views></connector>`
     })
     const fields   = { family: library, ...behavior?.properties, 'kicad symbol': `${library}:${name}`, ...Object.fromEntries(SHOWN.flatMap(key => symbol.properties[key] && symbol.properties[key] !== '~' ? [[key.toLowerCase(), symbol.properties[key]]] : [])), ...footprint ? { footprint: field, package: footprint.name } : {}, 'footprint filters': symbol.properties.ki_fp_filters ?? '' }
-    const spice    = behavior ? `<spice><line>${escapeXml(behavior.line.replace(/#(\w+)/g, (_, pin: string) => `connector${ids.get(pin)}`))}</line>${behavior.model ? `<model>${escapeXml(behavior.model)}</model>` : ''}</spice>\n` : ''
+    const own      = behavior ? { lines: behavior.lines.map(line => line.replace(/#(\w+)/g, (_, pin: string) => `connector${ids.get(pin)}`)), models: behavior.model ? [behavior.model] : [] } : simulate(symbol, base.replace(/\W+/g, '_'), spice)
+    const element  = own ? `<spice>${own.lines.map(line => `<line>${escapeXml(line)}</line>`).join('')}${own.models.map(model => `<model>${escapeXml(model)}</model>`).join('')}</spice>\n` : ''
     const label    = (symbol.properties.Reference ?? 'U').replace(/[?#]+$/, '') || 'U'
-    const fzp      = `<?xml version="1.0" encoding="UTF-8"?>\n<module moduleId="${escapeXml(moduleId)}">\n<version>1</version><author>CircuitMaster</author><title>${escapeXml(name)}</title><label>${escapeXml(label)}</label><description>${escapeXml(symbol.properties.Description ?? '')}</description>\n<properties>${Object.entries(fields).map(([key, value]) => property(key, value)).join('')}</properties>\n${spice}<views>${views.join('')}</views>\n<connectors>${connectors.join('\n')}</connectors>\n</module>\n`
+    const fzp      = `<?xml version="1.0" encoding="UTF-8"?>\n<module moduleId="${escapeXml(moduleId)}">\n<version>1</version><author>CircuitMaster</author><title>${escapeXml(name)}</title><label>${escapeXml(label)}</label><description>${escapeXml(symbol.properties.Description ?? '')}</description>\n<properties>${Object.entries(fields).map(([key, value]) => property(key, value)).join('')}</properties>\n${element}<views>${views.join('')}</views>\n<connectors>${connectors.join('\n')}</connectors>\n</module>\n`
     return { sketch: null, parts: [{ name: `part.${base}.fzp`, text: fzp }], svgs, others: [], bin: null }
 }
 
 type Read = (root: string, path: string) => Promise<string | null>
+
+// TEXTO DA BIBLIOTECA SPICE QUE OS CAMPOS Sim.* DO SÍMBOLO CITAM, LIDO DO ACERVO DE SÍMBOLOS
+const readSpice = async (symbol: KicadSymbol, read: Read) => {
+    const file = libraryOf(symbol)
+    return file ? await read(KICAD_SYMBOLS, file) ?? '' : ''
+}
 
 // SÍMBOLO DO moduleId LIDO DO ACERVO, COM O PAI SE FOR DERIVADO; NULO SEM ELE
 const readKicadSymbol = async (moduleId: string, read: Read) => {
@@ -124,7 +134,7 @@ export const readKicadPart = async (moduleId: string, read: Read, equivalent = '
 
     const field = chosen ?? footprintOf(symbol)
     const file  = footprintPath(field)
-    return kicadBundle(moduleId, symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field, equivalent)
+    return kicadBundle(moduleId, symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field, equivalent, await readSpice(symbol, read))
 }
 
 const PIN = 2.54    // mm: PASSO E COMPRIMENTO DOS PINOS DO SÍMBOLO GERADO
@@ -159,7 +169,7 @@ export const importKicad = async (name: string, text: string, read: Read): Promi
     const bundles = await Promise.all(symbols.map(async symbol => {
         const field = footprintOf(symbol)
         const file  = footprintPath(field)
-        return kicadBundle(kicadId(base, symbol.name), symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field)
+        return kicadBundle(kicadId(base, symbol.name), symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field, '', await readSpice(symbol, read))
     }))
     return bundles.length ? merge(bundles) : 'biblioteca de símbolos do KiCad ilegível ou sem símbolos com pinos'
 }
