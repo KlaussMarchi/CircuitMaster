@@ -16,11 +16,11 @@ const KICAD_FILES = ['.kicad_pro', '.kicad_sch', '.kicad_pcb', '.kicad_sym', '.k
 
 const field = (text: string, name: string) => text.match(new RegExp(`\\(property "${name}" "((?:[^"\\\\]|\\\\.)*)"`))?.[1] ?? ''
 
-// RESUMO DE CADA SÍMBOLO PARA A BUSCA UNIFICADA: [BIBLIOTECA, NOME, DESCRIÇÃO, PALAVRAS-CHAVE] (SPEC 08 §5)
+// RESUMO DE CADA SÍMBOLO PARA A BUSCA UNIFICADA: "BIBLIOTECA⇥NOME⇥DESCRIÇÃO⇥PALAVRAS-CHAVE", UM TEXTO POR SÍMBOLO, QUE O NAVEGADOR LÊ MAIS DEPRESSA QUE LISTAS (SPEC 08 §5)
 const getSymbols = (files: string[]) => files.flatMap(file => {
     const [folder, name] = file.split('/')
     const text           = fs.readFileSync(path.join(ROOTS.symbols, file), 'utf8')
-    return folder?.endsWith('.kicad_symdir') && name ? [[folder.slice(0, -'.kicad_symdir'.length), name.slice(0, -'.kicad_sym'.length), field(text, 'Description'), field(text, 'ki_keywords')]] : []
+    return folder?.endsWith('.kicad_symdir') && name ? [[folder.slice(0, -'.kicad_symdir'.length), name.slice(0, -'.kicad_sym'.length), field(text, 'Description'), field(text, 'ki_keywords')].map(value => value.replaceAll('\t', ' ')).join('\t')] : []
 })
 
 // LISTAGENS DAS BIBLIOTECAS (UM .kicad_sym POR SÍMBOLO NAS PASTAS .kicad_symdir, UM .kicad_mod POR FOOTPRINT), DO RESUMO DOS SÍMBOLOS, DOS MODELOS DE PROJETO E DOS DEMOS

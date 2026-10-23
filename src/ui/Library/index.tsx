@@ -210,6 +210,7 @@ export const Library = () => {
     const library             = useStore(state => state.library)
     const bins                = useStore(state => state.bins)
     const indexed             = useStore(state => state.indexed)
+    const symbols             = useStore(state => state.indexed.symbols)
     const ready               = useStore(state => state.ready)
     const mine                = useStore(state => state.mine)
     const userBins            = useStore(state => state.userBins)
@@ -248,7 +249,7 @@ export const Library = () => {
         return () => {
             live = false
         }
-    }, [query, catalog, ready])
+    }, [query, catalog, ready, symbols])
 
     const kept = useMemo(() => [...new Set([...mine, ...userBins.flatMap(bin => bin.moduleIds)])], [mine, userBins])
 

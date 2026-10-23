@@ -37,6 +37,8 @@ const PROGRESS     = 100
 const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR NO MEIO DA PRIMEIRA INDEXAÇÃO NÃO PERDE O QUE JÁ FOI LIDO
 const SEARCH_MAX   = 300
 const KICAD_MAX    = 100     // SÍMBOLOS DO KICAD NO FIM DE CADA BUSCA
+const KICAD_BATCH  = 2000    // SÍMBOLOS MONTADOS POR VEZ: ENTRE UM LOTE E OUTRO O WORKER ATENDE A BUSCA EM CURSO
+const KICAD_DELAY  = 1500    // ms DEPOIS DO ACERVO PRONTO: A PRIMEIRA BUSCA DE QUEM ACABOU DE ABRIR NÃO DIVIDE O WORKER COM A CARGA DOS SÍMBOLOS
 const BINS         = [['Core', 'bins/core.fzb'], ['Simulador', 'bins/more/sim.fzb']]    // À FRENTE, NESTA ORDEM; OS OUTROS BINS DO ACERVO SEGUEM PELO TÍTULO
 const ENGINE_FAULT = 'InternalError'
 const FETCH_MS     = 15000    // LEITURA PRESA NO SERVIDOR VIRA UMA SEGUNDA TENTATIVA EM VEZ DE PRENDER A INDEXAÇÃO
@@ -195,12 +197,21 @@ const readBins = async () => {
     scope.postMessage({ type: 'bin', bins })
 }
 
-let kicad: Entry[] = []
+const kicad: Entry[] = []
 
-// SÍMBOLOS DO KICAD NA BUSCA UNIFICADA: O RESUMO QUE O SERVIDOR MONTA (BIBLIOTECA, NOME, DESCRIÇÃO, PALAVRAS-CHAVE), SEM LER CADA ARQUIVO (SPEC 08 §5)
+const kicadEntry = (row: string): Entry => {
+    const [library, name, description, keywords] = row.split('\t')
+    return { moduleId: kicadId(library, name), root: KICAD_SYMBOLS, path: symbolPath(library, name), title: name, family: `KiCad · ${library}`, label: '', kind: 'part', icon: '', obsolete: false, properties: { description, keywords }, haystack: `${library} ${name} ${description} ${keywords}`.toLowerCase() }
+}
+
+// SÍMBOLOS DO KICAD NA BUSCA UNIFICADA: O RESUMO QUE O SERVIDOR MONTA, EM LOTES (SPEC 08 §5)
 const readKicad = async () => {
-    const rows: string[][] = JSON.parse(await fetchText('/kicad/symbols-index.json') ?? '[]')
-    kicad = rows.map(([library, name, description, keywords]) => ({ moduleId: kicadId(library, name), root: KICAD_SYMBOLS, path: symbolPath(library, name), title: name, family: `KiCad · ${library}`, label: '', kind: 'part', icon: '', obsolete: false, properties: { description, keywords }, haystack: normalize(`${library} ${name} ${description} ${keywords}`) }))
+    const rows: string[] = JSON.parse(await fetchText('/kicad/symbols-index.json') ?? '[]')
+
+    for (let start = 0; start < rows.length; start += KICAD_BATCH) {
+        kicad.push(...rows.slice(start, start + KICAD_BATCH).map(kicadEntry))
+        await new Promise(resolve => setTimeout(resolve))
+    }
 }
 
 // SÍMBOLOS COM TODOS OS TERMOS: O NOME IGUAL AO PRIMEIRO TERMO, DEPOIS O QUE COMEÇA POR ELE, NOMES CURTOS ANTES; SEM A NOTA DO ACERVO, QUE NÃO CABE NO ORÇAMENTO COM 23 MIL SÍMBOLOS
@@ -217,7 +228,7 @@ const indexed = index()
 
 indexed.catch(() => {})    // A FALHA DO ÍNDICE CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
 indexed.then(readBins).catch(() => {})
-const symbols = indexed.then(readKicad).catch(() => {})    // A BUSCA ESPERA OS SÍMBOLOS DO KICAD: SEM ISSO A PRIMEIRA BUSCA DEPOIS DE ABRIR NÃO OS VÊ
+indexed.then(() => new Promise(resolve => setTimeout(resolve, KICAD_DELAY))).then(readKicad).then(() => scope.postMessage({ type: 'symbols', count: kicad.length })).catch(() => {})    // A BUSCA NÃO ESPERA OS SÍMBOLOS: QUANDO CHEGAM, O PAINEL REFAZ A BUSCA EM CURSO
 
 // PEDIDO QUE ESPERA AS PEÇAS APARECEREM NA LEITURA; O ÍNDICE PRONTO TAMBÉM O LIBERA (PEÇA GERADA OU INEXISTENTE)
 const arrival = (moduleIds: string[]) => new Promise<void>(resolve => {
@@ -236,7 +247,7 @@ serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async
     await indexed
 
     if (data.type === 'search')
-        return symbols.then(() => search(data.text))
+        return search(data.text)
 
     if (data.type === 'family')
         return entries.filter(entry => !entry.obsolete && entry.family.toLowerCase() === data.family.toLowerCase()).map(strip)

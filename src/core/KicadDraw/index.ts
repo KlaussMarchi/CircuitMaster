@@ -25,3 +25,9 @@ export const arcPath = (a: Point, m: Point, b: Point) => {
 export const svgOf = (width: number, height: number, body: string) => `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny" width="${width / 1000}in" height="${height / 1000}in" viewBox="0 0 ${width} ${height}">\n${body}\n</svg>\n`
 
 export const escapeXml = (text: string) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+
+// FILTRO DE FOOTPRINT DO KICAD (ki_fp_filters: * E ?) COMO REGEX
+const glob = (pattern: string) => new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*').replaceAll('?', '.')}$`)
+
+// O FOOTPRINT "Biblioteca:Nome" CASA COM ALGUM DOS FILTROS DO SÍMBOLO, PELO NOME OU POR Biblioteca:Nome
+export const fitsFilters = (field: string, filters: string) => filters.split(/\s+/).filter(Boolean).map(glob).some(filter => filter.test(field) || filter.test(field.split(':')[1] ?? ''))

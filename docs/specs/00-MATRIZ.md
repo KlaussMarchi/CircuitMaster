@@ -13,7 +13,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 |---|---|---|---|---|
 | Fritzing | 251 | 209 | 17 | 25 |
 | KiCad esquemático, comuns e projeto | 404 | 121 | 270 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 30 | 389 | 2 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 31 | 388 | 2 |
 
 ## Fritzing
 
@@ -767,7 +767,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-074 | Árvore de bibliotecas (Library Tree) | KiCad › Common | feita | 0 | e2e/ui.spec.ts | painel Peças pelo trilho |
 | KC-075 | Ir para o gerenciador de projeto (Switch to Project Manager) | KiCad › Common | falta | 6 | — | — |
 | KC-076 | Painel de propriedades (Properties) | KiCad › Common | feita | 0 | e2e/ui.spec.ts | inspetor à direita |
-| KC-077 | Navegador de bibliotecas de símbolos (Symbol Library Browser) | KiCad › Common | falta | 5 | — | P1; parcial: o painel Peças navega o acervo do Fritzing |
+| KC-077 | Navegador de bibliotecas de símbolos (Symbol Library Browser) | KiCad › Common | falta | 5 | — | P1; parcial: o painel Peças navega o acervo do Fritzing e a busca acha os 22.905 símbolos do KiCad (spec 08 §5), sem a árvore de bibliotecas |
 | KC-078 | Editor de símbolos (Symbol Editor) | KiCad › Common | falta | 5 | — | P1; parcial: editor de peças do Fritzing (.fzp) |
 | KC-079 | Desenhar caixas delimitadoras (Draw Bounding Boxes) | KiCad › Common | não se aplica | — | — | auxílio de depuração do KiCad |
 | KC-080 | Sempre mostrar o cursor em cruz (Always Show Crosshairs) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Cursor › Sempre mostrar o cursor em cruz (sem isso, aparece com o cursor do teclado) |
@@ -1247,7 +1247,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-143 | Reajustar todos os padrões de comprimento (Update All Tuning Patterns) | KiCad › PCB Editor | falta | 11 | — | P2 |
 | KP-144 | Refazer os geradores selecionados (Rebuild Selected Generators) | KiCad › PCB Editor | falta | 11 | — | P2 |
 | KP-145 | Gerenciador de geradores (Generators Manager) | KiCad › PCB Editor | falta | 11 | — | P2 |
-| KP-146 | Trocar o footprint (Change Footprint…) | KiCad › PCB Editor | falta | 5 | — | P1; parcial: trocar o encapsulamento no inspetor troca a peça dentro da família |
+| KP-146 | Trocar o footprint (Change Footprint…) | KiCad › PCB Editor | feita | 5 | e2e/kicad.spec.ts | campo Footprint no inspetor da peça do KiCad, com os footprints que casam com os filtros do símbolo; troca a peça e mantém os fios (spec 08 §4); nas peças do Fritzing, o encapsulamento troca dentro da família |
 | KP-147 | Trocar footprints em lote (Change Footprints...) | KiCad › PCB Editor | falta | 5 | — | P1 |
 | KP-148 | Limpar gráficos redundantes (Cleanup Graphics...) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-149 | Limpar trilhas e vias (Cleanup Tracks & Vias...) | KiCad › PCB Editor | falta | 10 | — |  |

@@ -58,14 +58,27 @@ inicial.
   `.fzz`. Conector SMD é do tipo `pad`, os demais `male`.
 - A `Library` monta o pacote (`.fzp` e os SVG das vistas) na primeira carga e o trata como peça de pacote: o `.fzz`
   gravado leva a peça inteira e reabre sem o acervo do KiCad.
+- **Peças básicas simulam** como a equivalente do Fritzing (`KICAD_EQUIVALENTS` em `core/Properties`): resistor
+  (`R`, `R_Small`, `R_US`), capacitor (`C`, `C_Small`), eletrolítico (`C_Polarized…`), indutor, LED e diodo da
+  biblioteca `Device`. A equivalente dá as propriedades editáveis do inspetor (resistência, capacitância…), a
+  família, que liga os efeitos da simulação (fumaça, brilho), e o `<spice>`: os mesmos modelos do LED de 5 mm e do
+  1N4001 do acervo do Fritzing, com os pinos citados pelo número do KiCad (`#1`, `#2`; no diodo e no LED o pino 1 é o
+  catodo), e os pinos ganham os nomes que os efeitos procuram (`Pin 0`, `+`, `anode`…).
+- **Trocar o footprint** (KP-146): o `.fzp` guarda o footprint em uso (`footprint`, "Biblioteca:Nome") e os filtros do
+  símbolo; o inspetor oferece os footprints da listagem que casam com os filtros, e escolher um troca a instância
+  pela peça `…@Biblioteca:Nome`, que mantém os fios (os conectores são os mesmos pinos). Nome que não existe nas
+  bibliotecas dá mensagem e não troca. A peça sem footprint mostra o campo vazio: escolher um dá a protoboard e a
+  PCB.
 
 ## 5. BUSCA UNIFICADA
 
-- O servidor de dados monta `symbols-index.json` (biblioteca, nome, descrição, palavras-chave de cada símbolo; 0,3 s
-  para os 22.905) com as outras listagens.
-- O indexador, depois do acervo do Fritzing, carrega esse resumo; a busca devolve as peças do Fritzing pela nota de
-  `core/Search` e, depois, até 100 símbolos do KiCad que têm todos os termos: o nome igual ao primeiro termo, depois o
-  que começa por ele, nomes curtos antes. A busca espera o resumo, então a primeira busca depois de abrir já os vê.
+- O servidor de dados monta `symbols-index.json`, um texto `biblioteca⇥nome⇥descrição⇥palavras-chave` por símbolo
+  (0,3 s para os 22.905), com as outras listagens.
+- O indexador carrega esse resumo 1,5 s depois de o acervo do Fritzing ficar pronto e monta as entradas em lotes de
+  2.000, então a primeira busca de quem acabou de abrir não divide o worker com a carga. A busca devolve as peças do
+  Fritzing pela nota de `core/Search` e, depois, até 100 símbolos do KiCad que têm todos os termos: o nome igual ao
+  primeiro termo, depois o que começa por ele, nomes curtos antes (2 ms nos 22.905). Ela não espera os símbolos:
+  quando chegam, o indexador avisa (`symbols`) e o painel refaz a busca em curso.
 - No painel de peças o símbolo aparece com a família "KiCad · <Biblioteca>" e põe como qualquer peça.
 
 ## 6. PLANO DE TESTES
@@ -79,3 +92,5 @@ inicial.
 | Peça de três vistas pela `Library`: pinos nas três vistas, pacote do `.fzz`, footprint padrão e escolhido | `tests/kicad.test.ts` |
 | Fio no esquemático liga as mesmas portas na protoboard e na PCB | `tests/kicad.test.ts` |
 | Busca unificada, pôr no quadro, as três vistas e o `.fzz` com a peça | `e2e/kicad.spec.ts` |
+| Resistor e LED do KiCad acendem o LED com a fonte DC; eletrolítico do KiCad carrega com τ = RC | `tests/kicad.test.ts` |
+| Footprint no inspetor: as opções do filtro, a troca mantém os fios, nome inexistente avisa | `e2e/kicad.spec.ts` |

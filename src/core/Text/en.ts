@@ -433,6 +433,7 @@ export const EN: Record<string, string> = {
     'Conector sob o cursor': 'Connector under the cursor',
     'Descrição': 'Description',
     'Símbolo do KiCad': 'KiCad symbol',
+    '{0}: footprint não encontrado nas bibliotecas do KiCad': '{0}: footprint not found in the KiCad libraries',
     'Folha de dados': 'Datasheet',
     'Footprint': 'Footprint',
     '{0} conectores': '{0} connectors',

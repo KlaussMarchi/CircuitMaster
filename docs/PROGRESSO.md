@@ -684,11 +684,26 @@ e gerenciadores de bibliotecas, assistente e verificadores); vai em commits parc
 2. **A primeira busca depois de abrir não via os símbolos do KiCad**: ela rodava antes de o resumo chegar e não
    voltava a rodar. A busca espera o resumo (`workers/Indexer`).
 
+- **Peças básicas do KiCad simulam** (resistor, capacitores, indutor, LED e diodo da `Device`) pela equivalente do
+  Fritzing (`KICAD_EQUIVALENTS`): propriedades editáveis, família dos efeitos e o mesmo `<spice>`, com os pinos pelo
+  número do KiCad. Teste: `tests/kicad.test.ts` (LED aceso com resistor do KiCad; eletrolítico carrega com τ = RC).
+- **Trocar o footprint no inspetor** (KP-146): os footprints que casam com os filtros do símbolo; a troca mantém os
+  fios. Teste: `e2e/kicad.spec.ts`.
+
+3. **A busca do KiCad pesava na primeira busca depois de abrir** (achado pelo `perf`: 54 a 82 ms contra 50): o
+   resumo de 3,4 MB era montado de uma vez no worker. Agora começa 1,5 s depois do acervo pronto, em lotes, a busca
+   não o espera e o painel refaz a busca quando os símbolos chegam. A primeira busca segue em 43 a 49 ms com a
+   máquina carregada (jogo e emulador abertos), contra 17 a 34 ms na fase 3: medir de novo com a máquina livre.
+4. **JS inicial em 712 KB**: o campo de footprint e as medidas da ponta carregam sob demanda (`ui/FootprintField`,
+   `ui/Measures`) e a `Library` passa a equivalente do Fritzing ao `KicadPart` (o import de `core/Properties` por ele
+   partia o módulo num arquivo próprio): 708,6 KB.
+5. **Teste de desempenho: o campo de busca não limpava às vezes**: a medida escreve pelo setter nativo e limpava com o
+   `fill('')` do Playwright, que o React pode não ver; com o painel re-renderizando (os símbolos chegando), o texto
+   antigo voltava. Agora limpa pelo mesmo setter (`e2e/perf.spec.ts`).
+
 ### Próximo
 
-- Trocar o footprint no inspetor (KP-146), entre os que casam com o `ki_fp_filters`; o `moduleId` já aceita.
-- `<spice>` das peças básicas do KiCad (R, C, L, D, LED, transistores) para simular (seção 12: "simula quando tem
-  modelo").
+- Transistores e CIs do KiCad com modelo (os de biblioteca com `Sim.*`) na simulação.
 - Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
   `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
 - Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.

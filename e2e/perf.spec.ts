@@ -82,8 +82,13 @@ const searchTime = (page: Page, text: string) => page.evaluate(text => new Promi
     input.dispatchEvent(new Event('input', { bubbles: true }))
 }), text)
 
+// LIMPA PELO MESMO SETTER NATIVO DO searchTime: DEPOIS DELE O fill DO PLAYWRIGHT PODE NÃO SER VISTO PELO React E O TEXTO VOLTA NA RENDERIZAÇÃO SEGUINTE
 const clearSearch = async (page: Page) => {
-    await page.getByRole('searchbox', { name: 'Buscar peça' }).fill('')
+    await page.evaluate(() => {
+        const input = document.querySelector('input[aria-label="Buscar peça"]') as HTMLInputElement
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
     await expect(page.locator('.lp .results button')).toHaveCount(0)
 }
 

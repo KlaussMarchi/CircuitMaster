@@ -2,7 +2,7 @@ import { findSvg, type PartLocation, type Source } from '../../core/Library'
 import type { BinTab, Found } from '../../workers/Indexer'
 import { Supervisor } from '../Supervisor'
 
-export type IndexerStatus = { type: 'progress', done: number, total: number } | { type: 'ready', count: number, total: number } | { type: 'bin', bins: BinTab[] }
+export type IndexerStatus = { type: 'progress', done: number, total: number } | { type: 'ready', count: number, total: number } | { type: 'bin', bins: BinTab[] } | { type: 'symbols', count: number }
 
 // ESCOLHE NA FAMÍLIA A PEÇA COM O VALOR PEDIDO E O MAIOR NÚMERO DE OUTRAS PROPRIEDADES IGUAIS (SPEC 01 §8.1)
 export const pickSwap = (family: Found[], current: Record<string, string>, name: string, value: string) => family.filter(entry => entry.properties[name] === value).map(entry => [entry, Object.entries(current).filter(([key, other]) => key !== name && entry.properties[key] === other).length] as const).sort((a, b) => b[1] - a[1])[0]?.[0]
@@ -55,6 +55,11 @@ export class Catalog implements Source {
     family = (family: string) => this.request<Found[]>({ type: 'family', family }, [])
 
     locate = (moduleIds: string[]) => this.request<Record<string, PartLocation>>({ type: 'locate', moduleIds }, {})
+
+    footprintList: Promise<string[]> | null = null
+
+    // FOOTPRINTS DO KICAD COMO "Biblioteca:Nome", LIDOS UMA VEZ (TROCA DE FOOTPRINT NO INSPETOR)
+    footprints = () => this.footprintList ??= fetchText('/kicad/footprints.json').then(text => (JSON.parse(text ?? '[]') as string[]).map(file => file.replace(/\.pretty\/(.+)\.kicad_mod$/, ':$1')))
 
     read = (root: string, path: string) => fetchText(root.startsWith('kicad-') ? `/kicad/${root.slice(6)}/${path}` : `/fritzing/${root}/${path}`)    // AS BIBLIOTECAS DO KICAD (kicad-symbols, kicad-footprints) VÊM DE /kicad
 

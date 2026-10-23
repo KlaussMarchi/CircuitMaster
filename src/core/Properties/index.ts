@@ -69,7 +69,19 @@ export const PROPERTY_DEFS: PropertyDef[] = [
     def('resistance', 'Ω', 0, 9.9e9, '220', ['ResistorModuleID'])
 ]
 
-export const getPropertyDefs = (moduleId: string) => PROPERTY_DEFS.filter(item => item.suffixes.some(suffix => moduleId.toLowerCase().endsWith(suffix.toLowerCase())))
+// SÍMBOLOS DO KICAD QUE SE COMPORTAM COMO UMA PEÇA DO FRITZING: AS PROPRIEDADES EDITÁVEIS, A FAMÍLIA E O MODELO SPICE VÊM DELA (SPEC 08 §4)
+export const KICAD_EQUIVALENTS: Record<string, string> = {
+    'Device:R': 'ResistorModuleID', 'Device:R_Small': 'ResistorModuleID', 'Device:R_US': 'ResistorModuleID', 'Device:R_Small_US': 'ResistorModuleID',
+    'Device:C': '100milCeramicCapacitorModuleID', 'Device:C_Small': '100milCeramicCapacitorModuleID',
+    'Device:C_Polarized': 'SmallElectrolyticCapacitorModuleID', 'Device:C_Polarized_Small': 'SmallElectrolyticCapacitorModuleID', 'Device:C_Polarized_US': 'SmallElectrolyticCapacitorModuleID',
+    'Device:L': '56bed03878064b8286b71d5240035138InductorModuleID', 'Device:L_Small': '56bed03878064b8286b71d5240035138InductorModuleID',
+    'Device:LED': '5mmColorLEDModuleID', 'Device:LED_Small': '5mmColorLEDModuleID',
+    'Device:D': '3254CBFC44diode', 'Device:D_Small': '3254CBFC44diode'
+}
+
+export const equivalentOf = (moduleId: string) => KICAD_EQUIVALENTS[moduleId.replace(/^kicad:/, '').replace(/@.*$/, '')] ?? moduleId
+
+export const getPropertyDefs = (moduleId: string) => PROPERTY_DEFS.filter(item => item.suffixes.some(suffix => equivalentOf(moduleId).toLowerCase().endsWith(suffix.toLowerCase())))
 
 export const getSymbol = (moduleId: string, name: string) => getPropertyDefs(moduleId).find(item => item.name === name)?.symbol ?? ''
 

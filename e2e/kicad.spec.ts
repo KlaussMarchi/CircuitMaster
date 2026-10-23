@@ -45,3 +45,28 @@ test('Busca unificada: um símbolo do KiCad aparece na busca, entra no esquemát
     const saved = await app.download(() => page.keyboard.press('Control+s'))
     expect(saved.bytes.includes('part.kicad_Timer_NE555P.fzp')).toBe(true)
 })
+
+// TROCA DE FOOTPRINT NO INSPETOR: OS QUE CASAM COM OS FILTROS DO SÍMBOLO; A PEÇA TROCA E OS FIOS FICAM (KP-146, SPEC 08 §4)
+test('Footprint da peça do KiCad: o inspetor oferece os que casam com o símbolo e trocar mantém os fios', async ({ app, page }) => {
+    await page.evaluate(async () => {
+        const { addPart } = cm.store.getState()
+        await addPart('kicad:Device:R', [0, 0])
+        await addPart('kicad:Device:R', [200, 0])
+        await cm.store.getState().connect('1/connector1', '2/connector0')
+        cm.store.getState().select(['1'])
+    })
+    const panel = page.getByRole('complementary', { name: 'Inspetor' })
+    const field = panel.locator('.field').filter({ hasText: 'Footprint' }).locator('input')
+    await expect(field).toHaveValue('Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal')
+    await expect.poll(() => field.evaluate(input => (input as HTMLInputElement).list?.options.length ?? 0)).toBeGreaterThan(50)
+
+    await field.fill('Resistor_SMD:R_0805_2012Metric')
+    await field.press('Enter')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().doc.instances['1']?.moduleIdRef)).toBe('kicad:Device:R@Resistor_SMD:R_0805_2012Metric')
+    expect(await page.evaluate(() => cm.store.getState().netlist?.getNet('pcbView', '1/connector1'))).toContain('2/connector0')
+    await expect(panel.getByText('R_0805_2012Metric').first()).toBeVisible()
+
+    await field.fill('Nada:Inexistente')
+    await field.press('Enter')
+    await expect.poll(() => app.message()).toMatch(/footprint não encontrado/)
+})

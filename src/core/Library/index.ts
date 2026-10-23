@@ -6,6 +6,7 @@ import type { Bundle, BundleFile, Instance } from '../Sketch'
 import { generateFzp, generateSvg, needsParametric, setParametric, getNetLabel, holeSvg, isResizableBoard, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg, stripboardSvg } from '../Generator'
 import { MIL_PER_INCH } from '../Units'
 import { Font, type Fonts } from '../Font'
+import { equivalentOf } from '../Properties'
 
 export type PartLocation = { root: string, path: string }
 
@@ -79,7 +80,7 @@ export class Library {
     async load(moduleIds: string[]) {
         const missing  = [...new Set(moduleIds)].filter(id => !this.parts.has(id))
         const kicad    = missing.filter(id => id.startsWith(KICAD))
-        const bundles  = kicad.some(id => !this.bundled.has(id)) ? await import('../KicadPart').then(module => Promise.all(kicad.filter(id => !this.bundled.has(id)).map(id => module.readKicadPart(id, (root, path) => this.source.read(root, path))))) : []
+        const bundles  = kicad.some(id => !this.bundled.has(id)) ? await import('../KicadPart').then(module => Promise.all(kicad.filter(id => !this.bundled.has(id)).map(id => module.readKicadPart(id, (root, path) => this.source.read(root, path), equivalentOf(id))))) : []
         bundles.forEach(bundle => bundle && this.addBundle(bundle))
         const located  = missing.length > kicad.length ? await this.source.locate(missing.filter(id => !kicad.includes(id))) : {}
         const loaded   = await Promise.all(missing.map(id => this.loadOne(id, located[id])))

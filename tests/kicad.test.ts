@@ -11,7 +11,15 @@ import { emptyDoc, keyOf } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
 import { Netlist } from '../src/core/Netlist'
 import { kicadId } from '../src/core/KicadPart'
-import { createInstance, createWire } from '../src/engine/Edit'
+import { createInstance, createWire, setProperty } from '../src/engine/Edit'
+import { SIGNAL_KEY, buildCircuit } from '../src/core/Spice'
+import { Ngspice } from '../src/core/Ngspice'
+import { Simulation } from '../src/engine/Simulation'
+import { getStepResponse } from '../src/engine/Response'
+import { getPropertyDefs } from '../src/core/Properties'
+import type { Doc } from '../src/core/Document'
+import type { Library } from '../src/core/Library'
+import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
 import { loadWasm, makeLibrary } from './Fixtures'
 import { ROOTS } from '../tools/KiCad'
 
@@ -209,5 +217,51 @@ describe.skipIf(!HAS_KICAD)('símbolo e footprint do KiCad como peça de três v
         netlist.update()
 
         VIEWS.forEach(view => expect(netlist.getNet(view, keyOf('1', 'connector1')), view).toContain(keyOf('2', 'connector0')))
+    })
+})
+
+// FONTE DC DO FRITZING, A PEÇA DO KICAD NO MEIO E O TERRA: FIOS PELO NÚMERO DO PINO DO KICAD
+const series = async (library: Library, parts: string[], wires: [string, string][], change: (doc: Doc) => Doc = doc => doc) => {
+    const placed  = parts.reduce((doc, moduleId, i) => createInstance(doc, library, moduleId, everywhere([300 * i, 0])), emptyDoc())
+    const wired   = change(wires.reduce((doc, [a, b]) => createWire(doc, library, 'schematicView', a, b), placed))
+    const netlist = new Netlist(wired, library, await loadWasm())
+    netlist.update()
+    const circuit = buildCircuit(wired, library, netlist, true)
+    const ngspice = new Ngspice(await createNgspice())
+    ngspice.setup()
+    const result  = ngspice.run(circuit.deck)
+    expect(result.error, circuit.deck).toBeNull()
+    return { circuit, sim: new Simulation(wired, library, circuit, result.vectors) }
+}
+
+describe.skipIf(!HAS_KICAD)('peças básicas do KiCad simulam como as do Fritzing (spec 08 §4)', () => {
+    it('resistor e LED do KiCad com a fonte DC: o LED acende com (5 − 2) / 220 Ω e a resistência é editável no inspetor', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'LED'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        expect(getPropertyDefs(kicadId('Device', 'R')).map(item => item.name)).toContain('resistance')
+        expect(library.getPart(kicadId('Device', 'LED'))?.connectors.map(connector => connector.name)).toEqual(['cathode', 'anode'])
+
+        const wires: [string, string][] = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector1'], ['3/connector0', '4/connector0'], ['1/connector0', '4/connector0']]
+        const { circuit, sim } = await series(library, parts, wires, doc => setProperty(doc, '2', 'resistance', '220Ω'))
+        expect(circuit.deck).toMatch(/^D\S+ \S+ \S+ LED_GENERIC$/m)
+        expect(sim.getCurrent('3', 0)).toBeGreaterThan(0.010)
+        expect(sim.getCurrent('3', 0)).toBeLessThan(0.016)
+        expect(sim.getEffect('3', 0).light).toBeGreaterThan(0)
+        expect(sim.getEffect('2', 0).smoke).toBe(false)
+    })
+
+    it('eletrolítico do KiCad carrega pelo resistor do KiCad com o degrau na fonte: τ = 1 kΩ · 100 µF', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'C_Polarized'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const wires: [string, string][] = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector0'], ['3/connector1', '4/connector0'], ['1/connector0', '4/connector0']]
+        const { sim } = await series(library, parts, wires, doc => setProperty(setProperty(setProperty(doc, '1', SIGNAL_KEY, 'step'), '2', 'resistance', '1kΩ'), '3', 'capacitance', '100µF'))
+        const step    = getStepResponse(sim.vectors.time, Float64Array.from(sim.vectors.time, (_, i) => sim.getBetween(keyOf('3', 'connector0'), keyOf('3', 'connector1'), i)), 0, Infinity)
+        expect(step?.tau).toBeGreaterThan(0.097)
+        expect(step?.tau).toBeLessThan(0.103)
+        expect(Array.from({ length: sim.steps }, (_, i) => sim.getEffect('3', i).smoke).some(Boolean)).toBe(false)
     })
 })

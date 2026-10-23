@@ -57,7 +57,7 @@ type State = {
     library: Library
     wasm: NetlistWasm | null
     ready: boolean
-    indexed: { done: number, total: number, ready: boolean }
+    indexed: { done: number, total: number, ready: boolean, symbols: number }
     bins: BinTab[]
     samples: string[]
     mine: string[]
@@ -373,10 +373,13 @@ export const useStore = create<State>((set, get) => {
 
     const listen = (status: IndexerStatus) => {
         if (status.type === 'progress')
-            return set({ indexed: { done: status.done, total: status.total, ready: false } })
+            return set({ indexed: { ...get().indexed, done: status.done, total: status.total, ready: false } })
 
         if (status.type === 'ready')
-            return set({ indexed: { done: status.total, total: status.total, ready: true }, message: get().message || t('{0} peças indexadas', status.count) })    // O AVISO DO ÍNDICE NÃO APAGA O DA AÇÃO DO USUÁRIO
+            return set({ indexed: { ...get().indexed, done: status.total, total: status.total, ready: true }, message: get().message || t('{0} peças indexadas', status.count) })    // O AVISO DO ÍNDICE NÃO APAGA O DA AÇÃO DO USUÁRIO
+
+        if (status.type === 'symbols')
+            return set({ indexed: { ...get().indexed, symbols: status.count } })    // OS SÍMBOLOS DO KICAD CHEGAM DEPOIS: A BUSCA EM CURSO É REFEITA
 
         set({ bins: status.bins })
     }
@@ -433,7 +436,7 @@ export const useStore = create<State>((set, get) => {
         library: new Library(catalog),
         wasm: null,
         ready: false,
-        indexed: { done: 0, total: 0, ready: false },
+        indexed: { done: 0, total: 0, ready: false, symbols: 0 },
         bins: [],
         samples: [],
         mine: readStored<string[]>(MINE_KEY, []),
