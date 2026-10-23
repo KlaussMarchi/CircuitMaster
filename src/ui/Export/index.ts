@@ -6,7 +6,6 @@ import type { Box } from '../../core/Geometry'
 import { Clipper } from '../../core/Clipper'
 import { pickBoard } from '../../core/Cam'
 import { Scene } from '../../engine/Scene'
-import createClipper from '../../core/Clipper/clipper2.js'
 import { t } from '../../core/Text'
 
 // EXPORTAÇÕES QUE PRECISAM DE UMA PLACA NA VISTA PCB; A GERAÇÃO DOS ARQUIVOS (ui/Output) SÓ CARREGA QUANDO SE EXPORTA
@@ -20,7 +19,7 @@ export const needsBoard = (kind: ExportKind): kind is BoardKind => (BOARD_EXPORT
 
 let clipper: Promise<Clipper> | null = null
 
-export const getClipper = () => clipper ?? (clipper = createClipper().then(module => new Clipper(module)))
+export const getClipper = () => clipper ?? (clipper = import('../../core/Clipper/clipper2.js').then(({ default: createClipper }) => createClipper()).then(module => new Clipper(module)))    // A COLA DO WASM SÓ CARREGA NA PRIMEIRA OPERAÇÃO DE PCB
 
 export const download = (name: string, data: string | Uint8Array, type: string) => {
     const url  = URL.createObjectURL(new Blob([typeof data === 'string' ? data : new Uint8Array(data)], { type }))

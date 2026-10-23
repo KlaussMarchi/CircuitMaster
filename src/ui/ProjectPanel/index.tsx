@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { VIEW_LABELS } from '../../core/Layer'
+import { VIEW_BACKGROUNDS, VIEW_LABELS } from '../../core/Layer'
 import { Scene } from '../../engine/Scene'
 import { Icon } from '../Icon'
 import { Kv } from '../Inspector'
@@ -28,7 +28,7 @@ export const ProjectPanel = () => {
     const [text, setText] = useState('')
     const grids           = useStore(state => state.preferences.grids[state.view]) ?? GRID_SIZES[view]
     const units           = useStore(state => state.preferences.units)
-    const { setViewSetting, openSample, exportFile, newSketch, save, setGridOrigin } = useStore.getState()
+    const { setViewSetting, openSample, exportFile, newSketch, save, setGridOrigin, setGridSize } = useStore.getState()
     // "x, y" NA UNIDADE ESCOLHIDA (VÍRGULA DECIMAL TAMBÉM VALE: "12,7 5,08"); VAZIO VOLTA A ORIGEM A ZERO
     const setOrigin       = (text: string) => {
         const [x, y] = text.trim().split(/\s*;\s*|,\s+|\s+/).map(part => Number(part.replace(',', '.')))
@@ -42,6 +42,7 @@ export const ProjectPanel = () => {
         setGridOrigin([lengthToPx(x, units), lengthToPx(y, units)])
     }
     const settings        = doc.settings[view] ?? {}
+    const background      = (settings.backgroundColor ?? VIEW_BACKGROUNDS[view]).toLowerCase()
     const instances       = Object.values(doc.instances)
     const wires           = instances.filter(instance => instance.moduleIdRef === 'WireModuleID').length
     const scene           = useMemo(() => new Scene(doc, library, 'pcbView'), [doc, library])
@@ -82,12 +83,15 @@ export const ProjectPanel = () => {
                 <Check label="Alinhar à grade" checked={settings.alignToGrid !== '0'} change={checked => setViewSetting('alignToGrid', checked ? '1' : '0')} hint="peças com o primeiro terminal na grade; dobras e pontas de fio na grade" />
                 {view !== 'pcbView' && <Check label="Fios ortogonais (90°)" checked={settings.orthogonalWires !== '0'} change={checked => setViewSetting('orthogonalWires', checked ? '1' : '0')} hint="fios novos em trechos horizontais e verticais, que continuam retos ao mover peças" />}
                 <div className="field">
-                    <label>{t('Grade')}</label>
-                    <div className="in">
-                        <select value={settings.gridSize ?? grids[0]} onChange={event => setViewSetting('gridSize', event.target.value)}>
-                            {[...new Set([settings.gridSize ?? grids[0], ...grids])].map(size => <option key={size} value={size}>{size}</option>)}
-                        </select>
-                        <Icon name="chevronDown" />
+                    <label title={t('Tamanho livre em in ou mm, de 0.001in a 1in')}>{t('Grade')}</label>
+                    <Entry value={settings.gridSize ?? grids[0]} options={grids} numeric commit={setGridSize} />
+                </div>
+                <div className="field">
+                    <label>{t('Cor de fundo')}</label>
+                    <div className="in paint">
+                        <input id="view-background" type="color" aria-label={t('Cor de fundo')} value={background} onChange={event => setViewSetting('backgroundColor', event.target.value)} />
+                        <span className="num grow">{background}</span>
+                        {background !== VIEW_BACKGROUNDS[view] && <button onClick={() => setViewSetting('backgroundColor', VIEW_BACKGROUNDS[view])}>{t('Padrão')}</button>}
                     </div>
                 </div>
                 <div className="field">

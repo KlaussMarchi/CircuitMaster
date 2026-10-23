@@ -5,15 +5,15 @@ import { milsToPx } from '../../core/Units'
 import { formatReading } from '../../core/Properties'
 import type { Library } from '../../core/Library'
 import { Scene, WIRE_STYLE, owner } from '../../engine/Scene'
-import { bendWire, connectEnd, dragSegment, getAnchor, getCarried, getChangedWires, getObstacles, insertLegPoint, joinWires, moveInstances, moveLabel, removeLegPoint, setLegEnd, setNoteSize, setNoteText, setWireEnds, snapConnections, splitWire, squareWires, tidyWires, type WireEnd } from '../../engine/Edit'
+import { bendWire, connectEnd, cutStrip, getStripAt, dragSegment, getAnchor, getCarried, getChangedWires, getObstacles, insertLegPoint, joinWires, moveInstances, moveLabel, removeLegPoint, setLegEnd, setNoteSize, setNoteText, setWireEnds, snapConnections, splitWire, squareWires, tidyWires, type WireEnd } from '../../engine/Edit'
 import { getPath, isAxisAligned, simplifyPath, toHeading, type Heading } from '../../engine/Path'
-import { getDrawing, getImageText, type PartItem, type WireItem } from '../../engine/Drawing'
+import { getDrawing, getImageText, type Drawing, type LabelItem, type PartItem, type WireItem } from '../../engine/Drawing'
 import type { Effect, Reading } from '../../engine/Simulation'
 import { Glow, Overlay } from '../Effects'
 import { ContextMenu, type MenuEntry } from '../ContextMenu'
 import { getMenu, type Target } from '../Menus'
 import { useStore, type View, type Viewport } from '../Store'
-import { ALTIUM, hiddenPlanes } from '../Layers'
+import { ALTIUM, LABEL_PLANE, RAT_PLANE, hiddenPlanes } from '../Layers'
 import { PART_MIME } from '../Library'
 import { NoteShape } from '../Note'
 import { QuickValue } from '../QuickValue'
@@ -23,6 +23,7 @@ import { FEATURED } from '../../core/Featured'
 import { getSwitching, isPressedAt, switchOf } from '../../core/Spice'
 import { switchText } from '../Inspector'
 import { t } from '../../core/Text'
+import { VIEW_BACKGROUNDS, getLayerZ } from '../../core/Layer'
 import { clampZoom as clamp, fit, useCursor } from '../Navigation'
 
 type Drag =
@@ -76,12 +77,14 @@ const MULTI_LAYER = '#c8c8c8'
 const PCB_GROUND  = '#262626'    // ÁREA DE TRABALHO FORA DA PLACA
 const PCB_DOTS    = '#4a4a4a'
 const BOTTOM_SIDE = ['copper0', 'copper0trace', 'silkscreen0', 'groundplane']
+const COPPER_PLANES = ['copper0', 'copper1']
+const FROM_BELOW    = ['board', 'groundplane1', 'silkscreen', 'silkscreenLabel', 'copper1', 'copper1trace', 'groundplane', 'copper0', 'copper0trace', 'ratsnest', 'silkscreen0', 'silkscreen0Label', 'partimage', 'pcbNote', 'pcbRuler']    // PCBViewFromBelowLayerList DO viewlayer.cpp DO FRITZING
 const TOP_SIDE    = ['copper1', 'copper1trace', 'silkscreen', 'groundplane1']
 const DIMMED      = 0.18          // FACE INATIVA (DESIGN.md §3)
+const UNROUTED_PX = 9             // RAIO DO REALCE DOS TERMINAIS POR ROTEAR
 
 export const INVERTED = 'invert(1) hue-rotate(180deg)'    // ESQUEMÁTICO NO TEMA ESCURO: TRAÇOS PRETOS DO FRITZING VIRAM CLAROS, AS CORES MANTÊM O MATIZ
 
-const BACKGROUND: Record<View, string> = { breadboardView: '#ffffff', schematicView: '#ffffff', pcbView: '#333333' }    // FUNDO DO FRITZING, USADO NA EXPORTAÇÃO DA VISTA
 const DOT_PX = 1.1     // RAIO DO PONTO DA GRADE NA TELA
 const KIND_LINES: Record<ProbeKind, ('V' | 'I')[]> = { voltage: ['V'], current: ['I'], both: ['V', 'I'] }
 
@@ -226,6 +229,22 @@ const Crosshair = () => {
     )
 }
 
+// z VISTO DE BAIXO: A POSIÇÃO DA CAMADA NA ORDEM INVERTIDA, MANTENDO A ORDEM DENTRO DA CAMADA
+const belowZ = (scene: Scene, item: Drawing['items'][number]) => {
+    const plane = item.type === 'part' ? item.plane : scene.getView(item.modelIndex)?.layer ?? ''
+    return item.z - getLayerZ('pcbView', plane) + Math.max(0, FROM_BELOW.indexOf(plane))
+}
+
+// GIRO DO RÓTULO E, NA PCB VISTA DE BAIXO, O DESESPELHO EM TORNO DO CENTRO PARA O TEXTO SEGUIR LEGÍVEL
+const labelTransform = (label: LabelItem, fromBelow: boolean) => [fromBelow ? `matrix(-1 0 0 1 ${label.box ? label.box[0] + label.box[2] : 2 * label.x} 0)` : '', label.matrix ? `matrix(${label.matrix.join(' ')})` : ''].join(' ').trim() || undefined
+
+// X DO PONTEIRO A PARTIR DA BORDA ESQUERDA DO QUADRO; NA PCB VISTA DE BAIXO O QUADRO ESTÁ ESPELHADO E O X CONTA DA DIREITA
+const screenX = (clientX: number, rect: DOMRect | undefined) => {
+    const { fromBelow, view } = useStore.getState()
+    const x                   = clientX - (rect?.left ?? 0)
+    return fromBelow && view === 'pcbView' ? (rect?.width ?? 0) - x : x
+}
+
 // VIEWPORT AO VIVO: DURANTE O GESTO SÓ O TRANSFORM CSS MUDA (COMPOSITOR) E O viewBox É REFEITO QUANDO O GESTO PARA OU O QUADRO JÁ NÃO COBRE A TELA; FICA FORA DO ESCOPO DO Canvas PARA OS CALLBACKS GUARDADOS NÃO PRENDEREM DESENHOS DE RENDERS ANTIGOS
 const useLiveViewport = (svgRef: RefObject<SVGSVGElement | null>, view: View, vp: Viewport, size: Point) => {
     const liveRef   = useRef<Viewport | null>(null)
@@ -287,6 +306,11 @@ export const Canvas = () => {
     const placing   = useStore(state => state.placing)
     const values    = useStore(state => state.show.values)
     const planesOff = useStore(state => state.hiddenLayers)
+    const byLength  = useStore(state => state.preferences.lengthColors)
+    const connected = useStore(state => state.preferences.connectedColor)
+    const loose     = useStore(state => state.preferences.unconnectedColor)
+    const fromBelow = useStore(state => state.fromBelow && state.view === 'pcbView')
+    const unrouted  = useStore(state => state.unrouted)
     const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, gridOf, originOf, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing, setGridOrigin, remove } = useStore.getState()
 
     const svgRef              = useRef<SVGSVGElement>(null)
@@ -300,7 +324,7 @@ export const Canvas = () => {
     const [pointed, setPointed] = useState<Pointed | null>(null)
     const [focus, setFocus]     = useState(0)
     const scene               = useMemo(() => new Scene(doc, library, view), [doc, library, view])
-    const drawing             = useMemo(() => getDrawing(scene, netlist), [scene, netlist])
+    const drawing             = useMemo(() => getDrawing(scene, netlist, byLength), [scene, netlist, byLength])
     const obstacles           = useMemo(() => getObstacles(scene), [scene])
     const result              = simulated.enabled && view !== 'pcbView' ? simulated.result : null
     const effects             = useMemo(() => result?.getEffects(simulated.step) ?? null, [result, simulated.step])
@@ -318,6 +342,8 @@ export const Canvas = () => {
     const plans      = useMemo(() => getSwitching(doc), [doc])
     const probing    = tool === 'voltage' || tool === 'current' || tool === 'both'
     const settings   = doc.settings[view] ?? {}
+    const background = (settings.backgroundColor ?? VIEW_BACKGROUNDS[view]).toLowerCase()
+    const custom     = background !== VIEW_BACKGROUNDS[view]    // NA TELA O FUNDO SEGUE O TEMA ATÉ O USUÁRIO ESCOLHER OUTRO
     const dotColor   = useMemo(() => view === 'pcbView' ? PCB_DOTS : theme && getComputedStyle(document.documentElement).getPropertyValue('--grid-dot').trim(), [theme, view]) || '#2a292e'
     const grid       = gridOf(view, 'wires')
     const partGrid   = gridOf(view, 'parts')
@@ -392,7 +418,7 @@ export const Canvas = () => {
         const onWheel = (event: WheelEvent) => {
             const rect     = element?.parentElement?.getBoundingClientRect()
             const base     = liveRef.current ?? shownRef.current
-            const [sx, sy] = [event.clientX - (rect?.left ?? 0), event.clientY - (rect?.top ?? 0)]
+            const [sx, sy] = [screenX(event.clientX, rect), event.clientY - (rect?.top ?? 0)]
             const scale    = event.deltaMode === 1 ? LINE_PX : 1
             const zoom     = clamp(base.zoom * ZOOM_STEP ** -(event.deltaY * scale))
             event.preventDefault()
@@ -413,7 +439,7 @@ export const Canvas = () => {
     const toScene = (clientX: number, clientY: number): Point => {
         const rect = svgRef.current?.parentElement?.getBoundingClientRect()
         const seen = liveRef.current ?? vp
-        return [seen.x + (clientX - (rect?.left ?? 0)) / seen.zoom, seen.y + (clientY - (rect?.top ?? 0)) / seen.zoom]
+        return [seen.x + screenX(clientX, rect) / seen.zoom, seen.y + (clientY - (rect?.top ?? 0)) / seen.zoom]
     }
 
     const snapAt    = (value: number, start: number, step = grid) => align ? Math.round((value - start) / step) * step + start : value
@@ -617,6 +643,9 @@ export const Canvas = () => {
         const index   = element?.getAttribute('data-index') ?? grip ?? (leg ? owner(leg) : '')
         const found   = doc.probes.find(probe => probe.id === probeId)
 
+        if (unrouted.length)
+            useStore.setState({ unrouted: [] })
+
         if (event.button === 2 || target.closest(EDITABLE))
             return
 
@@ -638,6 +667,11 @@ export const Canvas = () => {
 
         if (flipped)
             return void useStore.getState().toggleSwitch(flipped)
+
+        const cut = view === 'breadboardView' && index && !probing ? getStripAt(scene, index, point) : null
+
+        if (cut)
+            return commit(cutStrip(doc, index, cut))
 
         if (probing)
             return placeProbe(point, target, event.shiftKey)
@@ -769,7 +803,7 @@ export const Canvas = () => {
             if (!drag.moved && far(drag.client, client))
                 setDrag({ ...drag, moved: true })
 
-            return showLive({ ...drag.viewport, x: drag.viewport.x - (event.clientX - drag.client[0]) / drag.viewport.zoom, y: drag.viewport.y - (event.clientY - drag.client[1]) / drag.viewport.zoom })
+            return showLive({ ...drag.viewport, x: drag.viewport.x - (fromBelow ? -1 : 1) * (event.clientX - drag.client[0]) / drag.viewport.zoom, y: drag.viewport.y - (event.clientY - drag.client[1]) / drag.viewport.zoom })
         }
 
         if (drag.type === 'zoom')
@@ -1002,13 +1036,22 @@ export const Canvas = () => {
         return symbol && bounds && pins.every(pin => pin !== null) ? <SymbolArt kind={symbol[1]} pins={pins as Point[]} center={[(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2]} pressed={known ? pressedAt(item.modelIndex, known.pressed) : false} /> : null
     }
 
-    const planes  = useMemo(() => view === 'pcbView' ? hiddenPlanes(planesOff) : new Set<string>(), [view, planesOff])
+    const planes  = useMemo(() => hiddenPlanes(view, planesOff[view] ?? []), [view, planesOff])
+    const ordered = useMemo(() => fromBelow ? [...drawing.items].sort((a, b) => belowZ(scene, a) - belowZ(scene, b)) : drawing.items, [drawing, fromBelow, scene])
+    const blocked = useMemo(() => {    // SÓ A FACE ATIVA RECEBE CLIQUE: PEÇA SEM COBRE NELA (SMD DA OUTRA FACE) FICA DE FORA (setLayerActive DO FRITZING)
+        const copper = ordered.filter(item => item.type === 'part' && COPPER_PLANES.includes(item.plane))
+        const live   = new Set(copper.filter(item => item.type === 'part' && !dimmed(item.plane)).map(item => item.modelIndex))
+        return new Set(copper.map(item => item.modelIndex).filter(modelIndex => !live.has(modelIndex)))
+    }, [ordered, side])
 
-    const content = useMemo(() => drawing.items.map(item => {
-        if (item.type === 'wire' && view === 'pcbView') {
-            const layer = scene.getView(item.modelIndex)?.layer ?? ''
-            return planes.has(layer) ? null : <g key={item.modelIndex} opacity={dimmed(layer) ? DIMMED : 1}><WireShape item={{ ...item, color: ALTIUM_TRACE[layer] ?? item.color }} /></g>
-        }
+    const content = useMemo(() => ordered.map(item => {
+        const layer = item.type === 'part' ? item.plane : scene.getView(item.modelIndex)?.layer ?? ''
+
+        if (planes.has(layer))
+            return null
+
+        if (item.type === 'wire' && view === 'pcbView')
+            return <g key={item.modelIndex} opacity={dimmed(layer) ? DIMMED : 1} pointerEvents={dimmed(layer) ? 'none' : undefined}><WireShape item={{ ...item, color: ALTIUM_TRACE[layer] ?? item.color }} /></g>
 
         if (item.type === 'wire')
             return <WireShape key={item.modelIndex} item={item} />
@@ -1022,14 +1065,11 @@ export const Canvas = () => {
         const shown  = view === 'pcbView' ? altium(item) : timedItem(item)
         const art    = symbolArt(item)
 
-        if (view === 'pcbView' && planes.has(item.plane))
-            return null
-
         if (view === 'pcbView')
-            return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.layer) ? DIMMED : 1}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
+            return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.layer) ? DIMMED : 1} pointerEvents={blocked.has(item.modelIndex) ? 'none' : undefined}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
 
         return <PartShape key={`${item.modelIndex}|${item.layer}`} item={shown} image={art ? undefined : getImage(library, shown, view, effect?.color ? [['color_', effect.color]] : item.paint)} effect={effect} greyed={greyed} view={view} lab={item.moduleId.includes('LabDCPowerSupply')} art={art} />
-    }), [drawing, effects, running, library, view, editing, plans, result, simulated.step, side, planes])
+    }), [ordered, effects, running, library, view, editing, plans, result, simulated.step, side, planes, blocked])
 
     const ratsnest = useMemo(() => drawing.ratsnest.map((rat, i) => (
         <g key={`${rat.from}|${rat.to}`} data-rat={i} data-overlay>
@@ -1066,6 +1106,11 @@ export const Canvas = () => {
         if (rat) {
             const line = drawing.ratsnest[Number(rat)]
             return setMenu({ x: event.clientX, y: event.clientY, items: getMenu({ kind: 'ratsnest', modelIndex: '', key: null, point, rat: [line.from, line.to] }) })
+        }
+
+        if (element.hasAttribute('data-label')) {
+            select([index])
+            return setMenu({ x: event.clientX, y: event.clientY, items: getMenu({ kind: 'label', modelIndex: index, key: null, point, rat: null }) })
         }
 
         if (!selection.includes(index))
@@ -1114,7 +1159,8 @@ export const Canvas = () => {
     })
     const single   = idle && selection.length === 1 && !wireItems.has(selection[0]) ? scene.getBounds(selection[0]) : null
     const below    = single && (single[3] - vp.y) * vp.zoom + 90 < size[1]
-    const quick    = single ? { index: selection[0], at: [Math.min(size[0] - 150, Math.max(150, ((single[0] + single[2]) / 2 - vp.x) * vp.zoom)), below ? (single[3] - vp.y) * vp.zoom + 14 : Math.max(8, (single[1] - vp.y) * vp.zoom - 78)] as Point } : null
+    const across   = single ? ((single[0] + single[2]) / 2 - vp.x) * vp.zoom : 0
+    const quick    = single ? { index: selection[0], at: [Math.min(size[0] - 150, Math.max(150, fromBelow ? size[0] - across : across)), below ? (single[3] - vp.y) * vp.zoom + 14 : Math.max(8, (single[1] - vp.y) * vp.zoom - 78)] as Point } : null
     const aimed    = wiring?.aim ?? null
     const aimText  = aimed ? aimed.end.keys[0] ? pinName(scene.isWire(owner(aimed.end.keys[0])) ? scene.getPartners(aimed.end.keys[0]).find(partner => !scene.isWire(owner(partner))) ?? aimed.end.keys[0] : aimed.end.keys[0]) : t('junção no fio') : ''
     const handlers = { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onDoubleClick, onContextMenu, onDragOver, onDrop }
@@ -1149,51 +1195,54 @@ export const Canvas = () => {
 
     return (
         <>
-            <svg ref={svgRef} id="canvas" className="absolute block touch-none select-none will-change-transform" viewBox={`${vp.x - mx / vp.zoom} ${vp.y - my / vp.zoom} ${w} ${h}`} style={{ ...frame, backgroundColor: view === 'pcbView' ? PCB_GROUND : 'var(--well)', ...gridStyle, cursor }} data-background={settings.backgroundColor ?? BACKGROUND[view]} {...handlers}>
-                <g style={inverted ? { filter: INVERTED } : undefined}>
-                    {content}
-                    {drawing.junctions.map((junction, i) => <circle key={i} cx={junction.point[0]} cy={junction.point[1]} r={junction.radius} fill="#404040" pointerEvents="none" />)}
-                    {drawing.marks.filter(mark => view === 'breadboardView' || mark.color !== CONNECTED_MARK).map(mark => mark.box ? <rect key={mark.key} x={mark.box[0]} y={mark.box[1]} width={mark.box[2] - mark.box[0]} height={mark.box[3] - mark.box[1]} fill={mark.color} fillOpacity={mark.opacity} pointerEvents="none" data-overlay /> : <circle key={mark.key} cx={mark.point?.[0]} cy={mark.point?.[1]} r={mark.radius} fill={mark.color} fillOpacity={mark.opacity * 2} pointerEvents="none" data-overlay />)}
-                    {!planes.has('ratsnest') && ratsnest}
-                    {viaHits}
-                </g>
-                {!planes.has('silkscreen') && drawing.labels.map(label => (
-                    <g key={label.modelIndex} data-label={label.modelIndex} fontSize={label.size} fontFamily={view === 'pcbView' ? label.font : 'var(--font)'} fill={ink(label.color)}>
-                        {label.box && <rect x={label.box[0]} y={label.box[1]} width={label.box[2] - label.box[0]} height={label.box[3] - label.box[1]} fill="transparent" />}
-                        {label.lines.map((line, i) => view === 'pcbView' ? <text key={i} x={label.x} y={label.y + label.size * (i + 1)}>{line}</text> : <text key={i} x={label.x} y={label.y + label.size * (i + 1)} fontWeight={i === 0 ? 600 : 400} fill={i === 0 ? undefined : 'var(--soft)'}>{i === 0 ? line : unitSpace(line)}</text>)}
+            <div className={`absolute inset-0 ${fromBelow ? 'mirrored' : ''}`}>
+                <svg ref={svgRef} id="canvas" className="absolute block touch-none select-none will-change-transform" viewBox={`${vp.x - mx / vp.zoom} ${vp.y - my / vp.zoom} ${w} ${h}`} style={{ ...frame, backgroundColor: custom ? background : view === 'pcbView' ? PCB_GROUND : 'var(--well)', ...gridStyle, cursor }} data-background={background} data-mirror={fromBelow || undefined} {...handlers}>
+                    <g style={inverted ? { filter: INVERTED } : undefined}>
+                        {content}
+                        {drawing.junctions.map((junction, i) => <circle key={i} cx={junction.point[0]} cy={junction.point[1]} r={junction.radius} fill="#404040" pointerEvents="none" />)}
+                        {drawing.marks.filter(mark => view === 'breadboardView' || mark.color !== CONNECTED_MARK).map(mark => mark.box ? <rect key={mark.key} x={mark.box[0]} y={mark.box[1]} width={mark.box[2] - mark.box[0]} height={mark.box[3] - mark.box[1]} fill={mark.color === CONNECTED_MARK ? connected : loose} fillOpacity={mark.opacity} pointerEvents="none" data-overlay /> : <circle key={mark.key} cx={mark.point?.[0]} cy={mark.point?.[1]} r={mark.radius} fill={mark.color === CONNECTED_MARK ? connected : loose} fillOpacity={mark.opacity * 2} pointerEvents="none" data-overlay />)}
+                        {!planes.has(RAT_PLANE[view]) && ratsnest}
+                        {viaHits}
                     </g>
-                ))}
-                {flagged.map((d, i) => <path key={`drc${i}`} d={d} style={{ fill: 'var(--negative)', stroke: 'var(--negative)' }} fillOpacity={0.45} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay data-drc />)}
-                {chain.map(modelIndex => halo(modelIndex, modelIndex === pointed?.index ? 0.4 : 0.18))}
-                {selection.filter(modelIndex => wireItems.has(modelIndex)).map(modelIndex => halo(modelIndex, 0.45))}
-                {selection.filter(modelIndex => wireItems.has(modelIndex)).flatMap(handles)}
-                {idle && pointed?.end && wireItems.get(pointed.index)?.ends.map((point, i) => pointed.end?.endsWith(`connector${i}`) && <circle key={`tip${i}`} cx={point[0]} cy={point[1]} r={zoomed(6)} fill={SELECTED} fillOpacity={0.25} stroke={SELECTED} strokeWidth={zoomed(1.5)} pointerEvents="none" data-overlay />)}
-                {boxes.map((box, i) => <rect key={i} x={box[0] - zoomed(3)} y={box[1] - zoomed(3)} width={box[2] - box[0] + zoomed(6)} height={box[3] - box[1] + zoomed(6)} rx={zoomed(4)} fill={SELECTED} fillOpacity={0.06} stroke={SELECTED} strokeWidth={zoomed(1.2)} pointerEvents="none" data-overlay />)}
-                {lit && <rect x={lit[0] - zoomed(3)} y={lit[1] - zoomed(3)} width={lit[2] - lit[0] + zoomed(6)} height={lit[3] - lit[1] + zoomed(6)} rx={zoomed(4)} fill="none" stroke={SELECTED} strokeOpacity={0.5} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" data-overlay />}
-                {marks.map((point, i) => <circle key={i} cx={point[0]} cy={point[1]} r={MARK_PX / vp.zoom} fill={SELECTED} fillOpacity={0.35} stroke={SELECTED} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay />)}
-                {probes}
-                {switches}
-                {wiring && <WiringShape points={simplifyPath([...wiring.points, ...legOf(wiring)])} color={inverted ? 'var(--wire)' : style.color} width={milsToPx(style.mils)} zoom={vp.zoom} aimed={wiring.aim !== null} />}
-                {aimed && (
-                    <g key={aimText} className="snap" transform={`translate(${aimed.end.point[0]} ${aimed.end.point[1]}) scale(${1 / vp.zoom})`} pointerEvents="none">
-                        <circle r={11} fill={SELECTED} fillOpacity={0.18} stroke={SELECTED} strokeWidth={2} />
-                        <rect x={14} y={-27} width={aimText.length * 6.6 + 16} height={20} rx={10} fill="var(--surface)" stroke={SELECTED} />
-                        <text x={22} y={-13} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{aimText}</text>
-                    </g>
-                )}
-                {drag?.type === 'lasso' && <path d={`M${drag.points.map(([x, y]) => `${x} ${y}`).join('L')}Z`} fill={SELECTED} fillOpacity={0.08} stroke={SELECTED} strokeWidth={zoomed(1)} pointerEvents="none" />}
-                {drag?.type === 'zoom' && <rect x={Math.min(drag.start[0], drag.end[0])} y={Math.min(drag.start[1], drag.end[1])} width={Math.abs(drag.end[0] - drag.start[0])} height={Math.abs(drag.end[1] - drag.start[1])} fill="none" stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" />}
-                {marquee && drag?.type === 'marquee' && (
-                    <g pointerEvents="none">
-                        <rect x={marquee[0]} y={marquee[1]} width={marquee[2]} height={marquee[3]} rx={zoomed(2)} fill={SELECTED} fillOpacity={drag.crossing ? 0.05 : 0.1} stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={drag.crossing ? dash : undefined} />
-                        <g transform={`translate(${drag.end[0]} ${drag.end[1]}) scale(${1 / vp.zoom})`}>
-                            <rect x={12} y={12} width={t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count).length * 6.6 + 18} height={22} rx={11} fill="var(--surface)" stroke="var(--border)" />
-                            <text x={21} y={27} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count)}</text>
+                    {!planes.has(LABEL_PLANE[view]) && drawing.labels.map(label => (
+                        <g key={label.modelIndex} data-label={label.modelIndex} transform={labelTransform(label, fromBelow)} fontSize={label.size} fontFamily={view === 'pcbView' ? label.font : 'var(--font)'} fill={ink(label.color)}>
+                            {label.rect && <rect x={label.rect[0]} y={label.rect[1]} width={label.rect[2] - label.rect[0]} height={label.rect[3] - label.rect[1]} fill="transparent" />}
+                            {label.lines.map((line, i) => view === 'pcbView' ? <text key={i} x={label.x} y={label.y + label.size * (i + 1)}>{line}</text> : <text key={i} x={label.x} y={label.y + label.size * (i + 1)} fontWeight={i === 0 ? 600 : 400} fill={i === 0 ? undefined : 'var(--soft)'}>{i === 0 ? line : unitSpace(line)}</text>)}
                         </g>
-                    </g>
-                )}
-            </svg>
-            <Crosshair />
+                    ))}
+                    {unrouted.map(key => scene.getTerminal(key)).filter((point): point is Point => point !== null).map((point, i) => <circle key={`un${i}`} cx={point[0]} cy={point[1]} r={UNROUTED_PX / vp.zoom} style={{ fill: 'var(--warning)', stroke: 'var(--warning)' }} fillOpacity={0.4} strokeWidth={1.5 / vp.zoom} pointerEvents="none" data-overlay />)}
+                    {flagged.map((d, i) => <path key={`drc${i}`} d={d} style={{ fill: 'var(--negative)', stroke: 'var(--negative)' }} fillOpacity={0.45} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay data-drc />)}
+                    {chain.map(modelIndex => halo(modelIndex, modelIndex === pointed?.index ? 0.4 : 0.18))}
+                    {selection.filter(modelIndex => wireItems.has(modelIndex)).map(modelIndex => halo(modelIndex, 0.45))}
+                    {selection.filter(modelIndex => wireItems.has(modelIndex)).flatMap(handles)}
+                    {idle && pointed?.end && wireItems.get(pointed.index)?.ends.map((point, i) => pointed.end?.endsWith(`connector${i}`) && <circle key={`tip${i}`} cx={point[0]} cy={point[1]} r={zoomed(6)} fill={SELECTED} fillOpacity={0.25} stroke={SELECTED} strokeWidth={zoomed(1.5)} pointerEvents="none" data-overlay />)}
+                    {boxes.map((box, i) => <rect key={i} x={box[0] - zoomed(3)} y={box[1] - zoomed(3)} width={box[2] - box[0] + zoomed(6)} height={box[3] - box[1] + zoomed(6)} rx={zoomed(4)} fill={SELECTED} fillOpacity={0.06} stroke={SELECTED} strokeWidth={zoomed(1.2)} pointerEvents="none" data-overlay />)}
+                    {lit && <rect x={lit[0] - zoomed(3)} y={lit[1] - zoomed(3)} width={lit[2] - lit[0] + zoomed(6)} height={lit[3] - lit[1] + zoomed(6)} rx={zoomed(4)} fill="none" stroke={SELECTED} strokeOpacity={0.5} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" data-overlay />}
+                    {marks.map((point, i) => <circle key={i} cx={point[0]} cy={point[1]} r={MARK_PX / vp.zoom} fill={SELECTED} fillOpacity={0.35} stroke={SELECTED} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay />)}
+                    {probes}
+                    {switches}
+                    {wiring && <WiringShape points={simplifyPath([...wiring.points, ...legOf(wiring)])} color={inverted ? 'var(--wire)' : style.color} width={milsToPx(style.mils)} zoom={vp.zoom} aimed={wiring.aim !== null} />}
+                    {aimed && (
+                        <g key={aimText} className="snap" transform={`translate(${aimed.end.point[0]} ${aimed.end.point[1]}) scale(${(fromBelow ? -1 : 1) / vp.zoom} ${1 / vp.zoom})`} pointerEvents="none">
+                            <circle r={11} fill={SELECTED} fillOpacity={0.18} stroke={SELECTED} strokeWidth={2} />
+                            <rect x={14} y={-27} width={aimText.length * 6.6 + 16} height={20} rx={10} fill="var(--surface)" stroke={SELECTED} />
+                            <text x={22} y={-13} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{aimText}</text>
+                        </g>
+                    )}
+                    {drag?.type === 'lasso' && <path d={`M${drag.points.map(([x, y]) => `${x} ${y}`).join('L')}Z`} fill={SELECTED} fillOpacity={0.08} stroke={SELECTED} strokeWidth={zoomed(1)} pointerEvents="none" />}
+                    {drag?.type === 'zoom' && <rect x={Math.min(drag.start[0], drag.end[0])} y={Math.min(drag.start[1], drag.end[1])} width={Math.abs(drag.end[0] - drag.start[0])} height={Math.abs(drag.end[1] - drag.start[1])} fill="none" stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" />}
+                    {marquee && drag?.type === 'marquee' && (
+                        <g pointerEvents="none">
+                            <rect x={marquee[0]} y={marquee[1]} width={marquee[2]} height={marquee[3]} rx={zoomed(2)} fill={SELECTED} fillOpacity={drag.crossing ? 0.05 : 0.1} stroke={SELECTED} strokeWidth={zoomed(1)} strokeDasharray={drag.crossing ? dash : undefined} />
+                            <g transform={`translate(${drag.end[0]} ${drag.end[1]}) scale(${(fromBelow ? -1 : 1) / vp.zoom} ${1 / vp.zoom})`}>
+                                <rect x={12} y={12} width={t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count).length * 6.6 + 18} height={22} rx={11} fill="var(--surface)" stroke="var(--border)" />
+                                <text x={21} y={27} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{t(drag.count === 1 ? '{0} item' : '{0} itens', drag.count)}</text>
+                            </g>
+                        </g>
+                    )}
+                </svg>
+                <Crosshair />
+            </div>
             {quick && <QuickValue key={quick.index} modelIndex={quick.index} at={quick.at} focus={focus} />}
             <p className="hint" role="status">{hint}</p>
             {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={() => setMenu(null)} />}

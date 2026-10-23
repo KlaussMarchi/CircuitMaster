@@ -5,6 +5,7 @@ export type DraftView      = 'breadboardView' | 'schematicView' | 'pcbView' | 'i
 export type DraftPin       = { layer: string, svgId: string, terminalId: string }
 export type DraftConnector = { id: string, name: string, description: string, type: string, pins: Partial<Record<DraftView, DraftPin[]>> }
 export type HistoryEntry   = { date: string, author: string, mode: string, description: string }
+export type DraftSnapshot  = { fzp: string, svgs: Partial<Record<DraftView, string>> }
 
 export const DRAFT_VIEWS: DraftView[] = ['breadboardView', 'schematicView', 'pcbView', 'iconView']
 export const DRAFT_FIELDS = ['title', 'author', 'description', 'label', 'url', 'version', 'date'] as const
@@ -13,6 +14,7 @@ export const HISTORY_MODES = ['optional', 'recommended', 'required']
 const FOLDERS: Record<DraftView, string> = { breadboardView: 'breadboard', schematicView: 'schematic', pcbView: 'pcb', iconView: 'icon' }
 const PICK      = 'data-pe'    // ÍNDICE DE CADA ELEMENTO DO SVG NA CÓPIA DE TRABALHO: O CLIQUE NA TELA ACHA O ELEMENTO POR ELE
 const COPPER    = ['copper0', 'copper1']
+const SHOWN     = ['breadboardView', 'schematicView', 'pcbView']    // VISTAS QUE "SÓ ESTA VISTA" IGUALA; O ÍCONE FICA
 const GEOMETRY  = ['cx', 'cy', 'r', 'rx', 'ry', 'x', 'y', 'width', 'height', 'd', 'points', 'x1', 'y1', 'x2', 'y2', 'transform']
 const DANGEROUS = new Set(['script', 'foreignObject', 'iframe', 'object', 'embed'])
 const SVG_NS    = 'http://www.w3.org/2000/svg'
@@ -84,6 +86,17 @@ export class PartDraft {
         walk(cleanSvg(root), element => element.setAttribute(PICK, String(index++)))
         this.svgs[view] = root
         return true
+    }
+
+    // ESTADO INTEIRO COMO TEXTO, PARA DESFAZER E REFAZER NO EDITOR
+    snapshot(): DraftSnapshot {
+        return { fzp: serializeXml(this.root), svgs: Object.fromEntries(DRAFT_VIEWS.filter(view => this.svgs[view]).map(view => [view, this.getSvgText(view)])) }
+    }
+
+    restore({ fzp, svgs }: DraftSnapshot) {
+        this.fzpText  = fzp
+        this.svgTexts = svgs
+        this.update()
     }
 
     get root() {
@@ -236,6 +249,142 @@ export class PartDraft {
             this.child(element, 'description').textContent = patch.description
     }
 
+    // TODOS OS CONECTORES DE UMA VEZ COMO MACHO, FÊMEA OU PAD (Set all to DO peconnectorsview.cpp)
+    setAllTypes(type: string) {
+        this.connectorElements().forEach(element => element.setAttribute('type', type))
+    }
+
+    made(parent: XmlElement, tag: string, attribute: string, value: string) {
+        const element = documentOf(parent).createElement(tag)
+        element.setAttribute(attribute, value)
+        return element
+    }
+
+    getBuses() {
+        return childrenNamed(childNamed(this.root, 'buses'), 'bus').map(bus => childrenNamed(bus, 'nodeMember').map(member => member.getAttribute('connectorId') ?? ''))
+    }
+
+    // CONEXÕES INTERNAS: CADA GRUPO DE DOIS OU MAIS CONECTORES LIGADOS DENTRO DA PEÇA VIRA UM <bus>; SEM GRUPO, SAI O <buses>
+    setBuses(buses: string[][]) {
+        const old  = childNamed(this.root, 'buses')
+        const kept = buses.map(bus => [...new Set(bus)]).filter(bus => bus.length > 1)
+
+        if (old)
+            this.root.removeChild(old)
+
+        if (!kept.length)
+            return
+
+        const parent = this.child(this.root, 'buses')
+        kept.forEach((bus, i) => {
+            const element = documentOf(parent).createElement('bus')
+            element.setAttribute('id', `bus${i}`)
+            bus.forEach(id => element.appendChild(this.made(parent, 'nodeMember', 'connectorId', id)))
+            parent.appendChild(element)
+        })
+    }
+
+    pcbLayers() {
+        return childNamed(childNamed(childNamed(this.root, 'views'), 'pcbView'), 'layers')
+    }
+
+    isSmd() {
+        const layers = childrenNamed(this.pcbLayers(), 'layer').map(layer => layer.getAttribute('layerId'))
+        return layers.includes('copper1') && !layers.includes('copper0')
+    }
+
+    // PASSANTE OU SMD: A CAMADA copper0 DO .fzp, OS <p> DE CADA CONECTOR E OS GRUPOS DE COBRE DO SVG DA PCB (changeSMD, setConnectorSMD E smdChanged DO pemainwindow.cpp)
+    setSmd(smd: boolean) {
+        const layers = this.pcbLayers()
+        const svg    = this.svgs.pcbView
+
+        if (!layers || !svg)
+            return false
+
+        const ofLayer = (parent: XmlElement | undefined, attribute: string, id: string) => childrenOf(parent).find(child => child.getAttribute(attribute) === id)
+        const layer0  = ofLayer(layers, 'layerId', 'copper0')
+
+        if (smd && layer0)
+            layers.removeChild(layer0)
+
+        if (!smd && !layer0)
+            layers.appendChild(this.made(layers, 'layer', 'layerId', 'copper0'))
+
+        if (!ofLayer(layers, 'layerId', 'copper1'))
+            layers.appendChild(this.made(layers, 'layer', 'layerId', 'copper1'))
+
+        this.connectorElements().forEach(element => {
+            const holder = childNamed(childNamed(element, 'views'), 'pcbView')
+            const [p0, p1] = [ofLayer(holder, 'layer', 'copper0'), ofLayer(holder, 'layer', 'copper1')]
+
+            if (!holder || (!p0 && !p1))
+                return
+
+            if (smd && p0 && !p1)
+                return p0.setAttribute('layer', 'copper1')
+
+            if (smd && p0)
+                return holder.removeChild(p0)
+
+            if (!smd && (!p0 || !p1)) {
+                const twin = (p0 ?? p1 as XmlElement).cloneNode(true) as XmlElement
+                twin.setAttribute('layer', p0 ? 'copper1' : 'copper0')
+                holder.appendChild(twin)
+            }
+        })
+
+        const groups = new Map<string, XmlElement>()
+        walk(svg, element => ['copper0', 'copper1'].includes(element.getAttribute('id') ?? '') && void groups.set(element.getAttribute('id') ?? '', element))
+        const [g0, g1] = [groups.get('copper0'), groups.get('copper1')]
+
+        if (smd && g0 && !g1)
+            g0.setAttribute('id', 'copper1')
+
+        if (smd && g0 && g1)
+            g0.removeAttribute('id')
+
+        if (!smd && (!g0 || !g1) && (g0 ?? g1)) {
+            const outer = (g0 ?? g1) as XmlElement
+            const inner = documentOf(outer).createElement('g')
+            inner.setAttribute('id', g0 ? 'copper1' : 'copper0')
+            childrenOf(outer).forEach(child => inner.appendChild(child))
+            outer.appendChild(inner)
+        }
+
+        return true
+    }
+
+    // SÓ ESTA VISTA: AS OUTRAS VISTAS DA PEÇA E DOS CONECTORES COPIAM ESTA, E A PEÇA SÓ APARECE NELA E NO ÍCONE (hideOtherViews DO pemainwindow.cpp)
+    onlyView(view: DraftView) {
+        const others = SHOWN.filter(other => other !== view)
+        const swap   = (parent: XmlElement | undefined) => {
+            const source = childNamed(parent, view)
+
+            if (!parent || !source)
+                return
+
+            others.forEach(other => {
+                const old  = childNamed(parent, other)
+                const copy = documentOf(parent).createElement(other)
+                childrenOf(source).forEach(child => copy.appendChild(child.cloneNode(true)))
+                Array.from({ length: source.attributes.length }, (_, i) => source.attributes[i]).forEach(attribute => copy.setAttribute(attribute.name, attribute.value))
+
+                if (old)
+                    parent.removeChild(old)
+
+                parent.appendChild(copy)
+            })
+        }
+
+        swap(childNamed(this.root, 'views'))
+        this.connectorElements().forEach(element => swap(childNamed(element, 'views')))
+        others.forEach(other => this.svgs[view] && this.setSvg(other as DraftView, this.getSvgText(view)))
+    }
+
+    layerIds(view: DraftView) {
+        return childrenNamed(childNamed(childNamed(childNamed(this.root, 'views'), view), 'layers'), 'layer').map(layer => layer.getAttribute('layerId') ?? '').filter(Boolean)
+    }
+
     // CAMADAS DO <p> DE UM CONECTOR NOVO NA VISTA: A PRIMEIRA CAMADA DA VISTA; NA PCB, CADA CAMADA DE COBRE DA PEÇA
     layersOf(view: DraftView) {
         const layers = childrenNamed(childNamed(childNamed(childNamed(this.root, 'views'), view), 'layers'), 'layer').map(layer => layer.getAttribute('layerId') ?? '').filter(Boolean)
@@ -252,6 +401,7 @@ export class PartDraft {
             return elements.sort((a, b) => numberOf(a.getAttribute('id') ?? '') - numberOf(b.getAttribute('id') ?? '')).slice(count).forEach(element => {
                 const id = element.getAttribute('id') ?? ''
                 DRAFT_VIEWS.forEach(view => this.unassign(view, id))
+                this.setBuses(this.getBuses().map(bus => bus.filter(member => member !== id)))
                 parent.removeChild(element)
             })
 

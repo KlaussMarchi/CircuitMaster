@@ -16,7 +16,7 @@ const fritzingParts = (): Plugin => {
         const url  = decodeURIComponent((request.url ?? '').split('?')[0]).replace(/^\/+/, '')
         const name = url as keyof ReturnType<typeof getListings>
 
-        if (name === 'fzp.json' || name === 'svg.json' || name === 'sketches.json') {
+        if (name === 'fzp.json' || name === 'svg.json' || name === 'sketches.json' || name === 'bins.json') {
             listings = listings ?? getListings()
             response.setHeader('Content-Type', TYPES['.json'])
             return response.end(JSON.stringify(listings[name]))

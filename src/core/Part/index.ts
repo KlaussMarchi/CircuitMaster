@@ -9,6 +9,7 @@ export type Kind      = 'wire' | 'jumper' | 'logo' | 'copperFill' | 'blocker' | 
 export type Part = {
     moduleId: string
     version: number
+    replacedBy: string
     title: string
     label: string
     author: string
@@ -33,6 +34,7 @@ const PART_NUMBERS    = ['mn', 'mpn', 'part number']
 const KINDS: [(moduleId: string, properties: string, title: string) => boolean, Kind][] = [
     [id => id === 'WireModuleID', 'wire'],
     [id => id === 'JumperModuleID', 'jumper'],
+    [id => id.endsWith('BoardLogoImageModuleID'), 'board'],
     [id => id.endsWith('LogoImageModuleID') || id.endsWith('LogoTextModuleID'), 'logo'],
     [id => id === 'GroundPlaneModuleID', 'copperFill'],
     [id => id.endsWith('BlockerModuleID'), 'blocker'],
@@ -123,6 +125,7 @@ export const readPart = (text: string, internal = false) => {
     const part: Part = {
         moduleId,
         version: Number(textOf(childNamed(root, 'version')).trim()) || 0,
+        replacedBy: childNamed(root, 'version')?.getAttribute('replacedby')?.trim() ?? '',    // PEÇA DESATUALIZADA: O moduleId DA REVISÃO SEGUINTE
         title,
         label: textOf(childNamed(root, 'label')),
         author: textOf(childNamed(root, 'author')),

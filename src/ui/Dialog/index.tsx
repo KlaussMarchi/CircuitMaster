@@ -1,7 +1,8 @@
 import type { KeyboardEvent, ReactNode } from 'react'
 import { LEVELS } from '../Modes'
 import { assignKey, getKeyMap, KEY_ACTIONS, keyOf, shortcutOf, showKey } from '../Keys'
-import { GRID_SIZES, useStore, type GridKind, type View } from '../Store'
+import { GRID_SIZES, getSeedCandidates, useStore, type GridKind, type View } from '../Store'
+import { setGroundFillSeed } from '../../engine/Edit'
 import { CROSSHAIRS, UNITS } from '../Navigation'
 import { VIEWS, VIEW_LABELS } from '../../core/Layer'
 import { getTag, LANGUAGES, t } from '../../core/Text'
@@ -47,6 +48,15 @@ const Field = ({ label, value, placeholder, commit }: { label: string, value: st
     </div>
 )
 
+const Swatch = ({ label, value, change }: { label: string, value: string, change: (color: string) => void }) => (
+    <div className="pref">
+        <span>{t(label)}</span>
+        <div className="in paint"><input type="color" aria-label={t(label)} value={value} onChange={event => change(event.target.value)} /><span className="num grow">{value}</span></div>
+    </div>
+)
+
+const NET_TEXT: ['outside' | 'connector', string][] = [['outside', 'Na ponta de fora'], ['connector', 'Junto ao conector']]
+
 // PREFERÊNCIAS DO NAVEGADOR: RODA, FIOS CURVOS, MODO, LÍNGUA, TEMA, UNIDADES E CURSOR, GRADES, MANUTENÇÃO E AS TECLAS DE CADA AÇÃO (A TECLA ESCOLHIDA SAI DA AÇÃO QUE A TINHA)
 const Preferences = () => {
     const preferences = useStore(state => state.preferences)
@@ -76,6 +86,9 @@ const Preferences = () => {
             <Choice label="Unidades" value={preferences.units} options={UNITS} change={units => setPreferences({ units })} />
             <Choice label="Coordenadas relativas" value={preferences.polar} options={[[false, 'Cartesianas (dX, dY)'], [true, 'Polares (r, θ)']]} change={polar => setPreferences({ polar })} />
             <Choice label="Cursor em cruz" value={preferences.crosshair} options={CROSSHAIRS} change={crosshair => setPreferences({ crosshair })} />
+            <Swatch label="Realce de terminal ligado" value={preferences.connectedColor} change={connectedColor => setPreferences({ connectedColor })} />
+            <Swatch label="Realce de terminal solto" value={preferences.unconnectedColor} change={unconnectedColor => setPreferences({ unconnectedColor })} />
+            <Choice label="Texto dos net labels novos" value={preferences.netLabel} options={NET_TEXT} change={netLabel => setPreferences({ netLabel })} />
             <Choice label="Mostrar o cursor em cruz" value={preferences.crosshairAlways} options={[[false, 'Só com o teclado'], [true, 'Sempre']]} change={crosshairAlways => setPreferences({ crosshairAlways })} />
             <p className="soft" style={{ margin: '14px 0 6px' }}>{t('Grades: a lista de cada vista (N e Shift+N andam por ela; as duas primeiras são as grades rápidas Alt+1 e Alt+2) e as que valem só para peças ou só para fios.')}</p>
             {VIEWS.map(view => <Field key={view} label={VIEW_LABELS[view]} value={(preferences.grids[view] ?? GRID_SIZES[view]).join(', ')} placeholder={GRID_SIZES[view].join(', ')} commit={text => grids(view, text)} />)}
@@ -176,12 +189,30 @@ const Guide = () => (
 
 const About = () => <><p className="soft" style={{ marginBottom: 12 }}>{t('Editor de circuitos compatível com o Fritzing 1.0.8: protoboard, esquemático e PCB sincronizados, simulação SPICE e manufatura (Gerber, Excellon, BOM).')}</p><Table rows={CREDITS} /></>
 
+// SEMENTES DO PREENCHIMENTO DE TERRA: CADA CAIXA MARCA OU DESMARCA NA HORA, COM DESFAZER; O BOTÃO PREENCHE (GroundFillSeedDialog DO FRITZING)
+const Seeds = () => {
+    const doc     = useStore(state => state.doc)
+    const library = useStore(state => state.library)
+    const netlist = useStore(state => state.netlist)
+    const rows    = getSeedCandidates(doc, library, netlist)
+    const { edit, fillCopper } = useStore.getState()
+
+    return (
+        <>
+            <p className="soft" style={{ marginBottom: 12 }}>{t('No preenchimento de terra o cobre inunda também as trilhas e os terminais ligados às sementes. A lista traz as sementes marcadas e os conectores GND, VSS ou ground da PCB, um por net.')}</p>
+            {rows.length ? <ul className="seeds">{rows.map(row => <li key={row.key}><label className="pe-check"><input type="checkbox" checked={row.seed} onChange={event => edit(current => setGroundFillSeed(current, row.key, event.target.checked))} />{row.name}</label></li>)}</ul> : <div className="empty">{t('Nenhum conector de terra na PCB: marque uma semente no menu de contexto de um terminal.')}</div>}
+            <div className="boundary-actions" style={{ marginTop: 12 }}><button className="btn sm primary" onClick={() => { useStore.setState({ dialog: null }); void fillCopper('ground') }}>{t('Preencher com terra')}</button></div>
+        </>
+    )
+}
+
 const CONTENT: Record<string, [string, ReactNode]> = {
     recovery: ['Recuperar trabalho não salvo', <Versions startup />],
     versions: ['Versões salvas automaticamente', <Versions startup={false} />],
     shortcuts: ['Atalhos de teclado', <Shortcuts />],
     preferences: ['Preferências', <Preferences />],
     guide: ['Guia de uso', <Guide />],
+    seeds: ['Sementes de terra', <Seeds />],
     about: ['Sobre o CircuitMaster', <About />]
 }
 

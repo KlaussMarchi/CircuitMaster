@@ -60,6 +60,15 @@ guardado no navegador (`cm-theme`).
   grade própria para peças ou fios, seleção por laço, apagar com cliques, copiar como texto (`Ctrl+Shift+C`), ver a
   seleção em outra vista e recolher o painel da esquerda pelo trilho.
 - **Ajuda**: Guia de uso (como fazer cada coisa), Tour, Boas-vindas, Atalhos de teclado e a paleta (`Ctrl+K`).
+- **Arquivo**: Salvar como (`Shift+Ctrl+S`), Salvar uma cópia, Reverter ao arquivo, Abrir recentes (até 10, guardados
+  no navegador) e Imprimir (`Ctrl+P`).
+- **Camadas** nas três vistas, pela legenda do quadro ou Exibir › Camadas; na protoboard, Exibir › Colorir fios pelo
+  comprimento; grade de tamanho livre (Exibir › Grade) e cor de fundo da vista (aba Documento).
+- **PCB**: Roteamento › Ver de baixo espelha a placa; uma face de cobre só clicável (`Shift+Ctrl+1`, `2` e `3`);
+  Mostrar não roteadas realça as conexões que faltam; a largura das trilhas selecionadas muda no inspetor (8 a 128
+  mil); Escolher sementes… lista os conectores de terra para o preenchimento.
+- **Rótulo da peça**: clique direito no rótulo para editar o texto, escolher os valores exibidos, girar, espelhar e
+  mudar a fonte.
 
 - **Peças** (painel esquerdo, atalho `/` para buscar): os básicos (resistor, capacitor, fonte DC, gerador, terra,
   diodo, LED, transistores, amp-op, 555…) vêm primeiro, agrupados, e depois a biblioteca completa do Fritzing. A
@@ -88,8 +97,15 @@ guardado no navegador (`cm-theme`).
 - **Peças próprias**: "Editar (editor de peças)" no menu da peça abre o editor (metadados, conectores e o elemento e
   o terminal de cada conector em cada vista, com a marca do terminal arrastável); gravar pede o registro da revisão
   (histórico `<history>` do `.fzp`, com a opção de subir a versão) e cria uma peça nova em Meus itens, que pode
-  trocar a peça do sketch e ser baixada como `.fzpz`. Os bins do usuário e as peças importadas ou criadas ficam
-  guardados no navegador.
+  trocar a peça do sketch e ser baixada como `.fzpz`; uma peça sua é regravada no lugar. O editor desfaz e refaz
+  (`Ctrl+Z`, `Ctrl+Y`), define todos os conectores como macho, fêmea ou pad, passa de passante a SMD, liga conectores
+  por dentro (conexões internas), aceita PNG e JPG, tem zoom, grade e camadas e baixa o SVG de cada vista. Os bins do
+  usuário e as peças importadas ou criadas ficam guardados no navegador.
+- **Bins**: Core, Simulador, Meus itens e os bins do Fritzing pelo "+" (em ícones ou em lista); o clique direito numa
+  peça do bin edita, exporta, remove ou localiza no sketch.
+- **Peças geradas**: CI DIP e SIP, mystery part, borne com parafuso, barras de pinos, perfboard e stripboard mudam
+  pinos, espaçamento e tamanho no inspetor; na stripboard, um clique entre dois furos corta ou religa a tira. Logos de
+  imagem e a placa de forma livre carregam SVG, PNG ou JPG pelo inspetor.
 - **Simulação**: as ferramentas V, A e V·A do quadro colocam pontas de prova num fio ou terminal. **Simular** roda,
   numa ação, o ponto de operação e o transitório na janela do teste; se nada no circuito varia no tempo, mostra o
   regime direto, sem animação. Os valores aparecem no circuito e o painel de simulação abre embaixo, um só:
@@ -117,7 +133,7 @@ guardado no navegador (`cm-theme`).
 - **Nada se perde**: o sketch é salvo sozinho no navegador (IndexedDB) 1,5 s depois de cada mudança e ao esconder a
   aba, guardando as 20 versões mais recentes (Arquivo › Versões salvas automaticamente…). Se a aba fecha ou trava
   com alterações não salvas, a próxima abertura oferece recuperá-las; outra aba aberta no mesmo navegador não é
-  confundida com trabalho perdido. Abrir, Novo e circuito de teste perguntam antes de descartar alterações.
+  confundida com trabalho perdido.
 - **Histórico de desfazer** (Editar › Histórico de desfazer, no painel Projeto): cada passo com nome ("adicionou
   R1", "girou R1", "mudou resistência de R1"); um clique volta ou avança até ele.
 - **Falhas contidas**: se um painel falha, ele mostra a causa e "Recarregar painel" no lugar, e o resto do app

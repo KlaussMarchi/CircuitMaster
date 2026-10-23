@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Inspector } from '../Inspector'
-import { RoutingPanel } from '../RoutingPanel'
-import { ProjectPanel } from '../ProjectPanel'
 import { useStore, type Panel } from '../Store'
 import { t } from '../../core/Text'
+
+// AS ABAS ROTEAMENTO E DOCUMENTO CARREGAM QUANDO ABREM
+const RoutingPanel = lazy(() => import('../RoutingPanel').then(module => ({ default: module.RoutingPanel })))
+const ProjectPanel = lazy(() => import('../ProjectPanel').then(module => ({ default: module.ProjectPanel })))
 
 const TABS: [Panel, string][] = [['properties', 'Propriedades'], ['routing', 'Roteamento'], ['document', 'Documento']]
 
@@ -25,8 +27,10 @@ export const SidePanel = () => {
             </div>
             <div className="insp-body">
                 {panel === 'properties' && <Inspector />}
-                {panel === 'routing' && <RoutingPanel />}
-                {panel === 'document' && <ProjectPanel />}
+                <Suspense fallback={null}>
+                    {panel === 'routing' && <RoutingPanel />}
+                    {panel === 'document' && <ProjectPanel />}
+                </Suspense>
             </div>
         </aside>
     )

@@ -90,7 +90,10 @@ inspetor (Pinos) ficam recolhidas em qualquer modo; o cartão "Como funciona" ab
 ## 7. PREFERÊNCIAS E ATALHOS
 
 **Editar › Preferências…** (`Ctrl+,`): roda do mouse (zoom ou rolar a vista), arrastar o meio de um fio (dobra ou
-curva, como o "curvy wires" do Fritzing), modo da interface, idioma, tema e a tecla de cada ação. Ficam no navegador.
+curva, como o "curvy wires" do Fritzing), modo da interface, idioma, tema, unidades, cursor em cruz, grades, cores de
+realce dos terminais ligado e solto, texto dos net labels novos (na ponta de fora ou junto ao conector; o inspetor
+troca em cada um) e a tecla de cada ação. Ficam no navegador. O Gerber sai sempre com seis casas (a opção beta do
+Fritzing é o padrão aqui).
 
 `ui/Keys` é a tabela única de ações com tecla: nome, teclas padrão do Fritzing (spec 02 §10.3) e o que faz. O teclado,
 os atalhos mostrados nos menus e na paleta, Ajuda › Atalhos de teclado e o editor de teclas das Preferências leem
@@ -123,10 +126,17 @@ dela. A tecla escolhida para uma ação sai da ação que a tinha; "padrão" e "
   cada painel vazio diz como enchê-lo.
 - **Erro com causa e saída**: "autorouter: … ; tente de novo", "Onda quadrada precisa de uma fonte de pulso…".
 
-## 10. CAMADAS DA PCB E DRC AUTOMÁTICO
+## 10. CAMADAS, FACES DA PCB E DRC AUTOMÁTICO
 
-- A legenda "Camadas" no canto do quadro da PCB liga e desliga cada grupo (cobre de cima e de baixo, serigrafias,
-  placa, imagem das peças, ratsnest) num clique; Exibir › Camadas da PCB tem os mesmos e mostrar/ocultar todas.
+- A legenda "Camadas" no canto do quadro liga e desliga cada grupo num clique, nas três vistas (protoboard: protoboards,
+  peças, fios, rótulos, ratsnest, notas, réguas; esquemático: moldura, peças, texto, fios, rótulos, ratsnest, notas,
+  réguas; PCB: cobre de cima e de baixo, serigrafias, placa, imagem das peças, ratsnest, notas, réguas); fora da PCB
+  ela começa recolhida. Exibir › Camadas tem os mesmos e mostrar/ocultar todas; o que fica oculto é guardado por vista.
+- Roteamento › Ver de baixo espelha o quadro da PCB e põe as camadas de baixo por cima (como o Fritzing), com os
+  rótulos legíveis; clique, pan e a exportação da vista seguem o espelho. Vale só na sessão.
+- Só uma face de cobre clicável (`Shift+Ctrl+1`, `2` e `3`): a outra esmaece, e nem as trilhas nem as peças SMD dela
+  recebem clique.
+- Roteamento › Mostrar não roteadas realça em amarelo os terminais das linhas de ratsnest até o próximo clique.
 - O DRC roda sozinho 600 ms depois de cada mudança na PCB (e ao chegar nela) e marca cada violação no desenho
   (`[data-drc]`); Problemas lista com "Mostrar na placa".
 
@@ -178,6 +188,17 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Andar pela série de valores comerciais | seleciona e usa ‹ › do cartão, a roda ou as setas |
 | Girar, espelhar, apagar | seleciona e usa o botão da barra do quadro (ou o atalho mostrado na dica) |
 | Mover a vista e dar zoom | arrasta o fundo e usa a roda |
+| Abrir um arquivo recente | Arquivo › Abrir recentes |
+| Imprimir a vista | `Ctrl+P` (ou Arquivo › Imprimir…) |
+| Achar uma peça no sketch | `Ctrl+F` e o nome, ou clique direito na peça do bin › Localizar no sketch |
+| Ocultar uma camada | clica nela na legenda Camadas do quadro |
+| Ver a placa por baixo | Roteamento › Ver de baixo |
+| Mudar a largura de uma trilha | seleciona a trilha e escolhe no campo Largura do inspetor |
+| Girar ou mudar o texto do rótulo | clique direito no rótulo |
+| Cortar uma tira da stripboard | clica entre os dois furos |
+| Mudar os pinos de um CI genérico ou de um borne | seleciona e escolhe Pinos no inspetor |
+| Pôr um logo de imagem ou uma placa de forma livre | põe a peça e clica em Carregar imagem no inspetor |
+| Desfazer no editor de peças | `Ctrl+Z` ou o botão do cabeçalho do editor |
 | Selecionar várias | Shift+arrastar no fundo, ou o Seletor da barra |
 | Trocar de vista | clica em Protoboard, Esquemático ou PCB na barra superior |
 | Simular | clica em Simular |

@@ -31,6 +31,7 @@ const ICONS: Record<string, string[]> = {
     chevronRight: ['m9.5 6.5 5.5 5.5-5.5 5.5'],
     chevronLeft: ['m14.5 6.5-5.5 5.5 5.5 5.5'],
     grid: ['M4 4h16v16H4z', 'M4 12h16', 'M12 4v16'],
+    list: ['M9 6h11M9 12h11M9 18h11', 'M4 6h1M4 12h1M4 18h1'],
     gauge: ['M4.5 17a8 8 0 1 1 15 0', 'm12 13 3.5-4.5', 'M12 13h.01'],
     route: ['M5 19V9.5A4.5 4.5 0 0 1 9.5 5H15', 'm12 2 3 3-3 3', 'M5 19h.01', 'M19 15v4', 'M17 17h4'],
     check: ['m5 12.5 4.5 4.5L19 7.5'],

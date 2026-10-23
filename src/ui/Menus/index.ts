@@ -1,15 +1,16 @@
-import type { Point } from '../../core/Geometry'
+import { rotation, type Matrix, type Point } from '../../core/Geometry'
 import { WIRE_FLAGS } from '../../core/Document'
 import { Scene } from '../../engine/Scene'
 import { WIRE_COLORS } from '../../engine/Drawing'
-import { bendToVia, clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires, setAutoroutable, setGroundFillSeed, setLabelVisible, setLayerHidden, setLocked, setSticky, setTraceSide, setWireColor, splitWire, straightenWire, viaToBend, type ZMode } from '../../engine/Edit'
+import { bendToVia, clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires, setAutoroutable, setGroundFillSeed, setLabel, setLabelVisible, setLayerHidden, setLocked, setSticky, setTraceSide, setWire, splitWire, straightenWire, transformLabel, viaToBend, type ZMode } from '../../engine/Edit'
+import { nameOf } from '../../core/Properties'
 import { getConfig } from '../Pcb'
 import type { MenuEntry } from '../ContextMenu'
 import { isEditable, useStore } from '../Store'
 import { shortcutOf } from '../Keys'
 import { t } from '../../core/Text'
 
-export type Target = { kind: 'part' | 'wire' | 'ratsnest', modelIndex: string, key: string | null, point: Point, rat: [string, string] | null }
+export type Target = { kind: 'part' | 'wire' | 'ratsnest' | 'label', modelIndex: string, key: string | null, point: Point, rat: [string, string] | null }
 
 const COLOR_NAMES: Record<string, string> = { blue: 'azul', red: 'vermelho', black: 'preto', yellow: 'amarelo', green: 'verde', grey: 'cinza', white: 'branco', orange: 'laranja', ochre: 'ocre', cyan: 'ciano', brown: 'marrom', purple: 'roxo', pink: 'rosa' }
 const SILKSCREEN  = ['silkscreen', 'silkscreen0']
@@ -18,6 +19,10 @@ const AUTOROUTE   = 32
 const Z_ITEMS: [string, ZMode][] = [['Trazer para frente', 'front'], ['Avançar', 'forward'], ['Recuar', 'backward'], ['Enviar para trás', 'back']]
 
 const ROTATIONS: [string, string, number, boolean][] = [['Girar 45° no sentido horário', '', 45, true], ['Girar 90° no sentido horário', 'rotateCw', 90, false], ['Girar 180°', '', 180, false], ['Girar 90° no sentido anti-horário', 'rotateCcw', -90, false], ['Girar 45° no sentido anti-horário', '', -45, true]]
+
+const LABEL_TURNS: [string, number, boolean][] = [['Girar 45° no sentido horário', 45, true], ['Girar 90° no sentido horário', 90, false], ['Girar 135° no sentido horário', 135, true], ['Girar 180°', 180, false], ['Girar 135° no sentido anti-horário', 225, true], ['Girar 90° no sentido anti-horário', 270, false], ['Girar 45° no sentido anti-horário', 315, true]]    // RotateFlipTable DO partlabelcontextmenu.cpp; OS DE 45° SÓ NA PCB
+const LABEL_FLIPS: [string, Matrix][]          = [['Espelhar horizontalmente', [-1, 0, 0, 1, 0, 0]], ['Espelhar verticalmente', [1, 0, 0, -1, 0, 0]]]
+const LABEL_SIZES: [string, number, number][]  = [['Minúsculo', 5, 3], ['Pequeno', 7, 5], ['Médio', 9, 7], ['Grande', 14, 12]]    // pt DO getLabelFontSize*: FORA DA PCB (InfoGraphicsView) E NA PCB (PCBSketchWidget)
 
 // BIN NOVO COM O NOME PEDIDO; CANCELAR NÃO CRIA
 export const promptBin = (moduleIds: string[]) => {
@@ -62,6 +67,7 @@ const partMenu = (target: Target): MenuEntry[] => {
         { label: 'Duplicar', shortcut: shortcutOf(keys, 'duplicate'), apply: () => void duplicate() },
         { label: 'Apagar', shortcut: shortcutOf(keys, 'remove'), disabled: !free.length, apply: () => remove(false) },
         { label: 'Apagar sem fios', shortcut: shortcutOf(keys, 'removeMinus'), disabled: !free.length, apply: () => remove(true) },
+        { label: 'Desligar todos os fios', disabled: !chosen.length, apply: () => useStore.getState().disconnectWires(chosen) },
         null,
         { label: 'Editar (editor de peças)', disabled: !isEditable(part), apply: () => editPart(target.modelIndex) },
         { label: 'Adicionar ao bin', items: [
@@ -79,6 +85,36 @@ const partMenu = (target: Target): MenuEntry[] => {
             { label: 'Definir semente de preenchimento de terra', checked: seed, disabled: !target.key, apply: () => edit(current => setGroundFillSeed(current, target.key ?? '', !seed)) },
             { label: 'Limpar sementes de preenchimento de terra', apply: () => edit(clearGroundFillSeeds) }
         ] : []
+    ]
+}
+
+// O TEXTO DO RÓTULO É O NOME DA PEÇA: EDITAR LEVA AO CAMPO NOME DO INSPETOR, SEM DIÁLOGO (O partLabelEdit DO FRITZING ABRE UM)
+const editName = (modelIndex: string) => {
+    const { select, setPanel } = useStore.getState()
+    select([modelIndex])
+    setPanel('properties')
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>('#part-name')?.select())
+}
+
+// MENU DO RÓTULO DA PEÇA (partlabelcontextmenu.cpp DO FRITZING): TEXTO, OCULTAR, VALORES EXIBIDOS, GIRO E TAMANHO DA FONTE
+const labelMenu = (target: Target): MenuEntry[] => {
+    const { doc, library, view, edit } = useStore.getState()
+    const { modelIndex } = target
+    const shown  = doc.instances[modelIndex]?.views[view]?.label
+    const keys   = shown?.keys ?? []
+    const part   = library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')
+    const pcb    = view === 'pcbView'
+    const toggle = (key: string) => edit(current => setLabel(current, view, [modelIndex], { keys: keys.includes(key) ? keys.filter(other => other !== key) : [...keys, key] }))
+    const turn   = (change: Matrix) => edit(current => transformLabel(current, library, view, modelIndex, change))
+    const values = Object.keys(part?.properties ?? {}).map((key): MenuEntry => ({ label: nameOf(key), checked: keys.includes(key), apply: () => toggle(key) }))
+
+    return [
+        { label: 'Editar', apply: () => editName(modelIndex) },
+        { label: 'Ocultar rótulo da peça', apply: () => edit(current => setLabelVisible(current, library, view, [modelIndex], false)) },
+        null,
+        { label: 'Exibir valores', items: [{ label: 'Texto do rótulo', checked: keys.includes(''), apply: () => toggle('') }, null, ...values] },
+        { label: 'Girar/Espelhar', items: [...LABEL_TURNS.filter(([, , fine]) => pcb || !fine).map(([label, degrees]): MenuEntry => ({ label, apply: () => turn(rotation(degrees)) })), null, ...LABEL_FLIPS.map(([label, change]): MenuEntry => ({ label, apply: () => turn(change) }))] },
+        { label: 'Tamanho da fonte', items: LABEL_SIZES.map(([label, size, pcbSize]): MenuEntry => ({ label, checked: shown?.size === (pcb ? pcbSize : size), apply: () => edit(current => setLabel(current, view, [modelIndex], { size: pcb ? pcbSize : size })) })) }
     ]
 }
 
@@ -103,7 +139,7 @@ const wireMenu = (target: Target): MenuEntry[] => {
     return [
         zMenu(isRat),
         null,
-        ...colors.length ? [{ label: 'Cor do fio', disabled: isRat, items: colors.map(([name, color]) => ({ label: COLOR_NAMES[name], checked: state?.wire?.color.toLowerCase() === color, apply: () => edit(current => setWireColor(current, view, [wire], color)) })) }] : [],
+        ...colors.length ? [{ label: 'Cor do fio', disabled: isRat, items: colors.map(([name, color]) => ({ label: COLOR_NAMES[name], checked: state?.wire?.color.toLowerCase() === color, apply: () => edit(current => setWire(current, view, [wire], { color })) })) }] : [],
         ...view === 'pcbView' ? [{ label: state?.layer === 'copper0trace' ? 'Mover para a face de cima' : 'Mover para a face de baixo', disabled: isRat || !trace, apply: () => edit(current => setTraceSide(current, wire)) }] : [],
         { label: view === 'breadboardView' ? 'Criar fio a partir do ratsnest' : 'Criar trilha a partir do ratsnest', disabled: !isRat, apply: () => void connect(rat[0], rat[1]) },
         ...view !== 'breadboardView' ? [{ label: 'Não rotear automaticamente', checked: trace && (flags & AUTOROUTE) === 0, disabled: isRat || !trace, apply: () => edit(current => setAutoroutable(current, library, view, wire, (flags & AUTOROUTE) === 0)) }] : [],
@@ -117,4 +153,4 @@ const wireMenu = (target: Target): MenuEntry[] => {
     ]
 }
 
-export const getMenu = (target: Target) => target.kind === 'part' ? partMenu(target) : wireMenu(target)
+export const getMenu = (target: Target) => target.kind === 'part' ? partMenu(target) : target.kind === 'label' ? labelMenu(target) : wireMenu(target)

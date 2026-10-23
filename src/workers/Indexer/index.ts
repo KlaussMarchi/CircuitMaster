@@ -23,23 +23,25 @@ export type Entry = {
 export type Found = Omit<Entry, 'haystack'>
 
 export type BinSection = { title: string, entries: Found[] }
-export type BinTab     = { title: string, sections: BinSection[] }
+export type BinTab     = { title: string, file: string, sections: BinSection[] }
 
 type Cached = { size: number, mtime: number, entry: Entry | null }
 
 const DB_NAME      = 'circuitmaster'
 const DB_VERSION   = 3
 const STORE        = 'parts'
-const CONCURRENCY  = 16
+const CONCURRENCY  = 4       // LEITURAS AO MESMO TEMPO: O NAVEGADOR ABRE 6 CONEXÕES POR HOST E 2 FICAM LIVRES PARA A PEÇA QUE O USUÁRIO PÕE DURANTE A INDEXAÇÃO
 const PROGRESS     = 100
 const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR NO MEIO DA PRIMEIRA INDEXAÇÃO NÃO PERDE O QUE JÁ FOI LIDO
 const SEARCH_MAX   = 300
-const BINS         = [['Core', 'core.fzb'], ['Simulador', 'more/sim.fzb']]
+const BINS         = [['Core', 'bins/core.fzb'], ['Simulador', 'bins/more/sim.fzb']]    // À FRENTE, NESTA ORDEM; OS OUTROS BINS DO ACERVO SEGUEM PELO TÍTULO
 const ENGINE_FAULT = 'InternalError'
 const FETCH_MS     = 15000    // LEITURA PRESA NO SERVIDOR VIRA UMA SEGUNDA TENTATIVA EM VEZ DE PRENDER A INDEXAÇÃO
 
 let entries: Entry[] = []
 let byId = new Map<string, Entry>()
+const early = new Map<string, Entry>()    // PEÇAS JÁ LIDAS DURANTE A INDEXAÇÃO: PÔR UMA PEÇA DO CORE NÃO ESPERA O ACERVO INTEIRO
+const waiting: (() => void)[] = []
 let words = new Map<string, Words>()
 let inBins: Set<string>[] = []
 
@@ -130,6 +132,12 @@ const index = async () => {
                 fresh.push([key, { size: listing.size, mtime: listing.mtime, entry: found[i] }])
             }
 
+            if (found[i] && !early.has(found[i]?.moduleId ?? ''))
+                early.set(found[i]?.moduleId ?? '', found[i] as Entry)
+
+            if (waiting.length)
+                waiting.splice(0).forEach(check => check())
+
             if (++done % PROGRESS === 0)
                 scope.postMessage({ type: 'progress', done, total: listings.length })
 
@@ -140,20 +148,33 @@ const index = async () => {
 
     await Promise.all(Array.from({ length: CONCURRENCY }, work))
 
-    const read  = await Promise.all(BINS.map(async ([title, file]) => [title, readBin(await fetchText(`/fritzing/parts/bins/${file}`) ?? '')] as const))
-    const named = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
-    const made  = read.flatMap(([, bin]) => bin?.entries ?? []).filter(({ moduleIdRef }) => !named.has(moduleIdRef)).flatMap(({ moduleIdRef }) => {
+    byId    = new Map(found.filter((entry): entry is Entry => entry !== null).reverse().map(entry => [entry.moduleId, entry]))
+    entries = [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
+    words   = new Map(entries.map(entry => [entry.moduleId, prepare(entry)]))
+    waiting.length = 0    // OS PEDIDOS QUE AINDA ESPERAVAM SAEM PELO ÍNDICE PRONTO
+    scope.postMessage({ type: 'ready', count: entries.length, total: listings.length })
+
+    if (db && fresh.length)
+        void writeCache(db, fresh)    // A GRAVAÇÃO DO CACHE NÃO SEGURA OS PEDIDOS
+}
+
+// BINS DO ACERVO DEPOIS DO ÍNDICE: AS ABAS E AS PEÇAS GERADAS QUE SÓ OS BINS CITAM ENTRAM NUMA SEGUNDA LEVA, SEM SEGURAR A BUSCA
+const readBins = async () => {
+    const files = (JSON.parse(await fetchText('/fritzing/bins.json') ?? '[]') as string[]).filter(file => !BINS.some(([, fixed]) => fixed === file))
+    const read  = await Promise.all([...BINS, ...files.map(file => ['', file])].map(async ([title, file]) => [title, file, readBin(await fetchText(`/fritzing/parts/${file}`) ?? '')] as const))
+    const made  = read.flatMap(([, , bin]) => bin?.entries ?? []).filter(({ moduleIdRef }) => !byId.has(moduleIdRef)).flatMap(({ moduleIdRef }) => {
         const text  = generateFzp(moduleIdRef)
         const entry = text ? toEntry({ root: GENERATED_ROOT, path: moduleIdRef, size: 0, mtime: 0 }, text) : null
         return entry ? [[moduleIdRef, entry] as const] : []
     })
 
-    byId    = new Map([...named, ...made])
-    entries = [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
-    words   = new Map(entries.map(entry => [entry.moduleId, prepare(entry)]))
-    scope.postMessage({ type: 'ready', count: entries.length, total: listings.length })
+    if (made.length) {
+        byId    = new Map([...byId, ...made])
+        entries = [...byId.values()].sort((a, b) => a.title.localeCompare(b.title))
+        words   = new Map(entries.map(entry => [entry.moduleId, prepare(entry)]))
+    }
 
-    const bins = read.map(([title, bin]) => {
+    const bins = read.flatMap(([title, file, bin]) => {
         const sections = new Map<string, Found[]>()
 
         bin?.entries.forEach(({ moduleIdRef, section }) => {
@@ -163,14 +184,12 @@ const index = async () => {
                 sections.set(section, [...sections.get(section) ?? [], strip(entry)])
         })
 
-        return { title, sections: [...sections].map(([name, items]) => ({ title: name, entries: items })) }
+        return sections.size ? [{ title: title || bin?.title || file, file, sections: [...sections].map(([name, items]) => ({ title: name, entries: items })) }] : []
     })
+    bins.splice(BINS.length, Infinity, ...bins.slice(BINS.length).sort((a, b) => a.title.localeCompare(b.title)))
 
     inBins = bins.map(bin => new Set(bin.sections.flatMap(section => section.entries.map(entry => entry.moduleId))))
     scope.postMessage({ type: 'bin', bins })
-
-    if (db && fresh.length)
-        await writeCache(db, fresh)
 }
 
 // BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR
@@ -179,8 +198,22 @@ const search = (text: string) => again(() => rankParts(entries.filter(entry => !
 const indexed = index()
 
 indexed.catch(() => {})    // A FALHA DO ÍNDICE CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
+indexed.then(readBins).catch(() => {})
+
+// PEDIDO QUE ESPERA AS PEÇAS APARECEREM NA LEITURA; O ÍNDICE PRONTO TAMBÉM O LIBERA (PEÇA GERADA OU INEXISTENTE)
+const arrival = (moduleIds: string[]) => new Promise<void>(resolve => {
+    const check = () => moduleIds.every(id => early.has(id)) ? resolve() : void waiting.push(check)
+    check()
+})
+
+const locations = (moduleIds: string[], table: Map<string, Entry>) => Object.fromEntries(moduleIds.flatMap(id => table.has(id) && table.get(id)?.root !== GENERATED_ROOT ? [[id, { root: table.get(id)?.root, path: table.get(id)?.path }]] : []))
 
 serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async data => {
+    if (data.type === 'locate') {
+        await Promise.race([arrival(data.moduleIds), indexed])
+        return locations(data.moduleIds, byId.size ? byId : early)
+    }
+
     await indexed
 
     if (data.type === 'search')
@@ -192,5 +225,5 @@ serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async
     if (data.type === 'entries')
         return data.moduleIds.flatMap(moduleId => byId.has(moduleId) ? [strip(byId.get(moduleId) as Entry)] : [])
 
-    return Object.fromEntries(data.moduleIds.flatMap(id => byId.has(id) && byId.get(id)?.root !== GENERATED_ROOT ? [[id, { root: byId.get(id)?.root, path: byId.get(id)?.path }]] : []))
+    return locations(data.moduleIds, byId)
 })

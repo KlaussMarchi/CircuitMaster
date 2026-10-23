@@ -54,7 +54,8 @@ const getCanvas = () => document.getElementById('canvas')?.parentElement?.getBou
 export const clientOf = (state: State, [x, y]: Point): Point | null => {
     const rect = getCanvas()
     const vp   = state.viewports[state.view]
-    return rect && vp ? [rect.left + (x - vp.x) * vp.zoom, rect.top + (y - vp.y) * vp.zoom] : null
+    const sx   = vp ? (x - vp.x) * vp.zoom : 0
+    return rect && vp ? [state.fromBelow && state.view === 'pcbView' ? rect.right - sx : rect.left + sx, rect.top + (y - vp.y) * vp.zoom] : null
 }
 
 const centerOf = (state: State): Point | null => {

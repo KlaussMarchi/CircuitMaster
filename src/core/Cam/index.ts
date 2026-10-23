@@ -15,7 +15,7 @@ export type Shape =
     { kind: 'path', points: number[], closed: boolean, w: number, fill: boolean, cap: string } |
     { kind: 'region', paths: Paths, evenOdd: boolean }
 
-export type Placement = { getMatrix: (modelIndex: string) => Matrix | null, isShown: (instance: Instance) => boolean, getLabelLines: (modelIndex: string) => string[] }
+export type Placement = { getMatrix: (modelIndex: string) => Matrix | null, isShown: (instance: Instance) => boolean, getLabelLines: (modelIndex: string) => string[], getLabelMatrix: (modelIndex: string) => Matrix | null }
 
 export type Face    = 'top' | 'bottom'
 export type Pad     = { shape: Shape, face: Face, smd: boolean }
@@ -222,7 +222,8 @@ const getLabelShape = (library: Library, placement: Placement, instance: Instanc
         return null
 
     const size  = label.size * PX_PER_INCH / POINTS_PER_INCH
-    const paths = placement.getLabelLines(instance.modelIndex).flatMap((line, i) => flattenPath(font.getPath(line, label.x, label.y + size * (i + 1), size)).map(subpath => transform(frame, subpath.points.flat())))
+    const turn  = placement.getLabelMatrix(instance.modelIndex)
+    const paths = placement.getLabelLines(instance.modelIndex).flatMap((line, i) => flattenPath(font.getPath(line, label.x, label.y + size * (i + 1), size)).map(subpath => transform(turn ? multiply(frame, turn) : frame, subpath.points.flat())))
     return paths.length ? { kind: 'region', paths, evenOdd: false } : null
 }
 

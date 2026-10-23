@@ -1,12 +1,13 @@
 import { t } from '../../core/Text'
 
 const DB_NAME    = 'circuitmaster-user'
-const DB_VERSION = 1
+const DB_VERSION = 2    // 2: ARQUIVOS RECENTES
 
-export const PARTS = 'parts'       // ARQUIVOS DAS PEÇAS DE PACOTE E DO EDITOR, PELO NOME DO ARQUIVO
-export const SAVES = 'autosave'    // VERSÕES DO SKETCH GRAVADAS SOZINHAS, PELO id
+export const PARTS  = 'parts'       // ARQUIVOS DAS PEÇAS DE PACOTE E DO EDITOR, PELO NOME DO ARQUIVO
+export const SAVES  = 'autosave'    // VERSÕES DO SKETCH GRAVADAS SOZINHAS, PELO id
+export const RECENT = 'recent'      // CÓPIA DOS ÚLTIMOS ARQUIVOS ABERTOS OU SALVOS, PELO NOME
 
-const STORES = [PARTS, SAVES]
+const STORES = [PARTS, SAVES, RECENT]
 
 const settle = <T,>(request: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result)
@@ -27,7 +28,13 @@ export class Vault {
         const opening = new Promise<IDBDatabase>((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION)
             request.onupgradeneeded = () => STORES.filter(store => !request.result.objectStoreNames.contains(store)).forEach(store => request.result.createObjectStore(store))
-            request.onsuccess       = () => resolve(request.result)
+            request.onsuccess       = () => {
+                request.result.onversionchange = () => {    // OUTRA ABA ABRIU UMA VERSÃO NOVA DO BANCO: ESTA SOLTA A SUA E RECONECTA NO PRÓXIMO USO
+                    request.result.close()
+                    this.db = null
+                }
+                resolve(request.result)
+            }
             request.onerror         = () => reject(request.error)
             request.onblocked       = () => reject(new DOMException(t('outra aba segura uma versão antiga do banco'), 'BlockedError'))
         })

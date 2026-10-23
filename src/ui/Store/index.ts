@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { Library } from '../../core/Library'
 import { Netlist, loadNetlistWasm, type NetlistWasm } from '../../core/Netlist'
-import { emptyDoc, fromSketch, keyOf, removeInstance, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
-import { exportBinBundle, readFile, type BundleFile, type Instance } from '../../core/Sketch'
+import { strToU8, zipSync } from 'fflate'
+import { emptyDoc, fromSketch, keyOf, removeEdges, removeInstance, splitKey, type Doc, type Probe, type ProbeKind } from '../../core/Document'
+import { exportBinBundle, readFile, type Bundle, type BundleFile, type Instance, type Sketch } from '../../core/Sketch'
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
@@ -29,7 +30,8 @@ import { LEVELS, type Level } from '../Modes'
 import type { Crosshair, Unit } from '../Navigation'
 import { getTag, setWords, t, type Language } from '../../core/Text'
 import { boardProblem, download, getClipper, type ExportKind } from '../Export'
-import { PARTS, Vault } from '../Vault'
+import { alignForPolicy, embeddedLogoSvg, getNetLabel, layeredSvg, rasterLogoSvg } from '../../core/Generator'
+import { PARTS, RECENT, Vault } from '../Vault'
 import { Autosave, type Snapshot, type Version } from '../Autosave'
 import wasmUrl from '../../core/Netlist/netlist.wasm?url'
 
@@ -42,11 +44,13 @@ export type Left       = 'parts' | 'project' | 'problems'
 export type Theme      = 'dark' | 'light'
 export type Side       = 'both' | 'top' | 'bottom'
 export type UserBin    = { title: string, moduleIds: string[] }
-export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'palette' | 'preferences' | 'guide' | null
-export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean, units: Unit, polar: boolean, crosshair: Crosshair, crosshairAlways: boolean, grids: Partial<Record<View, string[]>>, overrides: Record<GridKind, string> }
+export type Dialog     = 'shortcuts' | 'about' | 'recovery' | 'versions' | 'palette' | 'preferences' | 'guide' | 'seeds' | null
+export type Preferences = { wheel: 'zoom' | 'scroll', curvy: boolean, units: Unit, polar: boolean, crosshair: Crosshair, crosshairAlways: boolean, grids: Partial<Record<View, string[]>>, overrides: Record<GridKind, string>, lengthColors: boolean, binList: boolean, openBins: string[], connectedColor: string, unconnectedColor: string, netLabel: 'outside' | 'connector' }
 export type Checked    = { violations: Violation[], frame: Matrix, keepout: number }
 export type Show       = { values: boolean, chart: boolean }
-export type Sheet      = { id: number, name: string, doc: Doc, saved: Doc, stored: boolean, past: Doc[], future: Doc[], viewports: Partial<Record<View, Viewport>>, view: View, selection: string[], probe: string | null, drc: Checked | null }
+export type Sheet      = { id: number, name: string, doc: Doc, saved: Doc, stored: boolean, file: Uint8Array | null, past: Doc[], future: Doc[], viewports: Partial<Record<View, Viewport>>, view: View, selection: string[], probe: string | null, drc: Checked | null }
+export type Recent     = { name: string, time: number }
+export type Editing    = { moduleId: string, modelIndex: string | null }
 export type Simulating = { enabled: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[], focus: string | null }
 
 type State = {
@@ -60,7 +64,7 @@ type State = {
     mine: string[]
     userBins: UserBin[]
     imported: Found[]
-    editing: string | null
+    editing: Editing | null
     message: string
     name: string
     doc: Doc
@@ -78,6 +82,8 @@ type State = {
     placing: string | null
     saved: Doc
     stored: boolean
+    file: Uint8Array | null
+    recent: Recent[]
     hover: string | null
     past: Doc[]
     future: Doc[]
@@ -97,7 +103,9 @@ type State = {
     drc: Checked | null
     sheets: Sheet[]
     sheet: number
-    hiddenLayers: string[]
+    hiddenLayers: Partial<Record<View, string[]>>
+    fromBelow: boolean
+    unrouted: string[]
     level: Level
     language: Language
     preferences: Preferences
@@ -108,6 +116,12 @@ type State = {
     setup: () => Promise<void>
     open: (name: string, bytes: Uint8Array) => Promise<void>
     save: () => Promise<void>
+    saveAs: () => Promise<void>
+    saveCopy: () => Promise<void>
+    revert: () => Promise<void>
+    openRecent: (name: string) => Promise<void>
+    clearRecent: () => Promise<void>
+    print: () => Promise<void>
     saveAll: () => Promise<void>
     openSample: (file: string) => Promise<void>
     openBench: (id: string) => Promise<void>
@@ -132,6 +146,7 @@ type State = {
     setFastGrid: (index: number) => void
     cycleFastGrid: () => void
     setGridOrigin: (point: Point | null) => void
+    setGridSize: (text: string | null) => void
     zooms: Partial<Record<View, { back: Viewport[], ahead: Viewport[] }>>
     undoZoom: () => void
     redoZoom: () => void
@@ -151,6 +166,8 @@ type State = {
     rebuildIndex: () => void
     toggleTheme: () => void
     setSide: (side: Side) => void
+    setFromBelow: (fromBelow: boolean) => void
+    showUnrouted: () => void
     makeBoard: () => Promise<void>
     setPlacing: (moduleId: string | null) => void
     toggleSimulation: () => void
@@ -185,11 +202,17 @@ type State = {
     renameBin: (index: number, title: string) => void
     deleteBin: (index: number) => void
     addToBin: (index: number, moduleIds: string[]) => void
+    removeFromBin: (index: number, moduleId: string) => void
     exportBin: (index: number) => void
     keepParts: (files: BundleFile[]) => Promise<void>
     editPart: (modelIndex: string | null) => void
-    installPart: (files: BundleFile[], replace: string | null) => Promise<void>
+    editModule: (moduleId: string) => Promise<void>
+    installPart: (files: BundleFile[], replace: string | null, overwrite?: string) => Promise<void>
     swap: (modelIndex: string, moduleId: string) => Promise<void>
+    updateParts: () => Promise<void>
+    exportPart: (moduleId: string) => Promise<void>
+    disconnectWires: (modelIndexes: string[]) => void
+    loadImage: (modelIndex: string, file: File) => Promise<void>
     toggleSwitch: (modelIndex: string) => Promise<boolean>
     setSwitching: (modelIndex: string, events: Event[]) => Promise<void>
     newSketch: () => void
@@ -238,9 +261,11 @@ const LANG_KEY  = 'circuitmaster.language'
 const PREFS_KEY = 'circuitmaster.preferences'
 const TOUR_KEY  = 'circuitmaster.toured'    // MODOS CUJO TOUR JÁ FOI VISTO OU PULADO: CADA UM APARECE UMA VEZ SÓ
 const KEYS_KEY  = 'circuitmaster.keys'      // TECLAS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
-const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false, units: 'mm', polar: false, crosshair: 'small', crosshairAlways: false, grids: {}, overrides: { parts: '', wires: '' } }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
+const PREFERENCES: Preferences = { wheel: 'zoom', curvy: false, units: 'mm', polar: false, crosshair: 'small', crosshairAlways: false, grids: {}, overrides: { parts: '', wires: '' }, lengthColors: false, binList: false, openBins: [], connectedColor: '#00ff00', unconnectedColor: '#ff0000', netLabel: 'outside' }    // COMO NO FRITZING: RODA DÁ ZOOM E ARRASTAR O FIO FAZ DOBRA
 export const GRID_SIZES: Record<View, string[]> = { breadboardView: ['0.1in', '0.05in', '2.54mm'], schematicView: ['0.1in', '0.05in', '7.5mm'], pcbView: ['0.05in', '0.025in', '0.1in', '1mm'] }    // AS DUAS PRIMEIRAS SÃO AS GRADES RÁPIDAS 1 E 2 (Alt+1, Alt+2)
 const ZOOMS = 50    // ZOOMS GUARDADOS POR VISTA PARA DESFAZER
+const RECENTS = 10   // ARQUIVOS EM Arquivo › Abrir recentes
+const VIEWS_WITH_ICON = ['breadboardView', 'schematicView', 'pcbView', 'iconView'] as const
 
 // ORIGEM DA GRADE GRAVADA NA VISTA COMO "x,y" EM PX DA CENA; SEM ELA, O ZERO
 export const parseOrigin = (text: string | undefined): Point => {
@@ -252,6 +277,7 @@ const INDEX_DB  = 'circuitmaster'          // BANCO DO workers/Indexer
 const PARTS_KEY = 'circuitmaster.parts'    // ARQUIVOS DAS PEÇAS QUE VIERAM DE .fzpz/.fzbz OU DO EDITOR (SPEC 01 §8A.6)
 const PASTE     = 20     // PX POR COLAGEM SEGUIDA (SPEC 02 §10.3)
 const GRID: Record<View, string> = { breadboardView: '0.1in', schematicView: '0.1in', pcbView: '0.05in' }
+const GRID_RANGE                 = [0.001, 1]    // in, COMO O QDoubleValidator DO setGridSize DO FRITZING
 const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SPEC 04 §5.4)
 const DRC_DELAY = 600    // MS ENTRE A ÚLTIMA MUDANÇA NA PCB E O DRC AUTOMÁTICO
 
@@ -259,10 +285,10 @@ const IDLE: Simulating = { enabled: false, busy: false, result: null, error: nul
 
 const blankSheet = (): Omit<Sheet, 'id'> => {
     const doc = emptyDoc()
-    return { name: 'sem título', doc, saved: doc, stored: false, past: [], future: [], viewports: {}, view: START_VIEW, selection: [], probe: null, drc: null }
+    return { name: 'sem título', doc, saved: doc, stored: false, file: null, past: [], future: [], viewports: {}, view: START_VIEW, selection: [], probe: null, drc: null }
 }
 
-const entryOf = (part: Part): Found => ({ moduleId: part.moduleId, root: 'bundle', path: '', title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? part.views.breadboardView?.image ?? '', obsolete: false, properties: part.properties })
+export const entryOf = (part: Part): Found => ({ moduleId: part.moduleId, root: 'bundle', path: '', title: part.title, family: part.properties.family ?? '', label: part.label, kind: part.kind, icon: part.views.iconView?.image ?? part.views.breadboardView?.image ?? '', obsolete: false, properties: part.properties })
 
 const loadFont = async (library: Library, key: string, file: string) => {
     const response = await fetch(`/fritzing/fonts/${encodeURI(file)}`)
@@ -352,7 +378,7 @@ export const useStore = create<State>((set, get) => {
             return set({ indexed: { done: status.done, total: status.total, ready: false } })
 
         if (status.type === 'ready')
-            return set({ indexed: { done: status.total, total: status.total, ready: true }, message: t('{0} peças indexadas', status.count) })
+            return set({ indexed: { done: status.total, total: status.total, ready: true }, message: get().message || t('{0} peças indexadas', status.count) })    // O AVISO DO ÍNDICE NÃO APAGA O DA AÇÃO DO USUÁRIO
 
         set({ bins: status.bins })
     }
@@ -364,8 +390,8 @@ export const useStore = create<State>((set, get) => {
 
     // O SKETCH ATIVO GUARDADO NA SUA ABA
     const stash = (): Sheet => {
-        const { sheet: id, name, doc, saved, stored, past, future, viewports, view, selection, probe, drc } = get()
-        return { id, name, doc, saved, stored, past, future, viewports, view, selection, probe, drc }
+        const { sheet: id, name, doc, saved, stored, file, past, future, viewports, view, selection, probe, drc } = get()
+        return { id, name, doc, saved, stored, file, past, future, viewports, view, selection, probe, drc }
     }
 
     // ABA QUE VIRA A ATIVA: O NETLIST É REFEITO E A SIMULAÇÃO, SE LIGADA, RECOMEÇA NO SKETCH DELA
@@ -379,6 +405,25 @@ export const useStore = create<State>((set, get) => {
         const reuse = doc === saved && (stored ? name === sheet.name : !Object.keys(doc.instances).length)
         const id    = reuse ? active : Math.max(...sheets.map(item => item.id)) + 1
         activate({ id, ...sheet }, reuse ? sheets : [...sheets.map(item => item.id === active ? stash() : item), { id, ...sheet }], message)
+    }
+
+    // SKETCH DE UM .fzz OU .fz LIDO: AS PEÇAS CARREGADAS E OS CAMPOS DA ABA, COM A MENSAGEM
+    const readSheet = async (name: string, bytes: Uint8Array, bundle: Bundle, sketch: Sketch): Promise<[Omit<Sheet, 'id'>, string]> => {
+        const { library } = get()
+        library.addBundle(bundle)
+        const doc = fromSketch(sketch)
+        set({ message: t('abrindo {0}…', name) })
+        await library.load([WIRE, ...Object.values(doc.instances).map(instance => instance.moduleIdRef)])
+        const missing = Object.values(doc.instances).filter(instance => !library.getPart(instance.moduleIdRef)).length
+        return [{ name, doc, saved: doc, stored: true, file: bytes, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: START_VIEW }, missing ? t('{0} peças não encontradas no acervo', missing) : t('{0} aberto', name)]
+    }
+
+    // ARQUIVO ABERTO OU SALVO ENTRA NOS RECENTES (UMA CÓPIA NO INDEXEDDB); OS MAIS ANTIGOS QUE RECENTS SAEM
+    const remember = (name: string, bytes: Uint8Array) => {
+        const time   = Date.now()
+        const recent = [{ name, time }, ...get().recent.filter(entry => entry.name !== name)]
+        set({ recent: recent.slice(0, RECENTS) })
+        void get().vault.save(RECENT, [[name, { name, time, bytes }]], recent.slice(RECENTS).map(entry => entry.name))
     }
 
     const catalog = new Catalog(listen)
@@ -414,6 +459,8 @@ export const useStore = create<State>((set, get) => {
         placing: null,
         saved: blank,
         stored: false,
+        file: null,
+        recent: [],
         hover: null,
         past: [],
         future: [],
@@ -434,7 +481,9 @@ export const useStore = create<State>((set, get) => {
         drc: null,
         sheets: [{ id: 1, ...blankSheet() }],
         sheet: 1,
-        hiddenLayers: [],
+        hiddenLayers: {},
+        fromBelow: false,
+        unrouted: [],
         level: readStored<Level>(LEVEL_KEY, 1),
         language: readStored<Language>(LANG_KEY, 'pt'),
         preferences: { ...PREFERENCES, ...readStored<Partial<Preferences>>(PREFS_KEY, {}) },
@@ -455,7 +504,8 @@ export const useStore = create<State>((set, get) => {
             const kept    = await migrateParts(get().vault)
             const added   = get().library.addBundle({ sketch: null, parts: kept.filter(file => file.name.startsWith('part.')), svgs: kept.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
             await Promise.all([started, fonts])
-            set({ wasm, samples, ready: true, imported: added.flatMap(moduleId => get().library.bundled.get(moduleId) ?? []).map(entryOf) })
+            const recent  = (await get().vault.load<Recent>(RECENT)).map(({ name, time }) => ({ name, time })).sort((a, b) => b.time - a.time)
+            set({ wasm, samples, recent, ready: true, imported: added.flatMap(moduleId => get().library.bundled.get(moduleId) ?? []).map(entryOf) })
 
             if (!get().toured.includes(get().level))
                 get().showTour(get().level)
@@ -493,13 +543,9 @@ export const useStore = create<State>((set, get) => {
             if (!bundle?.sketch)
                 return set({ message: t('{0}: arquivo sem sketch legível', name) })
 
-            library.addBundle(bundle)
-            const doc = fromSketch(bundle.sketch)
-            set({ message: t('abrindo {0}…', name) })
-            await library.load([WIRE, ...Object.values(doc.instances).map(instance => instance.moduleIdRef)])
-
-            const missing = Object.values(doc.instances).filter(instance => !library.getPart(instance.moduleIdRef)).length
-            place({ name, doc, saved: doc, stored: true, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: START_VIEW }, missing ? t('{0} peças não encontradas no acervo', missing) : t('{0} aberto', name))
+            const [sheet, message] = await readSheet(name, bytes, bundle, bundle.sketch)
+            place(sheet, message)
+            remember(name, bytes)
         },
 
         save: async () => {
@@ -510,12 +556,82 @@ export const useStore = create<State>((set, get) => {
                 return set({ message: t('não salvou: {0}', bundle) })
 
             download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
-            set({ saved: doc, stored: true })
+            set({ saved: doc, stored: true, file: bundle.bytes })
+            remember(`${bundle.base}.fzz`, bundle.bytes)
 
             // A VERSÃO AUTOMÁTICA VIRA "SALVA" JÁ, COM OS MESMOS BYTES: FECHAR A ABA LOGO DEPOIS DE SALVAR NÃO OFERECE RECUPERAR O QUE FOI SALVO
             get().autosave.schedule(String(get().sheet), async () => ({ name: get().name, dirty: false, count: Object.keys(doc.instances).length, bytes: bundle.bytes }))
             await get().autosave.flush()
             set({ message: bundle.files.length ? t('{0}.fzz salvo ({1} itens, {2} arquivos de peça embutidos)', bundle.base, Object.keys(doc.instances).length, bundle.files.length) : t('{0}.fzz salvo ({1} itens)', bundle.base, Object.keys(doc.instances).length) })
+        },
+
+        // SALVAR COMO: O SKETCH PASSA A TER O NOME PEDIDO (O NAVEGADOR BAIXA COM ELE)
+        saveAs: async () => {
+            const chosen = window.prompt(t('Nome do arquivo'), get().name.replace(/\.(fzz|fz)$/i, ''))?.trim()
+
+            if (!chosen)
+                return
+
+            set({ name: `${chosen.replace(/\.(fzz|fz)$/i, '')}.fzz` })
+            await get().save()
+        },
+
+        // SALVAR UMA CÓPIA: BAIXA COM OUTRO NOME SEM MUDAR O NOME NEM O ESTADO SALVO DO SKETCH ABERTO
+        saveCopy: async () => {
+            const { doc, library, saver, name } = get()
+            const chosen = window.prompt(t('Nome da cópia'), t('{0} (cópia)', name.replace(/\.(fzz|fz)$/i, '')))?.trim()
+
+            if (!chosen)
+                return
+
+            const bundle = await bundleOf({ doc, name: chosen, library, saver })
+
+            if (typeof bundle === 'string')
+                return set({ message: t('não salvou: {0}', bundle) })
+
+            download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
+            set({ message: t('cópia {0}.fzz baixada; o sketch aberto continua {1}', bundle.base, t(name)) })
+        },
+
+        // REVERTER: O SKETCH DA ABA VOLTA AO ARQUIVO DE ONDE VEIO (O ÚLTIMO ABERTO OU SALVO), SEM HISTÓRICO
+        revert: async () => {
+            const { file, name, doc, saved, sheet, sheets } = get()
+            const bundle = file ? readFile(name, file) : null
+
+            if (!bundle || typeof bundle === 'string' || !bundle.sketch)
+                return set({ message: t('nada para reverter: o sketch não veio de um arquivo') })
+
+            if (doc !== saved && !window.confirm(t('Reverter {0} ao arquivo e descartar as alterações? (elas ficam nas versões salvas automaticamente)', t(name))))
+                return
+
+            const [fields] = await readSheet(name, file as Uint8Array, bundle, bundle.sketch)
+            activate({ id: sheet, ...fields }, sheets, t('{0} revertido ao arquivo', t(name)))
+        },
+
+        openRecent: async name => {
+            const found = (await get().vault.load<Recent & { bytes: Uint8Array }>(RECENT)).find(entry => entry.name === name)
+
+            if (!found)
+                return set({ message: t('{0} não está mais nos recentes', name) })
+
+            await get().open(found.name, found.bytes)
+        },
+
+        clearRecent: async () => {
+            const failed = await get().vault.save(RECENT, [], get().recent.map(entry => entry.name))
+            set({ recent: failed ? get().recent : [], message: failed ? t('recentes não limpos: {0}', failed) : t('lista de recentes limpa') })
+        },
+
+        // IMPRIMIR: A VISTA CORRENTE NUMA FOLHA, PELA CAIXA DO DESENHO (Ctrl+P)
+        print: async () => {
+            const { doc, library, view } = get()
+            const svg = document.getElementById('canvas') as SVGSVGElement | null
+            const bounds = getDrawing(new Scene(doc, library, view), null).bounds
+
+            if (!svg || !bounds)
+                return set({ message: t('a vista está vazia') })
+
+            await (await import('../Output')).printView(svg, bounds)
         },
 
         // SALVAR TODOS: CADA SKETCH DAS OUTRAS ABAS COM ALTERAÇÕES BAIXA O SEU .fzz; O DA ABA ATIVA, POR ÚLTIMO
@@ -531,7 +647,7 @@ export const useStore = create<State>((set, get) => {
 
                 download(`${bundle.base}.fzz`, bundle.bytes, 'application/zip')
                 autosave.schedule(String(item.id), async () => ({ name: item.name, dirty: false, count: Object.keys(item.doc.instances).length, bytes: bundle.bytes }))
-                set({ sheets: get().sheets.map(other => other.id === item.id ? { ...other, saved: item.doc, stored: true } : other) })
+                set({ sheets: get().sheets.map(other => other.id === item.id ? { ...other, saved: item.doc, stored: true, file: bundle.bytes } : other) })
             }
 
             if (get().doc !== get().saved)
@@ -558,7 +674,7 @@ export const useStore = create<State>((set, get) => {
 
             await get().library.load([...BENCH_PARTS, WIRE])
             const doc = buildBench(get().library, bench)
-            place({ name: bench.title, doc, saved: doc, stored: false, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: 'schematicView' }, t(bench.summary))
+            place({ name: bench.title, doc, saved: doc, stored: false, file: null, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: 'schematicView' }, t(bench.summary))
             set({ simulation: { ...IDLE, enabled: true } })
             get().setShow({ chart: true })
         },
@@ -717,6 +833,18 @@ export const useStore = create<State>((set, get) => {
             set({ message: point ? t('origem da grade no cursor') : t('origem da grade de volta a zero') })
         },
 
+        // VALOR LIVRE EM in OU mm DENTRO DA FAIXA DO DIÁLOGO DO FRITZING; NULO VOLTA À GRADE PADRÃO DA VISTA
+        setGridSize: text => {
+            const value  = text?.trim().replace(',', '.').toLowerCase() ?? GRID[get().view]
+            const inches = /^\d*\.?\d+(in|mm)$/.test(value) ? toInches(value) : null
+
+            if (inches === null || inches < GRID_RANGE[0] || inches > GRID_RANGE[1])
+                return set({ message: t('tamanho de grade inválido: use de 0.001in a 1in, em in ou mm') })
+
+            get().setViewSetting('gridSize', value)
+            set({ message: t('grade de {0}', value) })
+        },
+
         isAligned: view => get().doc.settings[view]?.alignToGrid !== '0',
 
         isOrthogonal: view => view !== 'pcbView' && get().doc.settings[view]?.orthogonalWires !== '0',
@@ -749,7 +877,9 @@ export const useStore = create<State>((set, get) => {
             const made    = createInstance(doc, library, moduleId, places)
             const index   = String(doc.nextIndex)
             const values  = Object.entries(FEATURED.find(item => item.moduleId === moduleId)?.values ?? {}).filter(([name]) => !library.getPart(moduleId)?.properties[name]?.trim())
-            const next    = values.reduce((current, [name, value]) => setProperty(current, index, name, value), made)
+            const label   = getNetLabel(moduleId, library.getPart(moduleId)?.version ?? 0, {})
+            const styled  = label && label.style !== 'legacy' ? [...values, ['style', alignForPolicy(get().preferences.netLabel, label.left)]] : values
+            const next    = styled.reduce((current, [name, value]) => setProperty(current, index, name, value), made)
 
             if (made === doc)
                 return set({ message: t('{0}: peça não encontrada', moduleId) })
@@ -801,7 +931,17 @@ export const useStore = create<State>((set, get) => {
             location.reload()
         },
 
-        setSide: side => set({ side, message: side === 'both' ? '' : t(side === 'top' ? 'trilhas novas na face de cima (vermelha); a outra face fica esmaecida' : 'trilhas novas na face de baixo (azul); a outra face fica esmaecida') }),
+        // A PCB VISTA DE BAIXO: ESPELHADA NA TELA E COM AS CAMADAS DE BAIXO POR CIMA, SÓ NESTA SESSÃO (O FRITZING NÃO GRAVA)
+        setFromBelow: fromBelow => set({ fromBelow, message: t(fromBelow ? 'PCB vista de baixo, espelhada' : 'PCB vista de cima') }),
+
+        // MOSTRAR NÃO ROTEADAS: OS TERMINAIS DAS LINHAS DE RATSNEST DA VISTA FICAM REALÇADOS ATÉ O PRÓXIMO CLIQUE (showUnrouted DO FRITZING)
+        showUnrouted: () => {
+            const { doc, library, netlist, view } = get()
+            const unrouted = [...new Set(getDrawing(new Scene(doc, library, view), netlist).ratsnest.flatMap(rat => [rat.from, rat.to]))]
+            set({ unrouted, message: unrouted.length ? t('conexões por rotear realçadas em amarelo; clique no quadro para limpar') : t('não há conexões por rotear') })
+        },
+
+        setSide: side => set({ side, message: side === 'both' ? '' : t(side === 'top' ? 'trilhas novas e cliques na face de cima (vermelha); a outra fica esmaecida' : 'trilhas novas e cliques na face de baixo (azul); a outra fica esmaecida') }),
 
         // PLACA RETANGULAR DE DUAS FACES EM VOLTA DAS PEÇAS COM COBRE; INSTRUMENTOS DE BANCADA (FONTES, MULTÍMETRO, OSCILOSCÓPIO) VÃO PARA UMA COLUNA À ESQUERDA DELA; DEPOIS O AUTOROUTER (SPEC 03 §8.3.1)
         makeBoard: async () => {
@@ -840,9 +980,13 @@ export const useStore = create<State>((set, get) => {
 
         setPlacing: placing => set({ placing, tool: 'select', message: placing ? t('clique no quadro para posicionar a peça (Shift mantém, Esc cancela)') : '' }),
 
-        toggleLayer: id => set({ hiddenLayers: get().hiddenLayers.includes(id) ? get().hiddenLayers.filter(other => other !== id) : [...get().hiddenLayers, id] }),
+        toggleLayer: id => {
+            const { hiddenLayers, view } = get()
+            const hidden                 = hiddenLayers[view] ?? []
+            set({ hiddenLayers: { ...hiddenLayers, [view]: hidden.includes(id) ? hidden.filter(other => other !== id) : [...hidden, id] } })
+        },
 
-        setHiddenLayers: ids => set({ hiddenLayers: ids }),
+        setHiddenLayers: ids => set({ hiddenLayers: { ...get().hiddenLayers, [get().view]: ids } }),
 
         setPreferences: patch => {
             const preferences = { ...get().preferences, ...patch }
@@ -867,7 +1011,7 @@ export const useStore = create<State>((set, get) => {
             setWords(language, language === 'en' ? (await import('../../core/Text/en')).EN : {})
             document.documentElement.lang = getTag()
             writeStored(LANG_KEY, JSON.stringify(language))
-            set({ language })
+            set({ language, message: '' })    // A MENSAGEM DA BARRA FOI ESCRITA NA LÍNGUA DE ANTES
         },
 
         setLevel: level => {
@@ -994,6 +1138,52 @@ export const useStore = create<State>((set, get) => {
             const { library } = get()
             await library.load([moduleId])
             get().commit(swapPart(get().doc, library, modelIndex, moduleId))
+        },
+
+        // ATUALIZAR PEÇAS SELECIONADAS: CADA PEÇA DESATUALIZADA VIRA A REVISÃO SEGUINTE (replacedby DO .fzp), UM PASSO POR VEZ COMO NO FRITZING
+        updateParts: async () => {
+            const { doc, library, selection } = get()
+            const old = selection.filter(modelIndex => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')?.replacedBy)
+            await library.load(old.map(modelIndex => library.getPart(doc.instances[modelIndex].moduleIdRef)?.replacedBy ?? ''))
+            const ready = old.filter(modelIndex => library.getPart(library.getPart(doc.instances[modelIndex].moduleIdRef)?.replacedBy ?? ''))
+
+            if (!old.length)
+                return set({ message: t('nenhuma peça desatualizada na seleção') })
+
+            if (ready.length)
+                get().commit(ready.reduce((current, modelIndex) => swapPart(current, library, modelIndex, library.getPart(current.instances[modelIndex].moduleIdRef)?.replacedBy ?? ''), doc))
+
+            set({ message: ready.length === old.length ? t('{0} peças atualizadas para a revisão seguinte', ready.length) : t('{0} de {1} peças atualizadas; as outras não têm a revisão nova no acervo', ready.length, old.length) })
+        },
+
+        // EXPORTAR PEÇA: A PEÇA COMO ESTÁ NO ACERVO, NUM .fzpz (O .fzp E O SVG DE CADA VISTA, COM OS NOMES DO FRITZING)
+        exportPart: async moduleId => {
+            const { library } = get()
+            await library.load([moduleId])
+            const part = library.getPart(moduleId)
+            const fzp  = part ? await library.getFzpText(moduleId) : null
+
+            if (!part || !fzp)
+                return set({ message: t('esta peça não pode ser exportada') })
+
+            const views  = VIEWS_WITH_ICON.filter(view => part.views[view]?.image)
+            const images = await Promise.all(views.map(async view => [`svg.${part.views[view]?.image.replaceAll('/', '.')}`, await library.getImageText(moduleId, view)] as const))
+            const files  = Object.fromEntries([[`part.${moduleId}.fzp`, strToU8(fzp)], ...images.flatMap(([name, text]) => text === null ? [] : [[name, strToU8(text)]])])
+            download(`${part.title.replace(/[\\/:*?"<>|]+/g, '_')}.fzpz`, zipSync(files), 'application/zip')
+            set({ message: t('{0} exportada', part.title) })
+        },
+
+        // DESLIGAR TODOS OS FIOS: OS FIOS QUE CHEGAM NOS TERMINAIS DA PEÇA SOLTAM A PONTA; LIGAÇÕES DIRETAS ENTRE PEÇAS FICAM
+        disconnectWires: modelIndexes => {
+            const { doc } = get()
+            const isWire  = (key: string) => doc.instances[splitKey(key)[0]]?.moduleIdRef === WIRE
+            const touches = ([a, b]: string[]) => modelIndexes.includes(splitKey(a)[0]) && isWire(b) || modelIndexes.includes(splitKey(b)[0]) && isWire(a)
+            const next    = removeEdges(doc, touches)
+
+            if (next === doc)
+                return set({ message: t('nenhum fio ligado a esta peça') })
+
+            get().commit(next)
         },
 
         toggleSwitch: async modelIndex => {
@@ -1384,6 +1574,39 @@ export const useStore = create<State>((set, get) => {
             set({ userBins })
         },
 
+        // IMAGEM NUM LOGO OU NA PLACA DE FORMA LIVRE: SVG DENTRO DO GRUPO DA CAMADA; PNG E JPG NA PCB EM PRETO E BRANCO VETORIZADO, NAS OUTRAS VISTAS EMBUTIDOS (LogoItem::loadImage)
+        loadImage: async (modelIndex, file) => {
+            const { doc, library } = get()
+            const part   = library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')
+            const view   = /Breadboard/.test(part?.moduleId ?? '') ? 'breadboardView' : /Schematic/.test(part?.moduleId ?? '') ? 'schematicView' : 'pcbView'
+            const layer  = part?.views[view]?.layers[0] ?? 'silkscreen'
+            const color  = library.getSvg(part?.moduleId ?? '', view)?.text.match(/fill=["'](#[0-9a-f]{3,6})["']/i)?.[1] ?? '#000000'
+            const svg    = RASTER.test(file.type) ? await rasterLogo(file, view === 'pcbView', layer, color) : layeredSvg(await file.text(), layer)
+            const root   = svg ? new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement : null
+            const mm     = (value: string | null | undefined) => (toInches(value?.trim() ?? '') ?? Number.parseFloat(value ?? '') / PX_PER_INCH) * 25.4
+            const [w, h] = [mm(root?.getAttribute('width')), mm(root?.getAttribute('height'))]
+
+            if (!part || !svg || !(w > 0) || !(h > 0))
+                return set({ message: t('{0}: imagem inválida', file.name) })
+
+            const values: [string, string][] = [['shape', svg], ['logo', ''], ['lastfilename', file.name], ['width', String(+w.toFixed(3))], ['height', String(+h.toFixed(3))]]
+            get().commit(values.reduce((current, [key, value]) => setProperty(current, modelIndex, key, value), doc))
+            set({ message: t('{0} carregada', file.name) })
+        },
+
+        // index -1 É MEUS ITENS
+        removeFromBin: (index, moduleId) => {
+            if (index < 0) {
+                const mine = get().mine.filter(other => other !== moduleId)
+                writeStored(MINE_KEY, mine)
+                return set({ mine })
+            }
+
+            const userBins = get().userBins.map((bin, i) => i === index ? { ...bin, moduleIds: bin.moduleIds.filter(other => other !== moduleId) } : bin)
+            writeStored(BINS_KEY, userBins)
+            set({ userBins })
+        },
+
         addToBin: (index, moduleIds) => {
             const userBins = get().userBins.map((bin, i) => i === index ? { ...bin, moduleIds: [...new Set([...bin.moduleIds, ...moduleIds])] } : bin)
             const failed   = writeStored(BINS_KEY, userBins)
@@ -1416,12 +1639,26 @@ export const useStore = create<State>((set, get) => {
             if (modelIndex && !isEditable(part))
                 return set({ message: t('esta peça não abre no editor de peças') })
 
-            set({ editing: modelIndex })
+            set({ editing: modelIndex && part ? { moduleId: part.moduleId, modelIndex } : null })
+        },
+
+        // PEÇA DO BIN NO EDITOR: SEM INSTÂNCIA PARA TROCAR NO SKETCH
+        editModule: async moduleId => {
+            await get().library.load([moduleId])
+
+            if (!isEditable(get().library.getPart(moduleId)))
+                return set({ message: t('esta peça não abre no editor de peças') })
+
+            set({ editing: { moduleId, modelIndex: null } })
         },
 
         // PEÇA GRAVADA NO EDITOR: ENTRA NO ACERVO COMO PEÇA DE PACOTE, VAI PARA MEUS ITENS E PODE SUBSTITUIR A INSTÂNCIA EDITADA (SPEC 01 §8A.5)
-        installPart: async (files, replace) => {
+        installPart: async (files, replace, overwrite) => {
             const { library } = get()
+
+            if (overwrite)
+                library.forget(overwrite)
+
             const [moduleId]  = library.addBundle({ sketch: null, parts: files.filter(file => file.name.startsWith('part.')), svgs: files.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
             await library.load(moduleId ? [moduleId] : [])
             const part        = library.getPart(moduleId ?? '')
@@ -1445,6 +1682,25 @@ export const useStore = create<State>((set, get) => {
 const stopped = (task: string, failure: string) => failure ? t('{0}: {1}; tente de novo', t(task), failure) : t('{0} cancelado', t(task))
 
 const GROUNDED = new Set(['gnd', 'vss', 'ground'])
+const RASTER   = /^image\/(png|jpeg)$/
+
+const rasterLogo = async (file: File, vector: boolean, layer: string, color: string) => {
+    const bitmap = await createImageBitmap(file)
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    const paint  = canvas.getContext('2d')
+    paint?.drawImage(bitmap, 0, 0)
+    const pixels = paint?.getImageData(0, 0, bitmap.width, bitmap.height).data
+
+    if (vector)
+        return pixels ? rasterLogoSvg(pixels, bitmap.width, bitmap.height, layer, color) : null
+
+    const url = await new Promise<string>(resolve => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.readAsDataURL(file)
+    })
+    return embeddedLogoSvg(url, bitmap.width, bitmap.height, layer)
+}
 
 // DEPOIS DE GIRAR OU ESPELHAR, O PRIMEIRO TERMINAL VOLTA À GRADE (NO ESQUEMÁTICO E NA PCB; NA PROTOBOARD O ENCAIXE DECIDE)
 const settle = (doc: Doc, selection: string[]) => {
@@ -1482,6 +1738,25 @@ const pcbBoard = async ({ doc, library, wasm, selection }: { doc: Doc, library: 
     return { artwork, netlist, config: getConfig(doc.settings.pcbView) }
 }
 
+// CANDIDATAS A SEMENTE DE TERRA NA PCB: AS JÁ MARCADAS E OS CONECTORES gnd/vss/ground, UMA POR NET (collectGroundFillSeeds DO FRITZING)
+export const getSeedCandidates = (doc: Doc, library: Library, netlist: Netlist | null) => {
+    const scene = new Scene(doc, library, 'pcbView')
+    const parts = Object.values(doc.instances).filter(instance => scene.isShown(instance) && library.getPart(instance.moduleIdRef)?.kind !== 'copperFill')
+    const rows  = parts.flatMap(instance => (library.getPart(instance.moduleIdRef)?.connectors ?? []).map(connector => ({
+        key: keyOf(instance.modelIndex, connector.id),
+        name: `${instance.title} · ${connector.name}`,
+        seed: instance.views.pcbView?.connectors.some(state => state.id === connector.id && state.groundFillSeed) ?? false,
+        ground: GROUNDED.has(connector.name.trim().toLowerCase())
+    }))).filter(row => row.seed || row.ground)
+    const netOf = (key: string) => netlist?.index.has(key) ? netlist.nets.pcbView?.[netlist.index.get(key) ?? 0] ?? key : key
+    const seen  = new Set<number | string>()
+    return [...rows.filter(row => row.seed), ...rows.filter(row => !row.seed)].filter(row => {
+        const fresh = !seen.has(netOf(row.key))
+        seen.add(netOf(row.key))
+        return row.seed || fresh
+    })
+}
+
 // NETS DE TERRA DO PREENCHIMENTO: AS DAS SEMENTES MARCADAS, SENÃO A ÚNICA NET COM CONECTOR gnd/vss/ground (SPEC 03 §6.1)
 const getGroundNets = (doc: Doc, library: Library, netlist: Netlist) => {
     const seeds     = Object.values(doc.instances).flatMap(instance => (instance.views.pcbView?.connectors ?? []).filter(connector => connector.groundFillSeed).map(connector => keyOf(instance.modelIndex, connector.id)))
@@ -1504,6 +1779,9 @@ const signature = (doc: Doc) => [...Object.values(doc.instances).filter(instance
 useStore.subscribe((state, previous) => {
     if (state.ready && (state.doc !== previous.doc || state.saved !== previous.saved || state.name !== previous.name))
         state.autosave.schedule(String(state.sheet), () => snapshotOf(state))
+
+    if (state.ready && state.doc === state.saved && state.saved !== previous.saved)
+        void state.autosave.flush()    // ACABOU DE FICAR SALVO (SALVAR, REVERTER): GRAVA JÁ, PARA A RECARGA NÃO OFERECER O QUE FOI DESCARTADO
 })
 
 let pending: ReturnType<typeof setTimeout> | undefined

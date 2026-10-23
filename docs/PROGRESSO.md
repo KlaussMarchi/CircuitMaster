@@ -399,8 +399,9 @@ números). Na tomada, o mesmo teste deu 0 ms de tarefa longa no pan.
 
 `npm run verify` verde na pasta de trabalho (Vitest 138, E2E 182 nos dois navegadores, desempenho dentro dos
 orçamentos: pan e zoom com 1.000 footprints a 59–60 fps sem tarefa longa, JS inicial 700 KB de 710) e no clone limpo
-em `build/clean/`. Revisão visual nas fotos de `build/ui/` (dois temas, 1920, 1280 e 390 px). Matriz: Fritzing 141
-feitas de 251; KiCad esquemático, comuns e projeto 117 de 404; PCB 27 de 421; nenhuma linha da fase 2 em "falta".
+em `build/clean/` (Vitest 136 + 2 pulados pela falta do ngspice nativo, 182 E2E, desempenho). Commit `217ffa8`.
+Revisão visual nas fotos de `build/ui/` (dois temas, 1920, 1280 e 390 px). Matriz: Fritzing 141 feitas de 251; KiCad
+esquemático, comuns e projeto 117 de 404; PCB 27 de 421; nenhuma linha da fase 2 em "falta".
 
 Ficou para depois: o aviso de desenvolvimento do React no fechamento da página (acima); o JS inicial está a 10 KB do
 orçamento, então a fase 3 começa tirando do pacote inicial o que só abre sob demanda (diálogos, tour); os menus
@@ -412,3 +413,118 @@ Escopo: as 77 linhas "falta" da fase 3 na matriz (arquivo: reverter, recentes, s
 seleções e atualização de peças; grade livre, cor de fundo, fios por comprimento, camadas em todas as vistas, ver de
 baixo, face clicável, não roteadas; menu do rótulo; bins; editor de peças; peças paramétricas, logo de imagem e placa
 livre; largura da trilha no inspetor).
+
+### Feito (2026-10-22)
+
+- **Arquivo**: Salvar como… (Ctrl+Shift+S) pergunta o nome e renomeia a aba; Salvar uma cópia… baixa com outro nome
+  sem renomear; Reverter volta ao arquivo aberto ou salvo depois de perguntar; Abrir recentes ▸ guarda até 10 cópias
+  no IndexedDB (versão 2 do `circuitmaster-user`, store `recent`) e tem Limpar recentes; Imprimir… (Ctrl+P) põe a vista
+  em SVG numa folha de impressão.
+- **Peças e seleções**: Peça › Localizar peça no sketch… (Ctrl+F, a lista "No sketch" da busca), Selecionar peças
+  travadas, Selecionar peças desatualizadas (`replacedby` do `.fzp`) e Atualizar peças selecionadas, Exportar peça…
+  (o `.fzpz` da peça como está), Desligar todos os fios; Roteamento › Selecionar trilhas "não rotear" e autoroteáveis no
+  esquemático e na PCB, Selecionar todos os jumpers.
+- **Exibir**: fios da protoboard coloridos pelo comprimento; tamanho de grade livre em in ou mm e Restaurar a grade
+  padrão; cor de fundo da vista (aba Documento, Padrão volta ao tema); bin em ícones ou em lista; camadas nas três
+  vistas (legenda do quadro e Exibir › Camadas, guardadas por vista).
+- **Bins**: os 28 bins de `fritzing-parts/bins` abrem em abas pelo "+" e fecham no ×, e as abertas ficam gravadas; o
+  Temp aparece com as peças do sketch que não são do acervo; o menu de contexto da peça no bin edita no editor de
+  peças, exporta, remove de Meus itens ou de um bin do usuário e localiza no sketch.
+- **PCB**: Ver de baixo (quadro espelhado, camadas de baixo por cima, rótulos legíveis, clique, pan e exportação
+  espelhados); só uma face de cobre clicável (Shift+Ctrl+1, 2 e 3); Mostrar não roteadas (realce até o próximo
+  clique, nas três vistas); largura das trilhas selecionadas no inspetor (lista do Fritzing e valor livre de 8 a 128
+  mil, com desfazer).
+- **Menu do rótulo da peça** (`partlabelcontextmenu.cpp`): Editar (leva ao campo Nome do inspetor, sem diálogo),
+  Ocultar, Exibir valores ▸ (texto do rótulo e cada propriedade), Girar/Espelhar ▸ (45° e 135° só na PCB) e Tamanho da
+  fonte ▸ com os tamanhos de cada vista. O giro fica no `transform` do `titleGeometry`, como no Fritzing, e vale no
+  desenho, na caixa do rótulo e na serigrafia do Gerber; o histórico de desfazer diz "mudou o rótulo de…".
+- `ui/Dialog` e `ui/Tour` passaram a carregar sob demanda.
+- Testes: `e2e/fritzing.spec.ts` (12 fluxos), `tests/edit.test.ts` (giro do rótulo em torno do centro e ida e volta
+  do `.fz`), `tests/partdraft.test.ts` (pacote lido de novo).
+
+### Bugs achados e corrigidos (fase 3)
+
+1. **O `transform` do rótulo se perdia**: o leitor do `.fz` ignorava o `<transform>` do `titleGeometry`, e um rótulo
+   girado no Fritzing voltava reto ao gravar. Agora é lido, gravado e desenhado.
+2. **Reabrir um `.fzz` com peça própria tirava a peça do próximo Salvar**: `addBundle` trocava o objeto da peça em
+   `bundled` mas não em `parts`, e `getBundleFiles` (e o Temp) comparam os dois por identidade. A peça de pacote já
+   carregada fica, como no Fritzing (mesmo `moduleId` é a mesma peça). Teste: `tests/partdraft.test.ts`.
+3. **Exibir › Cor de fundo… abria o painel Projeto da esquerda**, que não tem o seletor; abre a aba Documento.
+4. **Paleta**: "copy" punha "Salvar uma cópia…" acima de "Copiar" (empate); no empate o rótulo mais curto vem antes.
+
+### Decisões
+
+- Os títulos dos bins de fábrica vêm do `.fzb` e ficam em inglês ("Contributed Parts"), como os nomes das peças do
+  acervo.
+- Editar o rótulo não abre diálogo (o Fritzing abre): leva ao campo Nome do inspetor já selecionado (seção 5, "direto
+  ao ponto").
+
+### Feito (2026-10-22, continuação)
+
+- **Preferências** (F-040): cores de realce dos terminais ligado e solto; texto dos net labels novos (na ponta de fora
+  ou junto ao conector), que o inspetor troca em cada net label (`alignForPolicy` do `symbolpaletteitem.cpp`). O
+  Gerber já sai sempre com seis casas (a opção beta do Fritzing é o padrão aqui).
+- **Sementes de terra** (F-102): Roteamento › Preenchimento de cobre › Escolher sementes… lista as sementes e os
+  conectores GND/VSS/ground da PCB, um por net; cada caixa marca na hora, com desfazer; Preencher com terra.
+- **Editor de peças** (grupo F): desfazer e refazer (botões e Ctrl+Z/Ctrl+Y, 100 passos, por instantâneos do
+  `PartDraft`); Cancelar pergunta com alterações; peça sua é regravada no mesmo `moduleId` (`Library.forget`) e há
+  Gravar como nova; Definir todos como macho, fêmea ou pad; passante ou SMD; conexões internas (`<bus>`); PNG e JPG
+  como desenho da vista; o ícone reaproveita a imagem de outra vista; Só nesta vista; Baixar o SVG da vista; barra
+  da vista com zoom, grade de 0,1 in, cor de fundo e camadas. O F-202 (conversor de esquemáticos anteriores ao 0.8.6)
+  ficou "não se aplica", com o motivo na matriz.
+- Testes: `e2e/fritzing.spec.ts` (14 fluxos), `e2e/parts.spec.ts` (fluxo do editor), `tests/partdraft.test.ts`.
+
+### Bugs achados e corrigidos (fase 3, continuação)
+
+5. **Pôr uma peça durante a primeira indexação esperava o acervo inteiro** (os vermelhos intermitentes de `app.place`
+   no Firefox): o `locate` só respondia com o índice pronto, e as 16 leituras simultâneas do indexador ocupavam as 6
+   conexões por host do navegador, deixando o `.fzp` e o SVG da peça na fila. O indexador responde o `locate` com o
+   que já leu e lê 4 arquivos por vez, deixando conexões livres.
+6. **Downloads dos E2E se sobrescreviam**: em paralelo, dois testes salvavam `sem título.fzz` na mesma pasta; agora
+   cada teste tem a sua.
+7. **O campo Cor de fundo usava a classe `.swatch`** da bolinha das faces (8 px); virou `.in.paint`.
+8. **Desfazer do editor**: o instantâneo era tirado dentro do atualizador do estado, depois da mudança.
+
+### Feito (2026-10-22, noite)
+
+- **Peças geradas** (grupo G): `core/Parametric` porta os geradores do SIP, da mystery part (uma ou duas fileiras) e do
+  borne com parafuso (`dip.cpp`, `mysterypart.cpp`, `screwterminal.cpp`, `incrementTemplateString` e os templates);
+  o símbolo de CI do esquemático virou `schematicChip` (pinos à esquerda e à direita, o ? da mystery part). O inspetor
+  muda pinos, espaçamento, fileiras e o tamanho da perfboard e da stripboard (`getParametric`), trocando pela peça
+  gerada e mantendo os fios. Na stripboard as tiras aparecem e um clique entre dois furos corta ou religa o trecho
+  (`buses`). Logos de imagem e a placa de forma livre carregam SVG, PNG ou JPG (PNG/JPG na PCB vetorizados em preto e
+  branco, como o `LogoItem`); `BoardLogoImageModuleID` passou a ser placa, com o contorno tirado da imagem.
+- F-014 (PDF vetorial da vista) foi para a fase 13, com a plotagem por camada em PDF: os dois precisam do mesmo
+  conversor de SVG para PDF. O PDF de hoje leva a vista rasterizada a 300 dpi.
+
+### Bugs achados e corrigidos (fase 3, noite)
+
+9. **Pôr uma peça durante a indexação esperava o índice inteiro** (o resto da causa do item 5): o `locate` que chegava
+   antes da leitura da peça só voltava com o índice pronto. Agora espera só a peça aparecer na leitura (medido: a
+   peça entra em 2,3 s com o índice em 800/2619, antes em 4,4 s, no fim).
+10. **"N peças indexadas" apagava a mensagem da ação do usuário** que chegava antes; o aviso do índice só aparece
+    com a barra vazia.
+11. **Reverter e recarregar oferecia recuperar o que foi descartado**: a versão automática do sketch limpo esperava
+    1,5 s, e o `pagehide` da recarga não gravava (a página sai ainda "visível"). Agora o sketch que acaba de ficar
+    salvo grava na hora e o `pagehide` sempre grava.
+12. **Trocar de idioma deixava a mensagem da barra na língua anterior.**
+13. **E2E**: cada contexto de teste indexava as 2.619 peças do zero, com 4 navegadores ao mesmo tempo; sob essa carga
+    o Firefox passava de 60 s e virava intermitência. O `globalSetup` (`e2e/Fixtures/setup.ts`) indexa uma vez por
+    navegador e entrega o IndexedDB pronto a cada contexto, como o de quem volta ao app; o caminho frio segue no
+    `perf` e em "Refazer o índice". A rodada caiu de 7,8 para 4 minutos.
+
+14. **JS inicial em 733 KB, acima dos 710**: a cola do Clipper2 passou a carregar na primeira operação de PCB,
+    `core/Parametric` só quando uma peça gerada dessas aparece (`setParametric`), e as abas Roteamento e Documento e o
+    painel Projeto viram chunks. Ficou em 709,7 KiB: o orçamento está cumprido sem folga, e a próxima função grande
+    precisa entrar sob demanda.
+
+15. **O índice só ficava pronto depois de ler os 28 bins, e todo pedido esperava também a gravação do cache**: sob
+    carga, no Firefox, a busca e as abas ficavam presas em "indexando 2600/2619". Agora o índice fica pronto ao fim da
+    leitura das peças; o cache grava em paralelo e os bins (com as peças geradas que só eles citam) chegam numa segunda
+    leva (`readBins`).
+
+### Fechamento da fase 3
+
+Matriz: Fritzing 209 feitas de 251 (17 "falta", todas de outras fases: 15 da aba Código na 14, subpartes na 8 e o PDF
+vetorial na 13; 25 "não se aplica"); KiCad esquemático, comuns e projeto 121 de 404; PCB 30 de 421. Nenhuma linha da
+fase 3 em "falta".

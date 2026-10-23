@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { emptyDoc, keyOf, type Doc } from '../src/core/Document'
+import { emptyDoc, fromSketch, keyOf, type Doc } from '../src/core/Document'
+import { exportSketch, readSketch } from '../src/core/Sketch'
 import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
-import { cubicAt, distance, nearestOnCubic, type Point } from '../src/core/Geometry'
+import { IDENTITY, cubicAt, distance, nearestOnCubic, rotation, type Box, type Point } from '../src/core/Geometry'
 import { Scene } from '../src/engine/Scene'
-import { bendToVia, bendWire, setAutoroutable, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, viaToBend } from '../src/engine/Edit'
+import { bendToVia, bendWire, setAutoroutable, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLabel, setLabelVisible, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, transformLabel, viaToBend } from '../src/engine/Edit'
 import { getDrawing } from '../src/engine/Drawing'
 import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
 
@@ -233,5 +234,29 @@ describe.skipIf(!HAS_FRITZING)('edição de fios e peças (spec 02 §4, §10)', 
         const start   = new Scene(doc, library, 'schematicView').getTerminal(key) ?? [0, 0]
         const flipped = flipInstances(flipInstances(doc, library, 'schematicView', ['1'], true), library, 'schematicView', ['1'], true)
         expect(distance(new Scene(flipped, library, 'schematicView').getTerminal(key) ?? [0, 0], start)).toBeLessThan(1e-9)
+    })
+
+    it('rótulo gira e espelha em torno do próprio centro, troca valores e fonte e volta igual na ida e volta do .fz', async () => {
+        const library = makeLibrary()
+        await library.load([RESISTOR])
+        const doc     = setLabelVisible(createInstance(emptyDoc(), library, RESISTOR, everywhere([100, 100])), library, 'pcbView', ['1'], true)
+        const box     = (current: Doc) => new Scene(current, library, 'pcbView').getLabelBox('1') as Box
+        const center  = (current: Doc): Point => [(box(current)[0] + box(current)[2]) / 2, (box(current)[1] + box(current)[3]) / 2]
+        const turn    = (current: Doc, degrees: number) => transformLabel(current, library, 'pcbView', '1', rotation(degrees))
+        const turned  = turn(doc, 90)
+        const [w, h]  = new Scene(doc, library, 'pcbView').getLabelSize('1') ?? [0, 0]
+
+        expect(distance(center(turned), center(doc))).toBeLessThan(1e-9)
+        expect(box(turned)[2] - box(turned)[0]).toBeCloseTo(h)
+        expect(box(turned)[3] - box(turned)[1]).toBeCloseTo(w)
+        turn(turn(turn(turned, 90), 90), 90).instances['1'].views.pcbView?.label?.transform?.forEach((value, i) => expect(value).toBeCloseTo(IDENTITY[i]))
+
+        const flipped = transformLabel(doc, library, 'pcbView', '1', [-1, 0, 0, 1, 0, 0])
+        expect(distance(center(flipped), center(doc))).toBeLessThan(1e-9)
+        expect(transformLabel(flipped, library, 'pcbView', '1', [-1, 0, 0, 1, 0, 0]).instances['1'].views.pcbView?.label?.transform).toEqual(IDENTITY)
+
+        const styled = setLabel(turn(doc, 45), 'pcbView', ['1'], { keys: ['', 'resistance'], size: 12 })
+        expect(new Scene(styled, library, 'pcbView').getLabelLines('1')).toHaveLength(2)
+        expect(fromSketch(readSketch(exportSketch(styled))!).instances['1'].views.pcbView?.label).toEqual(styled.instances['1'].views.pcbView?.label)
     })
 })

@@ -3,7 +3,7 @@ import { SvgFile } from '../SvgFile'
 import { getPins, type PinGeometry } from '../Pins'
 import { VIEWS, type ViewName } from '../Layer'
 import type { Bundle, BundleFile, Instance } from '../Sketch'
-import { generateFzp, generateSvg, getNetLabel, holeSvg, isResizableBoard, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg } from '../Generator'
+import { generateFzp, generateSvg, needsParametric, setParametric, getNetLabel, holeSvg, isResizableBoard, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg, stripboardSvg } from '../Generator'
 import { MIL_PER_INCH } from '../Units'
 import { Font, type Fonts } from '../Font'
 
@@ -55,12 +55,24 @@ export class Library {
             if (!part)
                 return
 
+            if (this.parts.has(part.moduleId) && this.parts.get(part.moduleId) === this.bundled.get(part.moduleId))
+                return    // JÁ CARREGADA DE UM PACOTE (REABRIR O .fzz): A PRIMEIRA FICA, SENÃO O SALVAR DEIXA A PEÇA FORA DO ARQUIVO
+
             this.bundled.set(part.moduleId, part)
             this.bundleParts.set(part.moduleId, file)
         })
 
         this.bundleSvgs = [...this.bundleSvgs, ...bundle.svgs]
         return bundle.parts.flatMap(file => readPart(file.text)?.moduleId ?? [])
+    }
+
+    // PEÇA PRÓPRIA REGRAVADA PELO EDITOR: SAI O QUE FOI LIDO DELA E DO PACOTE ANTIGO, PARA O PACOTE NOVO VALER (Save DO EDITOR SOBRE A PEÇA DO USUÁRIO)
+    forget(moduleId: string) {
+        const images = Object.values(this.bundled.get(moduleId)?.views ?? {}).flatMap(view => this.findBundled(view?.image ?? '') ?? [])
+        this.bundleSvgs = this.bundleSvgs.filter(file => !images.includes(file))
+        ;[this.parts, this.svgs, this.bundled, this.bundleParts, this.locations].forEach(table => table.delete(moduleId))
+        ;[...this.pins.keys()].filter(key => key.startsWith(`${moduleId}|`)).forEach(key => this.pins.delete(key))
+        this.revision++
     }
 
     async load(moduleIds: string[]) {
@@ -87,6 +99,10 @@ export class Library {
             this.locations.set(moduleId, location)
 
         const part      = text ? readPart(text, location?.root === 'app') : null
+
+        if (part && Object.values(part.views).some(view => needsParametric(view?.image ?? '')))
+            setParametric(await import('../Parametric'))
+
         const installed = part ? await this.loadSvgs(part, svg => this.readInstalled(location?.root ?? 'parts', svg)) : null
         const bundled   = this.bundled.get(moduleId)
 
@@ -174,12 +190,13 @@ export class Library {
         const options = part && instance && view === 'schematicView' ? getNetLabel(part.moduleId, part.version, merged) : null
         const board   = part && instance && view === 'pcbView' && isResizableBoard(part.moduleId) && Number(merged.width) > 0 && Number(merged.height) > 0
         const fill    = part?.kind === 'copperFill' && view === 'pcbView' ? instance?.properties.svg ?? '' : ''
-        const logo    = part?.kind === 'logo' ? instance?.properties.shape ?? '' : ''
+        const logo    = part?.kind === 'logo' || part?.moduleId.endsWith('BoardLogoImageModuleID') ? instance?.properties.shape ?? '' : ''
         const base    = part ? this.getSvg(part.moduleId, view) : undefined
         const drilled = part && view === 'pcbView' && (part.kind === 'via' || part.kind === 'hole')
         const padded  = part && view === 'pcbView' && (part.kind === 'blocker' || /^(Copper0)?PadModuleID$/.test(part.moduleId))
         const layer   = part?.views.pcbView?.layers.find(name => name.startsWith('copper')) ?? 'copper1'
         const holes   = part?.kind === 'part' && view === 'pcbView' && base && instance?.properties['hole size'] && instance.properties['hole size'] !== part.properties['hole size']
+        const strips  = part && view === 'breadboardView' && /Stripboard2?ModuleID$/.test(part.moduleId)
 
         const key = !part                ? '' :
                     options              ? `${part.moduleId}|${options.label}|${options.left}|${options.style}|${options.divisor}` :
@@ -188,7 +205,8 @@ export class Library {
                     logo                 ? `${merged.width}|${merged.height}|${logo}` :
                     drilled              ? `${part.kind}|${merged['hole size']}|${part.views.pcbView?.layers.join(',')}` :
                     padded               ? `${part.moduleId}|${merged.width}|${merged.height}|${merged.connect}` :
-                    holes                ? `${part.moduleId}|holes|${merged['hole size']}` : ''
+                    holes                ? `${part.moduleId}|holes|${merged['hole size']}` :
+                    strips               ? `${part.moduleId}|strips|${merged.layout}|${merged.buses}` : ''
 
         if (!key)
             return ''
@@ -198,7 +216,8 @@ export class Library {
             const layers = part?.views.pcbView?.layers.filter(layer => layer.startsWith('copper')) ?? []
             const scale  = base ? base.viewBox[2] / base.inches / MIL_PER_INCH : 1
             const [w, h] = [Number(merged.width), Number(merged.height)]
-            const text   = options ? netLabelSvg(options) :
+            const text   = strips  ? stripboardSvg(part.moduleId, merged) ?? '' :
+                           options ? netLabelSvg(options) :
                            board   ? resizeBoardSvg(base?.text ?? '', w, h) :
                            fill    ? fill :
                            logo    ? sizeSvg(logo, w, h) :

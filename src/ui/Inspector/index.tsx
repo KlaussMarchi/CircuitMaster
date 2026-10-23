@@ -1,11 +1,12 @@
-import { lazy, Suspense, useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
-import { keyOf, splitKey } from '../../core/Document'
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { keyOf, splitKey, WIRE_FLAGS } from '../../core/Document'
+import type { Instance } from '../../core/Sketch'
 import { formatReading, formatSi, getPropertyDefs, nameOf, parseSi } from '../../core/Properties'
 import { getNets, getSwitching, switchOf } from '../../core/Spice'
 import { Scene } from '../../engine/Scene'
 import { familyOf } from '../../engine/Simulation'
-import { setLogoText, setProperty, setTitle } from '../../engine/Edit'
-import { isResizableBoard } from '../../core/Generator'
+import { setLogoText, setProperty, setTitle, setWire } from '../../engine/Edit'
+import { alignForPolicy, getNetLabel, getParametric, isResizableBoard } from '../../core/Generator'
 import type { Part } from '../../core/Part'
 import type { Found } from '../../workers/Indexer'
 import { pickSwap } from '../Catalog'
@@ -37,7 +38,7 @@ const FREE: [string, (part: Part) => boolean, (part: Part) => string[]][] = [
 export const Kv = ({ label, value }: { label: string, value: string }) => <div className="kv"><span>{t(label)}</span><span className="num" title={value}>{value}</span></div>
 
 // CAMPO QUE SÓ GRAVA AO CONFIRMAR (Enter OU SAIR DO CAMPO); Escape DESFAZ A DIGITAÇÃO
-export const Entry = ({ value, options, numeric, commit }: { value: string, options: string[], numeric: boolean, commit: (text: string) => void }) => {
+export const Entry = ({ value, options, numeric, commit, id }: { value: string, options: string[], numeric: boolean, commit: (text: string) => void, id?: string }) => {
     const [text, setText] = useState(value)
     const list            = useId()
 
@@ -53,10 +54,36 @@ export const Entry = ({ value, options, numeric, commit }: { value: string, opti
 
     return (
         <div className="in">
-            <input className={numeric ? '' : 'text'} value={text} list={options.length ? list : undefined} onChange={event => setText(event.target.value)} onBlur={() => text !== value && commit(text)} onKeyDown={onKey} />
+            <input id={id} className={numeric ? '' : 'text'} value={text} list={options.length ? list : undefined} onChange={event => setText(event.target.value)} onBlur={() => text !== value && commit(text)} onKeyDown={onKey} />
             {options.length > 0 && <datalist id={list}>{options.map(option => <option key={option} value={option} />)}</datalist>}
         </div>
     )
+}
+
+// LARGURAS DE TRILHA DO FRITZING (Wire::widths) E A FAIXA DIGITÁVEL DO TraceWire, EM mil
+const TRACE_WIDTHS = [8, 12, 16, 24, 32, 48]
+const TRACE_RANGE  = [8, 128]
+
+const NET_TEXT: ['outside' | 'connector', string][] = [['outside', 'Na ponta de fora'], ['connector', 'Junto ao conector']]
+
+const isTrace = (instance: Instance | undefined) => instance?.moduleIdRef === 'WireModuleID' && ((instance.views.pcbView?.geometry.wireFlags ?? 0) & WIRE_FLAGS.pcbView) !== 0
+
+// LARGURA DAS TRILHAS SELECIONADAS: VAZIA QUANDO DIFEREM, COMO NO FRITZING; GRAVA EM TODAS DE UMA VEZ, COM DESFAZER
+const TraceWidth = ({ wireIndexes }: { wireIndexes: string[] }) => {
+    const doc    = useStore(state => state.doc)
+    const widths = new Set(wireIndexes.map(wireIndex => +(doc.instances[wireIndex]?.views.pcbView?.wire?.mils ?? 0).toFixed(1)))
+    const { edit, setMessage } = useStore.getState()
+
+    const commit = (text: string) => {
+        const mils = Number(text.replace(/mil/i, '').replace(',', '.').trim())
+
+        if (!Number.isInteger(mils) || mils < TRACE_RANGE[0] || mils > TRACE_RANGE[1])
+            return setMessage(t('largura inválida: use um inteiro de 8 a 128 mil'))
+
+        edit(current => setWire(current, 'pcbView', wireIndexes, { mils }))
+    }
+
+    return <div className="field"><label>{t('Largura')}</label><Entry value={widths.size === 1 ? `${[...widths][0]} mil` : ''} options={TRACE_WIDTHS.map(mils => `${mils} mil`)} numeric commit={commit} /></div>
 }
 
 const TIME_UNITS: [string, number][] = [['s', 1], ['ms', 1e-3], ['µs', 1e-6], ['ns', 1e-9]]
@@ -222,6 +249,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
     const catalog             = useStore(state => state.catalog)
     const netlist             = useStore(state => state.netlist)
     const [family, setFamily] = useState<Found[]>([])
+    const imageRef            = useRef<HTMLInputElement>(null)
     const { edit, swap }      = useStore.getState()
     const instance            = doc.instances[modelIndex]
     const part                = library.getPart(instance?.moduleIdRef ?? '')
@@ -247,7 +275,10 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
     const merged = { ...part.properties, ...instance.properties }
     const defs   = getPropertyDefs(part.moduleId)
     const free   = FREE.filter(([, accepts]) => accepts(part))
-    const keys   = [...new Set([...Object.keys(merged), ...free.map(([key]) => key)])].filter(key => !HIDDEN.has(key) && (merged[key] || defs.some(item => item.name === key) || free.some(([item]) => item === key)))
+    const label  = getNetLabel(part.moduleId, part.version, merged)
+    const generated = getParametric(part.moduleId)
+    const policy = label && (label.style === 'left') === label.left ? 'connector' : 'outside'
+    const keys   = [...new Set([...Object.keys(merged), ...free.map(([key]) => key)])].filter(key => !HIDDEN.has(key) && !(label && key === 'style') && (merged[key] || defs.some(item => item.name === key) || free.some(([item]) => item === key)))
     const netOf  = (key: string) => {
         const index = netIndex.get(key) ?? -1
         const others = index >= 0 ? nets[index].filter(other => other !== key && splitKey(other)[0] !== modelIndex) : []
@@ -282,7 +313,31 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
         edit(current => setProperty(current, modelIndex, key, key === 'width' || key === 'height' ? text.replace(',', '.') : text))
     }
 
+    // PINOS, ESPAÇAMENTO, FILEIRAS E TAMANHO DAS PEÇAS GERADAS: A ESCOLHA TROCA PELA PEÇA GERADA CORRESPONDENTE, MANTENDO OS FIOS
+    const generate = (key: string, value: string) => {
+        const moduleId = generated?.choose(key, value.trim())
+
+        if (!moduleId)
+            return useStore.getState().setMessage(t('tamanho inválido: use colunas.linhas, de 3 a 199'))
+
+        void swap(modelIndex, moduleId)
+    }
+
     const editor = (key: string) => {
+        const choices = generated?.options[key]
+
+        if (choices && !choices.length)
+            return <Entry value={merged[key] ?? ''} options={[]} numeric commit={text => generate(key, text)} />
+
+        if (choices)
+            return (
+                <div className="in">
+                    <select value={merged[key] ?? ''} onChange={event => generate(key, event.target.value)}>
+                        {[...new Set([merged[key] ?? '', ...choices])].filter(Boolean).map(value => <option key={value} value={value}>{value}</option>)}
+                    </select>
+                </div>
+            )
+
         const values = [...new Set(family.map(entry => entry.properties[key]).filter(Boolean))].sort()
         const def    = defs.find(item => item.name === key)
         const loose  = free.find(([item]) => item === key)
@@ -315,9 +370,23 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
             <p className="sub">{[merged.package, t(part.connectors.length === 1 ? '{0} pino' : '{0} pinos', part.connectors.length)].filter(Boolean).join(' · ')}</p>
             <div className="sec">
                 <h3>{t('Valores')}</h3>
-                <div className="field"><label>{t('Nome')}</label><Entry value={instance.title} options={[]} numeric={false} commit={text => edit(current => setTitle(current, modelIndex, text.trim() || instance.title))} /></div>
+                <div className="field"><label htmlFor="part-name">{t('Nome')}</label><Entry id="part-name" value={instance.title} options={[]} numeric={false} commit={text => edit(current => setTitle(current, modelIndex, text.trim() || instance.title))} /></div>
                 {keys.map(key => <div key={key} className="field"><label title={key}>{nameOf(key)}</label>{editor(key)}</div>)}
+                {label && label.style !== 'legacy' && <div className="field"><label>{t('Texto')}</label><div className="seg tabs" role="tablist" aria-label={t('Texto do net label')}>{NET_TEXT.map(([value, text]) => <button key={value} className="tab" role="tab" aria-selected={policy === value} onClick={() => edit(current => setProperty(current, modelIndex, 'style', alignForPolicy(value, label.left)))}>{t(text)}</button>)}</div></div>}
             </div>
+            {part.moduleId.endsWith('LogoImageModuleID') && (
+                <div className="sec">
+                    <button className="btn sm full" onClick={() => imageRef.current?.click()}><Icon name="open" />{t(part.kind === 'board' ? 'Carregar o contorno da placa (SVG, PNG ou JPG)…' : 'Carregar imagem (SVG, PNG ou JPG)…')}</button>
+                    <input ref={imageRef} type="file" accept=".svg,image/svg+xml,.png,image/png,.jpg,.jpeg,image/jpeg" hidden onChange={event => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ''
+
+                        if (file)
+                            void useStore.getState().loadImage(modelIndex, file)
+                    }} />
+                    {merged.lastfilename && <p className="sub" style={{ marginTop: 6, overflowWrap: 'anywhere' }}>{merged.lastfilename}</p>}
+                </div>
+            )}
             {familyOf(part) === 'multimeter' && <Meter modelIndex={modelIndex} variants={family} />}
             <SwitchEditor modelIndex={modelIndex} />
             <Reading modelIndex={modelIndex} />
@@ -382,6 +451,7 @@ export const Inspector = () => {
     const owner     = hover ? doc.instances[splitKey(hover)[0]] : undefined
     const connector = hover ? new Scene(doc, library, view).getConnector(hover) : undefined
     const net       = hover && netlist ? netlist.getNet(view, hover) : []
+    const traces    = view === 'pcbView' && selection.length > 0 && selection.every(index => isTrace(doc.instances[index])) ? selection : null
 
     if (chosen)
         return <PartEditor key={chosen} modelIndex={chosen} />
@@ -391,8 +461,9 @@ export const Inspector = () => {
 
     return (
         <>
-            {wire && <><div className="ph"><h2>{wire.title}</h2><span className="pill neutral">{t('Fio')}</span></div><div className="sec"><Kv label="Cor" value={wire.views[view]?.wire?.color ?? '—'} /><Kv label="Largura" value={`${(wire.views[view]?.wire?.mils ?? 0).toFixed(1)} mil`} /></div></>}
+            {wire && <><div className="ph"><h2>{wire.title}</h2><span className="pill neutral">{t('Fio')}</span></div><div className="sec"><Kv label="Cor" value={wire.views[view]?.wire?.color ?? '—'} />{traces ? <TraceWidth wireIndexes={traces} /> : <Kv label="Largura" value={`${(wire.views[view]?.wire?.mils ?? 0).toFixed(1)} mil`} />}</div></>}
             {selection.length > 1 && <div className="nopart"><b>{t('{0} itens selecionados', selection.length)}</b>{t('Arraste para mover juntos; Delete apaga todos.')}</div>}
+            {traces && traces.length > 1 && <div className="sec"><TraceWidth wireIndexes={traces} /></div>}
             {!selection.length && (
                 <div className="nopart">
                     <b>{t('Nada selecionado')}</b>

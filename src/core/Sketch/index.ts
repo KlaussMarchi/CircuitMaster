@@ -10,7 +10,7 @@ export type Leg            = { points: Point[], beziers: (number[] | null)[] }
 export type ConnectorState = { id: string, layer: string, x: number, y: number, leg: Leg | null, connects: Connect[], groundFillSeed: boolean }
 export type Geometry       = { x: number, y: number, z: number, transform: Matrix | null, line: [number, number, number, number] | null, wireFlags: number, size: Point | null }
 export type WireExtras     = { mils: number, color: string, opacity: number, banded: boolean, bezier: number[] | null }
-export type Label          = { visible: boolean, x: number, y: number, z: number, xOffset: number, yOffset: number, color: string, size: number, keys: string[] }
+export type Label          = { visible: boolean, x: number, y: number, z: number, xOffset: number, yOffset: number, color: string, size: number, keys: string[], transform: Matrix | null }
 export type InstanceView   = { layer: string, locked: boolean, bottom: boolean, geometry: Geometry, wire: WireExtras | null, connectors: ConnectorState[], label: Label | null, hidden: string[] }
 
 export type Instance = {
@@ -48,6 +48,8 @@ const readBezier = (element: XmlElement | undefined) => {
     return points.every(Boolean) ? points.flatMap(point => [number(point, 'x'), number(point, 'y')]) : null
 }
 
+const readMatrix = (element: XmlElement | undefined) => element ? TRANSFORM_KEYS.map(key => number(element, key)) as Matrix : null
+
 const readGeometry = (element: XmlElement | undefined): Geometry => {
     const transform = childNamed(element, 'transform')
     const hasLine   = element?.hasAttribute('x1') ?? false
@@ -55,7 +57,7 @@ const readGeometry = (element: XmlElement | undefined): Geometry => {
         x: number(element, 'x'),
         y: number(element, 'y'),
         z: number(element, 'z', -1),
-        transform: transform ? TRANSFORM_KEYS.map(key => number(transform, key)) as Matrix : null,
+        transform: readMatrix(transform),
         line: hasLine ? [number(element, 'x1'), number(element, 'y1'), number(element, 'x2'), number(element, 'y2')] : null,
         wireFlags: number(element, 'wireFlags'),
         size: element?.hasAttribute('width') ? [number(element, 'width'), number(element, 'height')] : null
@@ -88,7 +90,8 @@ const readLabel = (element: XmlElement | undefined): Label | null => element ? {
     yOffset: number(element, 'yOffset'),
     color: element.getAttribute('textColor') ?? '#000000',
     size: number(element, 'fontSize', LABEL_SIZE),
-    keys: childrenNamed(element, 'displayKey').map(key => key.getAttribute('key') ?? '')
+    keys: childrenNamed(element, 'displayKey').map(key => key.getAttribute('key') ?? ''),
+    transform: readMatrix(childNamed(element, 'transform'))
 } : null
 
 const readInstanceView = (element: XmlElement): InstanceView => {
@@ -239,7 +242,7 @@ const wireXml = (wire: WireExtras) => element('wireExtras', { mils: wire.mils, c
 
 const legXml = (leg: Leg) => element('leg', {}, leg.points.map((point, i) => element('point', { x: point[0], y: point[1] }) + bezierXml(leg.beziers[i] ?? null)).join(''))
 
-const labelXml = (label: Label) => element('titleGeometry', { visible: String(label.visible), x: label.x, y: label.y, z: label.z, xOffset: label.xOffset, yOffset: label.yOffset, textColor: label.color, fontSize: label.size }, label.keys.map(key => element('displayKey', { key })).join(''))
+const labelXml = (label: Label) => element('titleGeometry', { visible: String(label.visible), x: label.x, y: label.y, z: label.z, xOffset: label.xOffset, yOffset: label.yOffset, textColor: label.color, fontSize: label.size }, (label.transform ? matrixXml(label.transform) : '') + label.keys.map(key => element('displayKey', { key })).join(''))
 
 // UMA VISTA DA INSTÂNCIA COM TODAS AS ARESTAS DO GRAFO QUE A TOCAM, RESOLVENDO A CAMADA DO ALVO NA VISTA (SPEC 02 §7.3)
 const viewXml = (doc: Doc, instance: Instance, view: ViewName, state: InstanceView, partners: Map<string, string[]>) => {

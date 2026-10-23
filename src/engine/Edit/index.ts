@@ -2,8 +2,8 @@ import { IDENTITY, apply, boxesTouch, cubicAt, distance, invert, lerp, multiply,
 import { addEdges, addInstance, getTitle, keyOf, removeEdges, removeInstance, splitKey, updateInstance, updateView, WIRE_FLAGS, type Doc, type Edge } from '../../core/Document'
 import { VIEWS, getLayerZ, type ViewName } from '../../core/Layer'
 import type { Library } from '../../core/Library'
-import { getStrips, logoTextSvg } from '../../core/Generator'
-import type { ConnectorState, Instance, InstanceView, Label } from '../../core/Sketch'
+import { getStrips, logoTextSvg, toggleCut } from '../../core/Generator'
+import type { ConnectorState, Instance, InstanceView, Label, WireExtras } from '../../core/Sketch'
 import type { FillFragment } from '../../core/Fill'
 import type { End, Plan } from '../../core/Router'
 import { Scene, WIRE_STYLE, labelPx, owner } from '../Scene'
@@ -624,7 +624,7 @@ const createLabel = (doc: Doc, library: Library, view: View, modelIndex: string,
         return null
 
     const [xOffset, yOffset] = [svg.width, -height]
-    return { visible, x: state.geometry.x + xOffset, y: state.geometry.y + yOffset, z: getLayerZ(view, LABEL_LAYERS[view]), xOffset, yOffset, color: '#000000', size: style.size, keys }
+    return { visible, x: state.geometry.x + xOffset, y: state.geometry.y + yOffset, z: getLayerZ(view, LABEL_LAYERS[view]), xOffset, yOffset, color: '#000000', size: style.size, keys, transform: null }
 }
 
 // PEÇA NOVA NAS TRÊS VISTAS, CENTRADA NO PONTO DADO PARA CADA VISTA (SPEC 02 §1.2)
@@ -843,7 +843,42 @@ export const bendWire = (doc: Doc, view: ViewName, wireIndex: string, grab: Poin
 
 export const straightenWire = (doc: Doc, view: ViewName, wireIndex: string) => updateView(doc, view, wireIndex, state => ({ ...state, wire: state.wire && { ...state.wire, bezier: null } }))
 
-export const setWireColor = (doc: Doc, view: ViewName, wireIndexes: string[], color: string) => wireIndexes.reduce((current, wireIndex) => updateView(current, view, wireIndex, state => ({ ...state, wire: state.wire && { ...state.wire, color } })), doc)
+export const setWire = (doc: Doc, view: ViewName, wireIndexes: string[], patch: Partial<WireExtras>) => wireIndexes.reduce((current, wireIndex) => updateView(current, view, wireIndex, state => ({ ...state, wire: state.wire && { ...state.wire, ...patch } })), doc)
+
+const GAP = [0.38, 0.62]    // PARTE DO PASSO ENTRE DOIS FUROS QUE CORTA A TIRA, FORA DOS ANÉIS DE COBRE
+const BAND = 0.35            // MEIA LARGURA DA TIRA, EM PASSOS
+
+// TRECHO DE TIRA DA STRIPBOARD SOB O PONTO ("x.yh" OU "x.yv"), PELOS TERMINAIS DOS FUROS (A PLACA PODE ESTAR GIRADA); NULO PERTO DE UM FURO OU FORA DA PLACA
+export const getStripAt = (scene: Scene, modelIndex: string, point: Point) => {
+    const size   = scene.doc.instances[modelIndex]?.moduleIdRef.match(/^(\d+)\.(\d+)Stripboard2?ModuleID$/)
+    const hole   = (ix: number, iy: number) => scene.getTerminal(keyOf(modelIndex, `connector${1000 * iy + ix}`))
+    const [o, a, b] = [hole(0, 0), hole(1, 0), hole(0, 1)]
+
+    if (!size || !o || !a || !b)
+        return null
+
+    const [u, v] = [[a[0] - o[0], a[1] - o[1]], [b[0] - o[0], b[1] - o[1]]]
+    const det    = u[0] * v[1] - u[1] * v[0]
+    const [dx, dy] = [point[0] - o[0], point[1] - o[1]]
+    const [s, t] = [(dx * v[1] - dy * v[0]) / det, (u[0] * dy - u[1] * dx) / det]
+    const inside = (value: number, max: number) => value >= 0 && value <= max - 1
+    const across = (value: number) => value - Math.floor(value) >= GAP[0] && value - Math.floor(value) <= GAP[1]
+    const [cols, rows] = [Number(size[1]), Number(size[2])]
+
+    if (across(s) && Math.abs(t - Math.round(t)) <= BAND && inside(Math.floor(s) + 1, cols) && inside(Math.round(t), rows))
+        return `${Math.floor(s)}.${Math.round(t)}h`
+
+    if (across(t) && Math.abs(s - Math.round(s)) <= BAND && inside(Math.floor(t) + 1, rows) && inside(Math.round(s), cols))
+        return `${Math.round(s)}.${Math.floor(t)}v`
+
+    return null
+}
+
+// CORTAR OU RELIGAR UM TRECHO: MUDA AS NETS, ENTÃO O NETLIST SE REFAZ (revision)
+export const cutStrip = (doc: Doc, modelIndex: string, cut: string) => {
+    const instance = doc.instances[modelIndex]
+    return instance ? { ...updateInstance(doc, modelIndex, current => ({ ...current, properties: { ...current.properties, buses: toggleCut(current.moduleIdRef, current.properties, cut) } })), revision: doc.revision + 1 } : doc
+}
 
 export const setLocked = (doc: Doc, view: ViewName, modelIndexes: string[], locked: boolean) => modelIndexes.reduce((current, modelIndex) => updateView(current, view, modelIndex, state => ({ ...state, locked })), doc)
 
@@ -855,6 +890,20 @@ export const setLabelVisible = (doc: Doc, library: Library, view: View, modelInd
     const label = current.instances[modelIndex]?.views[view]?.label ?? createLabel(current, library, view, modelIndex, keys, visible)
     return label ? updateView(current, view, modelIndex, state => ({ ...state, label: { ...label, visible } })) : current
 }, doc)
+
+export const setLabel = (doc: Doc, view: ViewName, modelIndexes: string[], patch: Partial<Label>) => modelIndexes.reduce((current, modelIndex) => updateView(current, view, modelIndex, state => ({ ...state, label: state.label && { ...state.label, ...patch } })), doc)
+
+// GIRO OU ESPELHO DO RÓTULO EM TORNO DO PRÓPRIO CENTRO, DEPOIS DO QUE ELE JÁ TEM (transformLabel DO partlabel.cpp DO FRITZING)
+export const transformLabel = (doc: Doc, library: Library, view: View, modelIndex: string, change: Matrix) => {
+    const size  = new Scene(doc, library, view).getLabelSize(modelIndex)
+    const label = doc.instances[modelIndex]?.views[view]?.label
+
+    if (!size || !label)
+        return doc
+
+    const [cx, cy] = [size[0] / 2, size[1] / 2]
+    return setLabel(doc, view, [modelIndex], { transform: multiply(multiply(multiply(translate(cx, cy), change), translate(-cx, -cy)), label.transform ?? IDENTITY) })
+}
 
 export const moveLabel = (doc: Doc, view: ViewName, modelIndex: string, dx: number, dy: number) => updateView(doc, view, modelIndex, state => ({ ...state, label: state.label && { ...state.label, x: state.label.x + dx, y: state.label.y + dy, xOffset: state.label.xOffset + dx, yOffset: state.label.yOffset + dy } }))
 

@@ -1,7 +1,6 @@
 import { unzipSync } from 'fflate'
-import { test, expect, type App } from './Fixtures'
+import { test, expect, AUTOSAVE_MS, type App } from './Fixtures'
 
-const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTICO: A RECARGA SEMPRE OFERECE RECUPERAR
 
 const indexed = (app: App) => expect.poll(() => app.page.evaluate(() => cm.store.getState().indexed.ready), { timeout: 60000 }).toBe(true)
 
@@ -248,4 +247,167 @@ test('Editor de peças: SVG novo, conector atribuído a um elemento, terminal, t
 
     await app.context(await app.center(resistor), 'Editar (editor de peças)')
     expect(await rows()).toBe(history)
+})
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')    // 1×1 px
+
+test('Editor de peças: desfazer e refazer, definir todos, SMD, conexões internas, PNG na vista, ícone de outra vista, zoom, grade e camadas, fechar perguntando e regravar a peça própria', async ({ app, page }) => {
+    const part   = await app.place('Resistor', [-350, -150])
+    const editor = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Editor de peças' }) })
+    const first  = editor.locator('.pe-table select').first()
+    await app.context(await app.center(part), 'Editar (editor de peças)')
+    await editor.getByLabel('Título').fill('Resistor F')
+    await editor.getByLabel('Título').blur()
+
+    await editor.getByRole('tab', { name: 'Conectores' }).click()
+    await editor.getByRole('tablist', { name: 'Definir todos como' }).getByRole('tab', { name: 'Fêmea' }).click()
+    await expect(first).toHaveValue('female')
+    await page.keyboard.press('Control+z')
+    await expect(first).toHaveValue('male')
+    await editor.getByRole('button', { name: 'Refazer' }).click()
+    await expect(first).toHaveValue('female')
+
+    const mount = editor.getByRole('tablist', { name: 'Montagem na PCB' })
+    await mount.getByRole('tab', { name: 'SMD' }).click()
+    await expect(mount.getByRole('tab', { name: 'SMD' })).toHaveAttribute('aria-selected', 'true')
+
+    const buses = editor.locator('.pe-buses')
+    await buses.getByRole('checkbox').nth(0).check()
+    await buses.getByRole('checkbox').nth(1).check()
+    await buses.getByRole('button', { name: 'Ligar os marcados' }).click()
+    await expect(buses.locator('.pe-bus')).toHaveCount(1)
+    await buses.getByRole('button', { name: /^Remover a conexão interna/ }).click()
+    await expect(buses.locator('.pe-bus')).toHaveCount(0)
+    await page.keyboard.press('Control+z')
+    await expect(buses.locator('.pe-bus')).toHaveCount(1)
+
+    await editor.getByRole('tab', { name: 'Ícone', exact: true }).click()
+    await editor.getByRole('button', { name: 'Usar a imagem da vista Protoboard' }).click()
+    await editor.getByRole('tab', { name: 'Protoboard', exact: true }).click()
+    const tools = editor.getByRole('toolbar', { name: 'Vista do editor' })
+    await tools.getByRole('button', { name: 'Aumentar zoom' }).click()
+    await expect(tools.getByRole('button', { name: '150%' })).toBeVisible()
+    await tools.getByRole('checkbox', { name: 'Grade de 0,1 in' }).check()
+    await expect(editor.locator('.pe-stage')).toHaveCSS('background-image', /linear-gradient/)
+    await tools.getByRole('button', { name: 'breadboard', exact: true }).click()
+    await expect(editor.locator('.pe-stage [id="breadboard"]').first()).toBeHidden()
+    const svg = await app.download(() => editor.getByRole('button', { name: 'Baixar o SVG da vista' }).click())
+    expect(svg.bytes.toString()).toContain('<svg')
+
+    await editor.locator('input[type="file"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG })
+    await expect(editor.locator('.pe-stage image')).toHaveCount(1)
+    await page.keyboard.press('Control+z')
+    await expect(editor.locator('.pe-stage image')).toHaveCount(0)
+
+    app.answers.push(false)
+    await editor.getByRole('button', { name: 'Cancelar' }).click()
+    expect(app.asked.at(-1)).toBe('Fechar o editor de peças e descartar as alterações?')
+    await expect(editor).toBeVisible()
+
+    await editor.getByRole('button', { name: 'Gravar peça' }).click()
+    await page.getByRole('button', { name: 'Gravar sem registro' }).click()
+    await expect(editor).toHaveCount(0)
+    await expect.poll(() => moduleOf(app, part)).not.toBe('ResistorModuleID')
+    const own = await moduleOf(app, part)
+
+    await app.context(await app.center(part), 'Editar (editor de peças)')
+    await expect(editor.getByText(/peça sua: gravar a substitui em Meus itens/)).toBeVisible()
+    await editor.getByLabel('Título').fill('Resistor G')
+    await editor.getByLabel('Título').blur()
+    await editor.getByRole('button', { name: 'Gravar peça' }).click()
+    await page.getByRole('button', { name: 'Gravar sem registro' }).click()
+    await expect(editor).toHaveCount(0)
+    expect(await moduleOf(app, part)).toBe(own)
+    expect(await page.evaluate(moduleId => cm.store.getState().library.getPart(moduleId)?.title, own)).toBe('Resistor G')
+})
+
+test('Peças geradas: SIP, mystery part e borne de N pinos; o inspetor muda pinos, fileiras, espaçamento e o tamanho da perfboard mantendo os fios', async ({ app, page }) => {
+    const add       = (moduleId: string) => page.evaluate(async moduleId => {
+        await cm.store.getState().addPart(moduleId, [0, 0])
+        return cm.store.getState().selection[0]
+    }, moduleId)
+    const inspector = page.getByRole('complementary', { name: 'Inspetor' })
+    const field     = (key: string) => inspector.locator('.field').filter({ has: page.locator(`label[title="${key}"]`) })
+
+    const mystery  = await add('mystery_part_sip_3_100mil')
+    const resistor = await app.place('Resistor', [-350, -150])
+    await app.wire((await app.pins(resistor))['Pin 1'], (await app.pins(mystery))['pin1'])
+    const edges    = await app.edges()
+
+    await page.evaluate(modelIndex => cm.store.getState().select([modelIndex]), mystery)
+    await field('pins').locator('select').selectOption('5')
+    await expect.poll(() => moduleOf(app, mystery)).toBe('mystery_part_sip_5_100mil')
+    await field('layout').locator('select').selectOption('Double Row')
+    await expect.poll(() => moduleOf(app, mystery)).toBe('mystery_part_dip_6_300mil')
+    await field('pin spacing').locator('select').selectOption('600mil')
+    await expect.poll(() => moduleOf(app, mystery)).toBe('mystery_part_dip_6_600mil')
+    expect(await app.edges()).toBe(edges)
+
+    for (const moduleId of ['generic_sip_4_300mil', 'screw_terminal_2_3.5mm']) {
+        const placed = await add(moduleId)
+        await expect.poll(() => page.evaluate(modelIndex => cm.store.getState().library.getPart(cm.store.getState().doc.instances[modelIndex]?.moduleIdRef ?? '')?.connectors.length, placed)).toBeGreaterThan(1)
+    }
+    const screw = await add('screw_terminal_2_3.5mm')
+    await field('pins').locator('select').selectOption('4')
+    await expect.poll(() => moduleOf(app, screw)).toBe('screw_terminal_4_3.5mm')
+
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
+    const board = await add('30.20PerfboardModuleID')
+    const size  = field('size').locator('input')
+    await size.fill('2.2')
+    await size.press('Enter')
+    await expect.poll(() => app.message()).toBe('tamanho inválido: use colunas.linhas, de 3 a 199')
+    await size.fill('10.8')
+    await size.press('Enter')
+    await expect.poll(() => moduleOf(app, board)).toBe('10.8PerfboardModuleID')
+})
+
+test('Stripboard: um clique entre dois furos corta ou religa a tira, muda o netlist e desfaz', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'Protoboard' }).click()
+    const board  = await page.evaluate(async () => {
+        await cm.store.getState().addPart('10.8Stripboard2ModuleID', [0, 0])
+        return cm.store.getState().selection[0]
+    })
+    await page.keyboard.press('Escape')
+    const joined = () => page.evaluate(modelIndex => cm.store.getState().netlist?.getNet('breadboardView', `${modelIndex}/connector0`).includes(`${modelIndex}/connector1`), board)
+    const [a, b] = [await app.terminal(`${board}/connector0`), await app.terminal(`${board}/connector1`)]
+    expect(await joined()).toBe(false)
+
+    await page.mouse.click((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    await expect.poll(joined).toBe(true)
+    expect(await page.evaluate(modelIndex => cm.store.getState().doc.instances[modelIndex]?.properties.buses, board)).not.toContain('0.0h')
+    await page.mouse.click((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    await expect.poll(joined).toBe(false)
+    await page.keyboard.press('Control+z')
+    await expect.poll(joined).toBe(true)
+})
+
+test('Logo de imagem e placa de forma livre: PNG na serigrafia vira desenho vetorial, SVG vira o contorno da placa e sai no Gerber', async ({ app, page }) => {
+    await page.getByRole('tab', { name: 'PCB' }).click()
+    const add   = (moduleId: string) => page.evaluate(async moduleId => {
+        await cm.store.getState().addPart(moduleId, [0, 0])
+        return cm.store.getState().selection[0]
+    }, moduleId)
+    const shape = (modelIndex: string) => page.evaluate(modelIndex => cm.store.getState().doc.instances[modelIndex]?.properties.shape ?? '', modelIndex)
+    const load  = page.getByRole('complementary', { name: 'Inspetor' }).locator('input[type="file"]')
+    const png   = Buffer.from((await page.evaluate(() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 20
+        const paint  = canvas.getContext('2d') as CanvasRenderingContext2D
+        paint.fillStyle = '#ffffff'
+        paint.fillRect(5, 5, 10, 10)
+        return canvas.toDataURL('image/png')
+    })).split(',')[1], 'base64')
+
+    const logo = await add('newLogoImageModuleID')
+    await load.setInputFiles({ name: 'marca.png', mimeType: 'image/png', buffer: png })
+    await expect.poll(() => app.message()).toBe('marca.png carregada')
+    expect((await shape(logo)).match(/M\d+ \d+h10v1h-10z/g)).toHaveLength(10)
+
+    const board = await add('BoardLogoImageModuleID')
+    await load.setInputFiles({ name: 'placa.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="1in" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#338040"/></svg>') })
+    await expect.poll(() => shape(board)).toContain('id="board"')
+    expect(await page.evaluate(modelIndex => cm.store.getState().library.getPart(cm.store.getState().doc.instances[modelIndex]?.moduleIdRef ?? '')?.kind, board)).toBe('board')
+    const gerber = await app.download(() => app.menu('Arquivo', 'Exportar', 'Para produção', 'Gerber estendido (RS-274X)…'))
+    expect(gerber.name).toMatch(/gerber.*\.zip$|\.zip$/)
 })

@@ -29,5 +29,5 @@ export const getListings = () => {
 
     const svg      = Object.keys(PART_FOLDERS).flatMap(root => listFiles(ROOTS[root], 'svg', '.svg').map(file => `${root}/${file}`))
     const sketches = listFiles(ROOTS.sketches, '', '.fzz')
-    return { 'fzp.json': fzp, 'svg.json': svg, 'sketches.json': sketches }
+    return { 'fzp.json': fzp, 'svg.json': svg, 'sketches.json': sketches, 'bins.json': listFiles(ROOTS.parts, 'bins', '.fzb') }
 }

@@ -11,9 +11,9 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Fritzing | 251 | 141 | 86 | 24 |
-| KiCad esquemático, comuns e projeto | 404 | 117 | 274 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 27 | 392 | 2 |
+| Fritzing | 251 | 209 | 17 | 25 |
+| KiCad esquemático, comuns e projeto | 404 | 121 | 270 | 13 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 30 | 389 | 2 |
 
 ## Fritzing
 
@@ -23,18 +23,18 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 |---|---|---|---|---|---|---|
 | F-001 | Novo (New) | Fritzing › File › New | feita | 0 | e2e/circuit.spec.ts | Ctrl+N; abre numa aba nova e a anterior continua com o circuito (spec 05 §4); também na aba Documento |
 | F-002 | Abrir… (Open...) | Fritzing › File › Open... | feita | 0 | tests/sketch.test.ts · e2e/circuit.spec.ts | Ctrl+O; .fzz e .fz; o mesmo seletor importa .fzpz/.fzb/.fzbz (F-174) |
-| F-003 | Reverter (Revert) | Fritzing › File › Revert | falta | 3 | — | recarregar o arquivo aberto descartando as alterações |
-| F-004 | Abrir recentes ▸ (Open Recent Files) | Fritzing › File › Open Recent Files ▸ | falta | 3 | — | no navegador: lista no IndexedDB com a cópia ou o handle de cada arquivo |
+| F-003 | Reverter (Revert) | Fritzing › File › Revert | feita | 3 | e2e/fritzing.spec.ts | Arquivo › Reverter volta ao arquivo aberto ou salvo, depois de perguntar; as alterações ficam nas versões salvas automaticamente |
+| F-004 | Abrir recentes ▸ (Open Recent Files) | Fritzing › File › Open Recent Files ▸ | feita | 3 | e2e/fritzing.spec.ts | até 10 cópias no IndexedDB (store recent); reabre depois de recarregar; Limpar recentes |
 | F-005 | Abrir exemplo ▸ (Open Example) | Fritzing › File › Open Example ▸ (sketches/index.xml) | feita | 0 | tests/sketch.test.ts · e2e/samples.spec.ts | Arquivo › Exemplos em submenus por pasta; lista com busca na aba Documento |
 | F-006 | Fechar janela (Close Window) | Fritzing › File › Close Window (fritzingwindow.cpp) | feita | 2 | e2e/ui.spec.ts | Arquivo › Fechar sketch e o × da aba; com alterações pergunta; o Ctrl+W fica com o navegador |
 | F-007 | Salvar (Save) | Fritzing › File › Save | feita | 0 | tests/sketch.test.ts · e2e/circuit.spec.ts | Ctrl+S; baixa o .fzz com os arquivos das peças de pacote embutidos |
-| F-008 | Salvar como… (Save As...) | Fritzing › File › Save As... | falta | 3 | — | parcial: Salvar baixa com o nome atual; falta pedir o nome (Shift+Ctrl+S) |
+| F-008 | Salvar como… (Save As...) | Fritzing › File › Save As... | feita | 3 | e2e/fritzing.spec.ts | Ctrl+Shift+S pergunta o nome, renomeia a aba e baixa; Salvar uma cópia… baixa com outro nome sem renomear |
 | F-009 | Compartilhar online… (Share online...) | Fritzing › File › Share online... | não se aplica | — | — | serviço online do Fritzing (FRIZING_KICAD §10) |
 | F-010 | Encomendar placa… (Order a PCB...) | Fritzing › File › Order a PCB... | não se aplica | — | — | Fritzing Fab/Aisler; Exportar › Para produção já gera o pacote (FRIZING_KICAD §10) |
 | F-011 | Exportar › Como imagem › PNG… (Export › as Image › PNG...) | Fritzing › File › Export › as Image › PNG... | feita | 0 | e2e/export.spec.ts | vista corrente a 300 dpi |
 | F-012 | Exportar › Como imagem › JPG… (Export › as Image › JPG...) | Fritzing › File › Export › as Image › JPG... | feita | 0 | e2e/export.spec.ts | vista corrente a 300 dpi |
 | F-013 | Exportar › Como imagem › SVG… (Export › as Image › SVG...) | Fritzing › File › Export › as Image › SVG... | feita | 0 | e2e/export.spec.ts | vista corrente com as imagens das peças embutidas |
-| F-014 | Exportar › Como imagem › PDF… (Export › as Image › PDF...) | Fritzing › File › Export › as Image › PDF... | falta | 3 | — | parcial: o PDF leva a vista rasterizada em JPEG (300 dpi, ui/Export); o Fritzing grava vetorial |
+| F-014 | Exportar › Como imagem › PDF… (Export › as Image › PDF...) | Fritzing › File › Export › as Image › PDF... | falta | 13 | — | parcial: o PDF leva a vista rasterizada em JPEG a 300 dpi (ui/Output); o vetorial precisa do conversor de SVG para PDF da plotagem por camada (11.6), que entra na fase 13 |
 | F-015 | Exportar › Para produção › Gravável (PDF)… (Etchable (PDF)...) | Fritzing › File › Export › for Production › Etchable (PDF)... | feita | 0 | tests/cam.test.ts · e2e/export.spec.ts | exige placa; baixa ‹nome›_etch_pdf.zip |
 | F-016 | Exportar › Para produção › Gravável (SVG)… (Etchable (SVG)...) | Fritzing › File › Export › for Production › Etchable (SVG)... | feita | 0 | e2e/export.spec.ts | exige placa; baixa ‹nome›_etch_svg.zip |
 | F-017 | Exportar › Para produção › Gerber estendido (RS-274X)… (Extended Gerber (RS-274X)...) | Fritzing › File › Export › for Production › Extended Gerber (RS-274X)... | feita | 0 | tests/cam.test.ts · e2e/export.spec.ts | exige placa; zip com as camadas, a furação Excellon e o pick-and-place .xy; com várias placas, a selecionada; o CircuitMaster também tem Pick-and-place… avulso |
@@ -45,7 +45,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-022 | Exportar › Netlist XML… (XML Netlist...) | Fritzing › File › Export › XML Netlist... | feita | 0 | tests/cam.test.ts · e2e/export.spec.ts | netlist da vista corrente |
 | F-023 | Exportar › Netlist SPICE… (SPICE Netlist...) | Fritzing › File › Export › SPICE Netlist... | feita | 0 | tests/spice.test.ts · e2e/export.spec.ts | .cir pelo mesmo gerador do deck da simulação |
 | F-024 | Exportar › Eagle… (Eagle...) | Fritzing › File › Export › Eagle... (mainwindow_export.cpp) | não se aplica | — | — | a ação existe mas está comentada no menu do 1.0.8; o Eagle foi descontinuado e exportar para KiCad substitui (FRIZING_KICAD §10) |
-| F-025 | Imprimir… (Print...) | Fritzing › File › Print... | falta | 3 | — | Ctrl+P, também no editor de peças; Page Setup está comentado no 1.0.8 e não aparece |
+| F-025 | Imprimir… (Print...) | Fritzing › File › Print... | feita | 3 | e2e/fritzing.spec.ts | Ctrl+P: a vista em SVG numa folha (@media print) e window.print(); Page Setup fica com o navegador |
 | F-026 | Abrir programa externo (Launch ‹programa›...) | Fritzing › File › Launch ‹programa›... | não se aplica | — | — | só aparece quando o Fritzing é iniciado com um programa externo na linha de comando; desktop |
 | F-027 | Sair (Quit) | Fritzing › File › Quit | não se aplica | — | — | Ctrl+Q; desktop, no navegador fecha-se a aba |
 | F-028 | Desfazer (Undo) | Fritzing › Edit › Undo | feita | 0 | e2e/edit.spec.ts | Ctrl+Z; também na barra do quadro |
@@ -60,9 +60,9 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-037 | Selecionar tudo (Select All) | Fritzing › Edit › Select All | feita | 0 | e2e/edit.spec.ts | Ctrl+A; só o que aparece na vista (`Scene.isShown`): na protoboard não entram placa, vias nem trilhas da PCB (bug da fase 0, corrigido com teste) |
 | F-038 | Desmarcar (Deselect) | Fritzing › Edit › Deselect | feita | 0 | e2e/edit.spec.ts | Esc |
 | F-039 | Adicionar nota (Add Note) | Fritzing › Edit › Add Note | feita | 0 | e2e/edit.spec.ts | nota no centro da vista visível, só nessa vista; duplo clique edita |
-| F-040 | Preferências… (Preferences...) | Fritzing › Edit › Preferences... (Help no macOS) | falta | 3 | — | parcial (fase 2, e2e/ui.spec.ts · e2e/navigation.spec.ts): roda do mouse, fios curvos, modo, idioma, tema, unidades, cursor em cruz, grades e grade por tipo, teclas e manutenção (spec 05 §7); faltam cores de realce, Gerber com seis casas, estilo do rótulo de net e programas da aba Código |
+| F-040 | Preferências… (Preferences...) | Fritzing › Edit › Preferences... (Help no macOS) | feita | 3 | e2e/ui.spec.ts · e2e/navigation.spec.ts · e2e/fritzing.spec.ts | roda do mouse, fios curvos, modo, idioma, tema, unidades, cursor em cruz, grades e grade por tipo, teclas, manutenção, cores de realce dos terminais ligado e solto, texto dos net labels novos (spec 05 §7); o Gerber sai sempre com seis casas (a opção beta do Fritzing é o padrão aqui); os programas da aba Código entram com ela (fase 14) |
 | F-041 | Editar (editor de peças) (Edit (new parts editor)) | Fritzing › Part › Edit (new parts editor) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | também no menu de contexto; desabilitado para peça que não abre no editor |
-| F-042 | Exportar peça… (Export...) | Fritzing › Part › Export... | falta | 3 | — | parcial: o editor de peças baixa um .fzpz, mas de uma peça nova (moduleId novo); falta exportar a peça selecionada como está |
+| F-042 | Exportar peça… (Export...) | Fritzing › Part › Export... | feita | 3 | e2e/fritzing.spec.ts | Peça › Exportar peça… baixa o .fzpz da peça como está no acervo (.fzp e o SVG de cada vista) |
 | F-043 | Espelhar horizontal (Flip Horizontal) | Fritzing › Part › Flip Horizontal | feita | 0 | tests/edit.test.ts · e2e/edit.spec.ts | atalho \|; no esquemático; também no menu de contexto do esquemático e na barra do quadro |
 | F-044 | Espelhar vertical (Flip Vertical) | Fritzing › Part › Flip Vertical | feita | 0 | e2e/edit.spec.ts | no esquemático; também no menu de contexto do esquemático |
 | F-045 | Girar ▸ 45° no sentido horário (Rotate 45° Clockwise) | Fritzing › Part › Rotate › Rotate 45° Clockwise | feita | 0 | e2e/edit.spec.ts | desabilitado só com breadboards; também no menu de contexto |
@@ -82,12 +82,12 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-059 | Alinhar ▸ Base (Align Bottom) | Fritzing › Part › Align › Align Bottom | feita | 0 | e2e/edit.spec.ts | idem |
 | F-060 | Travar peça (Lock Part) | Fritzing › Part › Lock Part | feita | 0 | e2e/edit.spec.ts | marcável; travada não move, não gira, não espelha e não é apagada; também no menu de contexto |
 | F-061 | Sticky (Sticky) | Fritzing › Part › Sticky | feita | 0 | tests/edit.test.ts · e2e/edit.spec.ts | marcável; só peça com camada sticky (no 1.0.8, as placas de PCB; a protoboard não tem); placa nova nasce sticky, como no Fritzing; também no menu de contexto |
-| F-062 | Selecionar todas as peças travadas (Select All Locked Parts) | Fritzing › Part › Select All Locked Parts | falta | 3 | — |  |
+| F-062 | Selecionar todas as peças travadas (Select All Locked Parts) | Fritzing › Part › Select All Locked Parts | feita | 3 | e2e/fritzing.spec.ts |  |
 | F-063 | Adicionar ao bin ▸ (Add to bin...) | Fritzing › Part › Add to bin... ▸ | feita | 0 | e2e/parts.spec.ts | Meus itens, cada bin do usuário e Novo bin…; também no menu de contexto |
 | F-064 | Mostrar/Ocultar rótulo da peça (Show part label) | Fritzing › Part › Show part label | feita | 0 | e2e/edit.spec.ts | o texto segue o estado; também no menu de contexto |
-| F-065 | Selecionar peças desatualizadas (Select outdated parts) | Fritzing › Part › Select outdated parts | falta | 3 | — |  |
-| F-066 | Atualizar peças selecionadas (Update selected parts) | Fritzing › Part › Update selected parts | falta | 3 | — | troca pela revisão nova da peça |
-| F-067 | Localizar peça no sketch… (Find part in sketch...) | Fritzing › Part › Find part in sketch... | falta | 3 | — | Ctrl+F; FRIZING_KICAD §10: entra no painel de busca |
+| F-065 | Selecionar peças desatualizadas (Select outdated parts) | Fritzing › Part › Select outdated parts | feita | 3 | e2e/fritzing.spec.ts | pelo <version replacedby> do .fzp |
+| F-066 | Atualizar peças selecionadas (Update selected parts) | Fritzing › Part › Update selected parts | feita | 3 | e2e/fritzing.spec.ts | troca pela revisão seguinte (swapPart), um passo por vez como no Fritzing, mantendo os fios |
+| F-067 | Localizar peça no sketch… (Find part in sketch...) | Fritzing › Part › Find part in sketch... | feita | 3 | e2e/fritzing.spec.ts | Ctrl+F foca a busca do painel de peças, que mostra antes a lista No sketch; o clique seleciona e centraliza |
 | F-068 | Regerar banco de peças… (Regenerate parts database...) | Fritzing › Part › Regenerate parts database... | não se aplica | — | — | só aparece com o log de depuração; o índice do acervo é refeito pelo worker Indexer a cada carga |
 | F-069 | Ampliar (Zoom In) | Fritzing › View › Zoom In | feita | 0 | e2e/edit.spec.ts | Ctrl++ e Ctrl+=; também no controle de zoom do quadro |
 | F-070 | Reduzir (Zoom Out) | Fritzing › View › Zoom Out | feita | 0 | e2e/edit.spec.ts | Ctrl+-; também no controle de zoom do quadro |
@@ -96,23 +96,23 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-073 | 100% (100% Size) | Fritzing › View › 100% Size | feita | 0 | e2e/edit.spec.ts | Ctrl+Shift+0; também clicando no percentual do quadro |
 | F-074 | Alinhar à grade (Align to Grid) | Fritzing › View › Align to Grid | feita | 0 | tests/path.test.ts · e2e/edit.spec.ts | marcável, gravado por vista; também na aba Documento |
 | F-075 | Mostrar grade (Show Grid) | Fritzing › View › Show Grid | feita | 0 | e2e/edit.spec.ts | marcável, gravado por vista; também na aba Documento |
-| F-076 | Tamanho da grade… (Set Grid Size...) | Fritzing › View › Set Grid Size... | falta | 3 | — | parcial: aba Documento › Grade escolhe entre tamanhos fixos de cada vista; faltam valor livre em in/mm e Restaurar padrão |
-| F-077 | Cor de fundo… (Set Background Color...) | Fritzing › View › Set Background Color... | falta | 3 | — | o desenho já lê backgroundColor do sketch; falta o comando |
-| F-078 | Colorir fios da protoboard pelo comprimento (Color Breadboard Wires By Length) | Fritzing › View › Color Breadboard Wires By Length | falta | 3 | — |  |
+| F-076 | Tamanho da grade… (Set Grid Size...) | Fritzing › View › Set Grid Size... | feita | 3 | e2e/fritzing.spec.ts | Exibir › Grade › Tamanho da grade… e o campo Grade da aba Documento aceitam valor livre em in ou mm (0,001 a 1 in); Restaurar a grade padrão |
+| F-077 | Cor de fundo… (Set Background Color...) | Fritzing › View › Set Background Color... | feita | 3 | e2e/fritzing.spec.ts | Exibir › Cor de fundo… abre a aba Documento no seletor de cor; Padrão volta ao fundo do tema; sem a caixa "fazer desta a cor padrão" |
+| F-078 | Colorir fios da protoboard pelo comprimento (Color Breadboard Wires By Length) | Fritzing › View › Color Breadboard Wires By Length | feita | 3 | e2e/fritzing.spec.ts | lengthColorTrans/colorForLength do wire.cpp; só na protoboard, fio curvo fica com a própria cor |
 | F-079 | Mostrar boas-vindas (Show Welcome) | Fritzing › View › Show Welcome | feita | 2 | e2e/navigation.spec.ts | Ajuda › Boas-vindas reabre o cartão; ele aparece sozinho no quadro vazio |
 | F-080 | Mostrar protoboard (Show Breadboard) | Fritzing › View › Show Breadboard | feita | 0 | e2e/circuit.spec.ts | Ctrl+1 e tecla 1 (Ctrl+2 no Fritzing, onde Ctrl+1 é Boas-vindas); abas da barra superior |
 | F-081 | Mostrar esquemático (Show Schematic) | Fritzing › View › Show Schematic | feita | 0 | e2e/circuit.spec.ts | Ctrl+2 e tecla 2 (Ctrl+3 no Fritzing); abas da barra superior |
 | F-082 | Mostrar PCB (Show PCB) | Fritzing › View › Show PCB | feita | 0 | e2e/circuit.spec.ts | Ctrl+3 e tecla 3 (Ctrl+4 no Fritzing); abas da barra superior |
 | F-083 | Mostrar código (Show Code) | Fritzing › View › Show Code | falta | 14 | — | Ctrl+5; a aba Código está detalhada na terceira tabela |
-| F-084 | Bin em ícones (Show Parts Bin Icon View) | Fritzing › View › Show Parts Bin Icon View (também Bin › Show Bin in Icon View) | falta | 3 | — | parcial: as seções da biblioteca saem em grade de ícones; não há como alternar |
-| F-085 | Bin em lista (Show Parts Bin List View) | Fritzing › View › Show Parts Bin List View (também Bin › Show Bin in List View) | falta | 3 | — | parcial: só os resultados da busca saem em lista |
-| F-086 | Mostrar todas as camadas (Show All Layers) | Fritzing › View › Show All Layers | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): na PCB, Exibir › Camadas da PCB › Mostrar todas as camadas e a legenda do quadro; falta nas outras vistas |
-| F-087 | Ocultar todas as camadas (Hide All Layers) | Fritzing › View › Hide All Layers | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): na PCB, Exibir › Camadas da PCB › Ocultar todas as camadas e a legenda do quadro; falta nas outras vistas |
-| F-088 | Camada ▸ cada camada da vista, marcável (‹nome› Layer) | Fritzing › View › ‹nome› Layer (sketchwidget.cpp) | falta | 3 | — | parcial: na PCB, Ambas/Topo/Base esmaecem uma face, e a serigrafia se oculta peça a peça (F-130) |
+| F-084 | Bin em ícones (Show Parts Bin Icon View) | Fritzing › View › Show Parts Bin Icon View (também Bin › Show Bin in Icon View) | feita | 3 | e2e/fritzing.spec.ts | Exibir › Bin em ícones e o botão de grade do painel de peças |
+| F-085 | Bin em lista (Show Parts Bin List View) | Fritzing › View › Show Parts Bin List View (também Bin › Show Bin in List View) | feita | 3 | e2e/fritzing.spec.ts | Exibir › Bin em lista e o botão de lista do painel de peças |
+| F-086 | Mostrar todas as camadas (Show All Layers) | Fritzing › View › Show All Layers | feita | 3 | e2e/pcb.spec.ts · e2e/fritzing.spec.ts | Exibir › Camadas › Mostrar todas as camadas, nas três vistas |
+| F-087 | Ocultar todas as camadas (Hide All Layers) | Fritzing › View › Hide All Layers | feita | 3 | e2e/pcb.spec.ts · e2e/fritzing.spec.ts | Exibir › Camadas › Ocultar todas as camadas, nas três vistas |
+| F-088 | Camada ▸ cada camada da vista, marcável (‹nome› Layer) | Fritzing › View › ‹nome› Layer (sketchwidget.cpp) | feita | 3 | e2e/pcb.spec.ts · e2e/fritzing.spec.ts | Exibir › Camadas e a legenda do quadro: protoboard 7 grupos, esquemático 8, PCB 9, guardados por vista |
 | F-089 | Minimizar (Minimize) | Fritzing › Window › Minimize | não se aplica | — | — | Ctrl+M; janela do sistema, desktop |
 | F-090 | Painel Peças (Parts) | Fritzing › Window › Parts (doca) | não se aplica | — | — | liga e desliga uma doca do Qt; no CircuitMaster os painéis são fixos no layout, o trilho troca o painel esquerdo e no celular eles viram folhas |
 | F-091 | Painel Inspetor (Inspector) | Fritzing › Window › Inspector (doca) | não se aplica | — | — | idem; o inspetor fica sempre à direita |
-| F-092 | Painel Camadas (Layers) | Fritzing › Window › Layers (doca) | falta | 3 | — | parcial (fase 2, e2e/pcb.spec.ts): legenda "Camadas" no quadro da PCB liga e desliga cada grupo num clique; falta nas outras vistas |
+| F-092 | Painel Camadas (Layers) | Fritzing › Window › Layers (doca) | feita | 3 | e2e/pcb.spec.ts · e2e/fritzing.spec.ts | legenda Camadas no canto do quadro nas três vistas, recolhida fora da PCB |
 | F-093 | Lista dos sketches abertos (uma entrada por janela) | Fritzing › Window › ‹sketch aberto› | feita | 2 | e2e/ui.spec.ts | abas de sketches no cabeçalho do quadro, com o ponto de alterações não salvas (spec 05 §4) |
 | F-094 | Abrir janela de programação (Open programming window) | Fritzing › Window › Open programming window | não se aplica | — | — | só aparece quando a aba Código está desligada; a função é a da aba Código (F-083) |
 | F-095 | Autorotear (Autoroute) | Fritzing › Routing (PCB e esquemático) › Autoroute | feita | 0 | tests/router.test.ts · e2e/pcb.spec.ts | Shift+Ctrl+A; progresso e cancelar na aba Roteamento; com várias placas, a selecionada; sem placa, "Criar placa e rotear" |
@@ -122,20 +122,20 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-099 | Preenchimento ▸ Preencher com cobre (Ground Fill › Copper Fill) | Fritzing › Routing (PCB) › Ground Fill › Copper Fill | feita | 0 | tests/fill.test.ts · e2e/pcb.spec.ts | também na aba Roteamento |
 | F-100 | Preenchimento ▸ Preencher com terra (Ground Fill › Ground Fill) | Fritzing › Routing (PCB) › Ground Fill › Ground Fill | feita | 0 | tests/fill.test.ts · e2e/pcb.spec.ts | alívio térmico nos pads de terra; também na aba Roteamento |
 | F-101 | Preenchimento ▸ Remover preenchimento (Ground Fill › Remove Copper Fill) | Fritzing › Routing (PCB) › Ground Fill › Remove Copper Fill | feita | 0 | e2e/pcb.spec.ts | também na aba Roteamento |
-| F-102 | Preenchimento ▸ Escolher sementes… (Choose Ground Fill Seed(s)...) | Fritzing › Routing (PCB) › Ground Fill › Choose Ground Fill Seed(s)... | falta | 3 | — | parcial: a semente se marca conector a conector no menu de contexto (F-132); falta o diálogo com a lista de conectores |
+| F-102 | Preenchimento ▸ Escolher sementes… (Choose Ground Fill Seed(s)...) | Fritzing › Routing (PCB) › Ground Fill › Choose Ground Fill Seed(s)... | feita | 3 | e2e/fritzing.spec.ts | Roteamento › Preenchimento de cobre › Escolher sementes…: sementes marcadas e conectores GND/VSS/ground da PCB, um por net; cada caixa marca na hora, com desfazer; Preencher com terra |
 | F-103 | Preenchimento ▸ Limpar sementes (Clear Ground Fill Seeds) | Fritzing › Routing (PCB) › Ground Fill › Clear Ground Fill Seeds | feita | 0 | e2e/pcb.spec.ts | também no menu de contexto da peça na PCB e na aba Roteamento |
 | F-104 | Preenchimento ▸ Folga do preenchimento… (Set Ground Fill Keepout...) | Fritzing › Routing (PCB) › Ground Fill › Set Ground Fill Keepout... | feita | 0 | e2e/pcb.spec.ts | aba Roteamento › Regras › Folga do cobre (GPG_Keepout); não está no menu |
-| F-105 | Ver de baixo (View from below) | Fritzing › Routing (PCB) › View from below | falta | 3 | — | também os botões View from Above/Below da barra inferior |
+| F-105 | Ver de baixo (View from below) | Fritzing › Routing (PCB) › View from below | feita | 3 | e2e/fritzing.spec.ts | Roteamento › Ver de baixo: quadro espelhado, camadas de baixo por cima (PCBViewFromBelowLayerList), rótulos legíveis, clique e pan seguem o mouse, exportação espelhada; só na sessão, como no Fritzing |
 | F-106 | Ambas as faces clicáveis (Set both copper layers clickable) | Fritzing › Routing (PCB) › Set both copper layers clickable | feita | 0 | e2e/pcb.spec.ts | botão Ambas no cabeçalho do quadro na PCB; sem o atalho Shift+Ctrl+3 |
-| F-107 | Só a face de cima clicável (Set copper top layer clickable) | Fritzing › Routing (PCB) › Set copper top layer clickable | falta | 3 | — | parcial: Topo esmaece a face de baixo e põe nela as trilhas novas, mas a outra face continua clicável; sem Shift+Ctrl+2 |
-| F-108 | Só a face de baixo clicável (Set copper bottom layer clickable) | Fritzing › Routing (PCB) › Set copper bottom layer clickable | falta | 3 | — | parcial: Base esmaece a face de cima e põe nela as trilhas novas, mas a outra face continua clicável; sem Shift+Ctrl+1 |
+| F-107 | Só a face de cima clicável (Set copper top layer clickable) | Fritzing › Routing (PCB) › Set copper top layer clickable | feita | 3 | e2e/fritzing.spec.ts | Shift+Ctrl+2; a face de baixo esmaece e nem trilha nem peça SMD dela recebe clique |
+| F-108 | Só a face de baixo clicável (Set copper bottom layer clickable) | Fritzing › Routing (PCB) › Set copper bottom layer clickable | feita | 3 | e2e/fritzing.spec.ts | Shift+Ctrl+1; a face de cima esmaece e nem trilha nem peça SMD dela recebe clique; Shift+Ctrl+3 volta às duas |
 | F-109 | Mover para a outra face (Move to other side of the board) | Fritzing › Routing (PCB) › Move to other side of the board | feita | 0 | e2e/pcb.spec.ts | Roteamento › Mover trilha para a outra face; também no menu de contexto da trilha (Mover para a face de cima/de baixo) |
 | F-110 | Não rotear automaticamente (Do not autoroute) | Fritzing › Routing (PCB e esquemático) › Do not autoroute | feita | 0 | e2e/pcb.spec.ts | marcável; também no menu de contexto da trilha |
-| F-111 | Mostrar não roteadas (Show unrouted) | Fritzing › Routing (PCB, esquemático e protoboard) › Show unrouted | falta | 3 | — | parcial: contagem no painel Problemas e na aba Roteamento e linhas tracejadas no quadro; não realça nem seleciona os conectores pendentes |
+| F-111 | Mostrar não roteadas (Show unrouted) | Fritzing › Routing (PCB, esquemático e protoboard) › Show unrouted | feita | 3 | e2e/fritzing.spec.ts | realça em amarelo os terminais das linhas de ratsnest da vista até o próximo clique; sem ratsnest avisa |
 | F-112 | Selecionar todas as trilhas (Select All Traces) | Fritzing › Routing (PCB e esquemático) › Select All Traces | feita | 0 | e2e/pcb.spec.ts |  |
-| F-113 | Selecionar trilhas "não rotear" (Select All "Don't Autoroute" Traces) | Fritzing › Routing (PCB e esquemático) › Select All "Don't Autoroute" Traces | falta | 3 | — |  |
-| F-114 | Selecionar trilhas autoroteáveis (Select All Autoroutable Traces) | Fritzing › Routing (PCB e esquemático) › Select All Autoroutable Traces | falta | 3 | — | parcial: existe no menu da PCB; falta no do esquemático |
-| F-115 | Selecionar todos os jumpers (Select All Jumpers) | Fritzing › Routing (PCB) › Select All Jumpers | falta | 3 | — |  |
+| F-113 | Selecionar trilhas "não rotear" (Select All "Don't Autoroute" Traces) | Fritzing › Routing (PCB e esquemático) › Select All "Don't Autoroute" Traces | feita | 3 | e2e/fritzing.spec.ts | no esquemático e na PCB |
+| F-114 | Selecionar trilhas autoroteáveis (Select All Autoroutable Traces) | Fritzing › Routing (PCB e esquemático) › Select All Autoroutable Traces | feita | 3 | e2e/fritzing.spec.ts | no esquemático e na PCB |
+| F-115 | Selecionar todos os jumpers (Select All Jumpers) | Fritzing › Routing (PCB) › Select All Jumpers | feita | 3 | e2e/fritzing.spec.ts |  |
 | F-116 | Selecionar todas as vias (Select All Vias) | Fritzing › Routing (PCB) › Select All Vias | feita | 0 | e2e/pcb.spec.ts |  |
 | F-117 | Selecionar todos os preenchimentos (Select All CopperFill) | Fritzing › Routing (PCB) › Select All CopperFill | feita | 0 | e2e/pcb.spec.ts |  |
 | F-118 | Selecionar todos os fios (Select All Wires) | Fritzing › Routing (protoboard) › Select All Wires | feita | 0 | e2e/pcb.spec.ts | menu Roteamento da protoboard |
@@ -158,7 +158,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-130 | Ocultar/Mostrar serigrafia da peça (Hide part silkscreen) | Fritzing › contexto da peça na PCB (pcbItemMenu, mainwindow_menu.cpp) | feita | 0 | e2e/pcb.spec.ts | o texto segue o estado; só peça com camada de serigrafia |
 | F-131 | Converter via em dobra (Convert Via to Bendpoint) | Fritzing › contexto da peça na PCB (pcbItemMenu, mainwindow_menu.cpp) | feita | 0 | tests/edit.test.ts · e2e/pcb.spec.ts | só em via, habilitado com duas trilhas ligadas |
 | F-132 | Definir semente de preenchimento de terra (Set Ground Fill Seed) | Fritzing › contexto da peça na PCB (pcbItemMenu, mainwindow_menu.cpp) | feita | 0 | e2e/pcb.spec.ts | marcável, sobre o conector clicado |
-| F-133 | Desligar todos os fios (Disconnect All Wires) | Fritzing › contexto da peça (viewItemMenuAux), com o log de depuração ligado | falta | 3 | — | FRIZING_KICAD §10 pede |
+| F-133 | Desligar todos os fios (Disconnect All Wires) | Fritzing › contexto da peça (viewItemMenuAux), com o log de depuração ligado | feita | 3 | e2e/fritzing.spec.ts | solta a ponta dos fios ligados à peça; ligações diretas entre peças ficam |
 | F-134 | Itens de depuração (Test Connectors, Update InfoView on hover, Export Normalized SVG, Export Normalized Flattened SVG) | Fritzing › contexto da peça e do fio (viewItemMenuAux, *WireMenu) | não se aplica | — | — | ferramentas internas, só com o log de depuração ou na compilação de depuração |
 | F-135 | Cor do fio ▸ azul (Wire Color › blue) | Fritzing › contexto do fio na protoboard e no esquemático (breadboardWireMenu, schematicWireMenu; items/wire.cpp) | feita | 0 | e2e/edit.spec.ts | marca a cor atual |
 | F-136 | Cor do fio ▸ vermelho (Wire Color › red) | Fritzing › contexto do fio na protoboard e no esquemático (breadboardWireMenu, schematicWireMenu; items/wire.cpp) | feita | 0 | e2e/edit.spec.ts | marca a cor atual |
@@ -181,24 +181,24 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-153 | Remover dobra (Remove Bendpoint) | Fritzing › contexto do fio, sobre uma dobra | feita | 0 | tests/edit.test.ts · e2e/edit.spec.ts | o texto troca quando o clique foi numa dobra |
 | F-154 | Converter dobra em via (Convert Bendpoint to Via) | Fritzing › contexto da trilha na PCB (pcbWireMenu) | feita | 0 | tests/edit.test.ts · e2e/pcb.spec.ts | numa dobra; furo do ajuste da placa |
 | F-155 | Endireitar curva (Straighten Curve) | Fritzing › contexto do fio (*WireMenu) | feita | 0 | e2e/edit.spec.ts | só em fio curvo |
-| F-156 | Editar rótulo (Edit) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Edit | falta | 3 | — | parcial: o campo Nome do inspetor muda o texto; o clique direito no rótulo abre o menu da peça |
+| F-156 | Editar rótulo (Edit) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Edit | feita | 3 | e2e/fritzing.spec.ts | Editar leva ao campo Nome do inspetor, selecionado, sem diálogo |
 | F-157 | Ocultar rótulo (Hide) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Hide | feita | 0 | e2e/edit.spec.ts | o clique direito no rótulo abre o menu da peça, que tem Ocultar rótulo da peça (F-064) |
-| F-158 | Exibir valores ▸ Texto do rótulo (Display Values › Label text) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Display Values › Label text | falta | 3 | — |  |
-| F-159 | Exibir valores ▸ cada propriedade da peça (Display Values › ‹propriedade›) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Display Values › ‹propriedade› | falta | 3 | — | o rótulo mostra hoje título e valor principal fixos |
-| F-160 | Girar/Espelhar ▸ 45° no sentido horário (Flip/Rotate › Rotate 45° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 45° Clockwise (só PCB) | falta | 3 | — |  |
-| F-161 | Girar/Espelhar ▸ 90° no sentido horário (Flip/Rotate › Rotate 90° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 90° Clockwise | falta | 3 | — |  |
-| F-162 | Girar/Espelhar ▸ 135° no sentido horário (Flip/Rotate › Rotate 135° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 135° Clockwise (só PCB) | falta | 3 | — |  |
-| F-163 | Girar/Espelhar ▸ 180° (Flip/Rotate › Rotate 180°) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 180° | falta | 3 | — |  |
-| F-164 | Girar/Espelhar ▸ 135° no sentido anti-horário (Flip/Rotate › Rotate 135° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 135° Counter Clockwise (só PCB) | falta | 3 | — |  |
-| F-165 | Girar/Espelhar ▸ 90° no sentido anti-horário (Flip/Rotate › Rotate 90° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 90° Counter Clockwise | falta | 3 | — |  |
-| F-166 | Girar/Espelhar ▸ 45° no sentido anti-horário (Flip/Rotate › Rotate 45° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 45° Counter Clockwise (só PCB) | falta | 3 | — |  |
-| F-167 | Girar/Espelhar ▸ Espelhar horizontal (Flip/Rotate › Flip Horizontal) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Flip Horizontal | falta | 3 | — |  |
-| F-168 | Girar/Espelhar ▸ Espelhar vertical (Flip/Rotate › Flip Vertical) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Flip Vertical | falta | 3 | — |  |
-| F-169 | Tamanho da fonte ▸ Minúsculo (Font Size › Tiny) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Tiny | falta | 3 | — |  |
-| F-170 | Tamanho da fonte ▸ Pequeno (Font Size › Small) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Small | falta | 3 | — |  |
-| F-171 | Tamanho da fonte ▸ Médio (Font Size › Medium) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Medium | falta | 3 | — |  |
-| F-172 | Tamanho da fonte ▸ Grande (Font Size › Large) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Large | falta | 3 | — |  |
-| F-173 | Remover conexão interna (Remove Internal Connection) | Fritzing › editor de peças › contexto da conexão interna (pemainwindow.cpp) | falta | 3 | — | depende das conexões internas (F-211) |
+| F-158 | Exibir valores ▸ Texto do rótulo (Display Values › Label text) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Display Values › Label text | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-159 | Exibir valores ▸ cada propriedade da peça (Display Values › ‹propriedade›) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Display Values › ‹propriedade› | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-160 | Girar/Espelhar ▸ 45° no sentido horário (Flip/Rotate › Rotate 45° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 45° Clockwise (só PCB) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-161 | Girar/Espelhar ▸ 90° no sentido horário (Flip/Rotate › Rotate 90° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 90° Clockwise | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-162 | Girar/Espelhar ▸ 135° no sentido horário (Flip/Rotate › Rotate 135° Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 135° Clockwise (só PCB) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-163 | Girar/Espelhar ▸ 180° (Flip/Rotate › Rotate 180°) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 180° | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-164 | Girar/Espelhar ▸ 135° no sentido anti-horário (Flip/Rotate › Rotate 135° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 135° Counter Clockwise (só PCB) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-165 | Girar/Espelhar ▸ 90° no sentido anti-horário (Flip/Rotate › Rotate 90° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 90° Counter Clockwise | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-166 | Girar/Espelhar ▸ 45° no sentido anti-horário (Flip/Rotate › Rotate 45° Counter Clockwise) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Rotate 45° Counter Clockwise (só PCB) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-167 | Girar/Espelhar ▸ Espelhar horizontal (Flip/Rotate › Flip Horizontal) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Flip Horizontal | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-168 | Girar/Espelhar ▸ Espelhar vertical (Flip/Rotate › Flip Vertical) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Flip/Rotate › Flip Vertical | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-169 | Tamanho da fonte ▸ Minúsculo (Font Size › Tiny) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Tiny | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-170 | Tamanho da fonte ▸ Pequeno (Font Size › Small) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Small | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-171 | Tamanho da fonte ▸ Médio (Font Size › Medium) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Medium | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-172 | Tamanho da fonte ▸ Grande (Font Size › Large) | Fritzing › contexto do rótulo da peça (items/partlabelcontextmenu.cpp) › Font Size › Large | feita | 3 | e2e/fritzing.spec.ts | menu de contexto do rótulo; gravado no titleGeometry (displayKey, transform, fontSize) |
+| F-173 | Remover conexão interna (Remove Internal Connection) | Fritzing › editor de peças › contexto da conexão interna (pemainwindow.cpp) | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | o × de cada conexão interna na aba Conectores |
 
 ### Bins, editor de peças, aba Código e outros docks
 
@@ -206,46 +206,46 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 |---|---|---|---|---|---|---|
 | F-174 | Importar… (Import...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Import... | feita | 0 | tests/sketch.test.ts · e2e/parts.spec.ts | pelo Arquivo › Abrir: .fzpz vai para Meus itens, .fzb/.fzbz vira bin do usuário; guardados no navegador |
 | F-175 | Novo bin… (New Bin...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › New Bin... | feita | 0 | e2e/parts.spec.ts | aba Meus itens › Novo bin e Adicionar ao bin › Novo bin… |
-| F-176 | Fechar bin (Close Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Close Bin (também no contexto da aba do bin) | falta | 3 | — | parcial: só Apagar; não há fechar e reabrir |
+| F-176 | Fechar bin (Close Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Close Bin (também no contexto da aba do bin) | feita | 3 | e2e/fritzing.spec.ts | o × da aba fecha o bin; o + reabre; os bins abertos ficam gravados |
 | F-177 | Apagar bin (Delete Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Delete Bin (também no contexto da aba do bin) | feita | 0 | e2e/parts.spec.ts | pede confirmação; as peças continuam no acervo |
 | F-178 | Salvar bin (Save Bin) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Save Bin (também no contexto da aba do bin) | feita | 0 | e2e/parts.spec.ts | gravação automática no navegador (localStorage circuitmaster.*): o bin volta depois de recarregar |
 | F-179 | Salvar bin como… (Save Bin As...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Save Bin As... (também no contexto da aba do bin) | não se aplica | — | — | no navegador gravar é baixar; Exportar bin (.fzbz) já leva o .fzb e as peças |
 | F-180 | Exportar bin… (Export Bin...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Export Bin... (também no contexto da aba do bin) | feita | 0 | tests/sketch.test.ts · e2e/parts.spec.ts | botão Exportar .fzbz em Meus itens e em cada bin do usuário |
 | F-181 | Renomear bin… (Rename Bin...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Rename Bin... (também no contexto da aba do bin) | feita | 0 | e2e/parts.spec.ts | bins do usuário |
 | F-182 | Copiar para o sketch e Copiar tudo para o sketch (Copy to Sketch, Copy all to Sketch) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Copy to Sketch, Copy all to Sketch | não se aplica | — | — | só na compilação de depuração |
-| F-183 | Editar peça do bin (Edit Part (new parts editor)...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Edit Part (new parts editor)... (também no contexto da peça no bin) | falta | 3 | — | parcial: o editor abre só a partir de uma peça do sketch (F-041) |
-| F-184 | Exportar peça do bin… (Export Part...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Export Part... (também no contexto da peça no bin) | falta | 3 | — |  |
-| F-185 | Remover peça do bin (Remove Part) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Remove Part (também no contexto da peça no bin) | falta | 3 | — |  |
-| F-186 | Localizar a peça do bin no sketch (Find Part in Sketch) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Find Part in Sketch (também no contexto da peça no bin) | falta | 3 | — |  |
-| F-187 | Bins de fábrica em abas (Core, Contrib, Arduino, SparkFun… e o bin Temp) | Fritzing › Parts (binmanager.cpp; fritzing-parts/bins) | falta | 3 | — | parcial: abas Core e Simulador; as peças dos outros bins só pela busca; sem o bin Temp com as peças do sketch aberto |
+| F-183 | Editar peça do bin (Edit Part (new parts editor)...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Edit Part (new parts editor)... (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça no bin › Editar peça (editor de peças), sem trocar no sketch |
+| F-184 | Exportar peça do bin… (Export Part...) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Export Part... (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça no bin › Exportar peça… |
+| F-185 | Remover peça do bin (Remove Part) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Remove Part (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça em Meus itens ou num bin do usuário › Remover do bin |
+| F-186 | Localizar a peça do bin no sketch (Find Part in Sketch) | Fritzing › Parts › menu Bin (partsbinpalette/binmanager/binmanager.cpp) › Find Part in Sketch (também no contexto da peça no bin) | feita | 3 | e2e/fritzing.spec.ts | menu de contexto da peça no bin › Localizar no sketch seleciona e centraliza |
+| F-187 | Bins de fábrica em abas (Core, Contrib, Arduino, SparkFun… e o bin Temp) | Fritzing › Parts (binmanager.cpp; fritzing-parts/bins) | feita | 3 | e2e/fritzing.spec.ts | Core e Simulador fixos, Meus itens, os 28 bins de fritzing-parts/bins pelo + e o Temp com as peças do sketch que não são do acervo |
 | F-188 | Busca de peças (Search) | Fritzing › Parts › Search (searchbinpalettewidget.cpp) | feita | 0 | tests/search.test.ts · e2e/parts.spec.ts | atalho /; português e inglês; básicos primeiro |
 | F-189 | Pôr peça do bin no sketch (arrastar) | Fritzing › Parts (partsbinview.cpp) | feita | 0 | e2e/circuit.spec.ts | arrastar, ou clicar e clicar no quadro, ou duplo clique para o centro |
 | F-190 | Carregar SVG da vista (Load image for view... SVG) | Fritzing › editor de peças › File › Load image for view... | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | Carregar SVG… em cada aba de vista; o SVG é saneado |
-| F-191 | Carregar JPG/PNG da vista (Load image for view... JPG, PNG) | Fritzing › editor de peças › File › Load image for view... | falta | 3 | — | parcial: só SVG |
+| F-191 | Carregar JPG/PNG da vista (Load image for view... JPG, PNG) | Fritzing › editor de peças › File › Load image for view... | feita | 3 | e2e/parts.spec.ts | Carregar SVG… aceita PNG e JPG: vira um SVG com a imagem embutida no tamanho dela a 90 dpi |
 | F-192 | Carregar footprint gEDA (.fp) ou módulo KiCad antigo (.mod) | Fritzing › editor de peças › File › Load image for view... (kicadmoduledialog.cpp) | não se aplica | — | — | superado pelas bibliotecas do KiCad (FRIZING_KICAD §10) |
-| F-193 | Reaproveitar a imagem da protoboard (Reuse breadboard image) | Fritzing › editor de peças › File › Reuse breadboard image | falta | 3 | — |  |
-| F-194 | Reaproveitar a imagem do esquemático (Reuse schematic image) | Fritzing › editor de peças › File › Reuse schematic image | falta | 3 | — |  |
-| F-195 | Reaproveitar a imagem da PCB (Reuse PCB image) | Fritzing › editor de peças › File › Reuse PCB image | falta | 3 | — |  |
-| F-196 | Fechar o editor (Close Window) | Fritzing › editor de peças › File › Close Window | falta | 3 | — | parcial: Cancelar fecha, mas sem perguntar pelas alterações não gravadas |
-| F-197 | Salvar a peça (Save) | Fritzing › editor de peças › File › Save | falta | 3 | — | parcial: gravar sempre cria peça nova; falta sobrescrever uma peça própria |
+| F-193 | Reaproveitar a imagem da protoboard (Reuse breadboard image) | Fritzing › editor de peças › File › Reuse breadboard image | feita | 3 | e2e/parts.spec.ts | na aba Ícone: Usar a imagem da vista Protoboard (só no ícone, como no Fritzing) |
+| F-194 | Reaproveitar a imagem do esquemático (Reuse schematic image) | Fritzing › editor de peças › File › Reuse schematic image | feita | 3 | e2e/parts.spec.ts | na aba Ícone: Usar a imagem da vista Esquemático |
+| F-195 | Reaproveitar a imagem da PCB (Reuse PCB image) | Fritzing › editor de peças › File › Reuse PCB image | feita | 3 | e2e/parts.spec.ts | na aba Ícone: Usar a imagem da vista PCB |
+| F-196 | Fechar o editor (Close Window) | Fritzing › editor de peças › File › Close Window | feita | 3 | e2e/parts.spec.ts | Cancelar pergunta antes de descartar alterações não gravadas |
+| F-197 | Salvar a peça (Save) | Fritzing › editor de peças › File › Save | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | peça sua (Meus itens ou bin do usuário): Gravar peça a substitui; Gravar como nova cria outra; peça do acervo só como nova |
 | F-198 | Salvar como peça nova (Save as new part) | Fritzing › editor de peças › File › Save as new part | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | Gravar peça: registro da revisão, peça nova em Meus itens e opção de trocar a do sketch |
-| F-199 | Exportar ▸ do editor de peças (Export › as Image, for Production) | Fritzing › editor de peças › File › Export ▸ | falta | 3 | — |  |
+| F-199 | Exportar ▸ do editor de peças (Export › as Image, for Production) | Fritzing › editor de peças › File › Export ▸ | feita | 3 | e2e/parts.spec.ts | Baixar o SVG da vista em cada aba; as saídas de produção são do sketch (Arquivo › Exportar) |
 | F-200 | Mostrar na pasta (Show in Folder) | Fritzing › editor de peças › File › Show in Folder | não se aplica | — | — | abre o gerenciador de arquivos do sistema; desktop |
-| F-201 | Desfazer e refazer no editor de peças (Undo, Redo) | Fritzing › editor de peças › Edit › Undo, Redo | falta | 3 | — |  |
-| F-202 | Converter esquemático para o padrão de 0,1 pol (Convert schematic to 0.1 inch standard) | Fritzing › editor de peças › Edit › Convert schematic to 0.1 inch standard | falta | 3 | — | para esquemáticos anteriores ao 0.8.6 |
+| F-201 | Desfazer e refazer no editor de peças (Undo, Redo) | Fritzing › editor de peças › Edit › Undo, Redo | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | botões e Ctrl+Z / Ctrl+Y no editor, até 100 passos; nos campos de texto vale o desfazer do campo |
+| F-202 | Converter esquemático para o padrão de 0,1 pol (Convert schematic to 0.1 inch standard) | Fritzing › editor de peças › Edit › Convert schematic to 0.1 inch standard | não se aplica | — | — | o conversor s2s refaz imagens de esquemático anteriores ao 0.8.6 (2013); o acervo do Fritzing 1.0.8 já vem convertido e o CircuitMaster abre e desenha o esquemático antigo como está |
 | F-203 | Mostrar ícone (Show Icon) | Fritzing › editor de peças › View › Show Icon | feita | 0 | e2e/parts.spec.ts | aba Ícone; sem o atalho Ctrl+4 |
 | F-204 | Mostrar metadados (Show Metadata) | Fritzing › editor de peças › View › Show Metadata | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | aba Metadados; sem o atalho Ctrl+5 |
 | F-205 | Mostrar conectores (Show Connectors) | Fritzing › editor de peças › View › Show Connectors | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | aba Conectores; sem o atalho Ctrl+6 |
 | F-206 | Vistas protoboard, esquemático e PCB do editor (Show Breadboard, Show Schematic, Show PCB) | Fritzing › editor de peças › View › Show Breadboard/Schematic/PCB | feita | 0 | e2e/parts.spec.ts | abas Protoboard, Esquemático e PCB |
-| F-207 | Tornar só esta vista visível (Make only this view visible) | Fritzing › editor de peças › View › Make only this view visible | falta | 3 | — |  |
-| F-208 | Exibir do editor de peças: zoom, grade, cor de fundo e camadas | Fritzing › editor de peças › View (zoom, grid, background, layers) | falta | 3 | — | parcial: o desenho se ajusta à área, sem zoom, grade nem camadas |
+| F-207 | Tornar só esta vista visível (Make only this view visible) | Fritzing › editor de peças › View › Make only this view visible | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | Só nesta vista: as outras vistas da peça e dos conectores copiam esta (hideOtherViews) |
+| F-208 | Exibir do editor de peças: zoom, grade, cor de fundo e camadas | Fritzing › editor de peças › View (zoom, grid, background, layers) | feita | 3 | e2e/parts.spec.ts | barra da vista: zoom de 50 a 400 %, grade de 0,1 in, cor de fundo e cada camada da vista |
 | F-209 | Lista de conectores e escolha do gráfico (Connector List, Select graphic) | Fritzing › editor de peças › tool view (petoolview.cpp) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | clique no elemento do SVG; Alt+clique pega o grupo; na PCB o gêmeo da outra camada recebe o mesmo id |
 | F-210 | Ponto terminal (Center, W, N, S, E e arrastar) | Fritzing › editor de peças › tool view (petoolview.cpp) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | Centro, Topo, Base, Esquerda, Direita e a marca arrastável |
-| F-211 | Conexões internas (Set Internal Connections) | Fritzing › editor de peças › tool view (petoolview.cpp) | falta | 3 | — | barramentos entre conectores |
+| F-211 | Conexões internas (Set Internal Connections) | Fritzing › editor de peças › tool view (petoolview.cpp) | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | aba Conectores › Conexões internas: marcar conectores e Ligar os marcados grava um <bus> |
 | F-212 | Número de conectores (number of connectors) | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | novos ganham o próximo número livre; diminuir apaga os de maior número |
 | F-213 | Tipo, nome e descrição de cada conector | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | feita | 0 | e2e/parts.spec.ts | male, female, pad |
-| F-214 | Definir todos como (Set all to: Male, Female, Pad) | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | falta | 3 | — |  |
-| F-215 | Passante ou SMD (Through-hole, SMD) | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | falta | 3 | — |  |
+| F-214 | Definir todos como (Set all to: Male, Female, Pad) | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | aba Conectores › Definir todos como Macho, Fêmea ou Pad |
+| F-215 | Passante ou SMD (Through-hole, SMD) | Fritzing › editor de peças › connectors view (peconnectorsview.cpp) | feita | 3 | e2e/parts.spec.ts · tests/partdraft.test.ts | aba Conectores › Passante ou SMD: camada copper0 do .fzp, <p> dos conectores e grupos de cobre do SVG da PCB |
 | F-216 | Metadados: título, autor, descrição, rótulo, URL, família, variante, propriedades e tags | Fritzing › editor de peças › metadata view (pemetadataview.cpp) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | família e variante entram como propriedades; variant repetida vira a próxima livre |
 | F-217 | Histórico de revisões (History, Add revision, Edit revision) | Fritzing › editor de peças › metadata view (pemetadataview.cpp, pehistoryentrydialog.cpp) | feita | 0 | tests/partdraft.test.ts · e2e/parts.spec.ts | gravar pede o registro e pode subir a versão |
 | F-218 | Nova aba de código (New Tab) | Fritzing › aba Código › Code › New Tab (programwindow.cpp; botão New) | falta | 14 | — |  |
@@ -273,11 +273,11 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-240 | Resultados nas peças ao simular (multímetro, fumaça, brilho do LED, osciloscópio) | Fritzing › simulation/simulator.cpp | feita | 0 | tests/spice.test.ts · e2e/simulation.spec.ts |  |
 | F-241 | Trocar a peça pelas propriedades do inspetor (swap) | Fritzing › Inspector (infoview/htmlinfoview.cpp) | feita | 0 | e2e/parts.spec.ts | outro valor de propriedade da família troca a peça mantendo as ligações |
 | F-242 | Peças geradas nos sketches abertos: DIP, barra de pinos, perfboard e stripboard | Fritzing › PartFactory (items/dip.cpp, pinheader.cpp, perfboard.cpp, stripboard.cpp) | feita | 0 | tests/engine.test.ts · e2e/parts.spec.ts | core/Generator cria .fzp e SVG pelo moduleId (generic_ic_dip_N, generic_*_pin_header_N, X.YPerfboard/Stripboard); os cortes gravados da stripboard valem no netlist |
-| F-243 | Pôr peças geradas pela biblioteca e mudar pinos, espaçamento e tamanho no inspetor | Fritzing › Parts › Core (IC, Generic female header, Perfboard, Stripboard) e Inspector › pins, pin spacing, size | falta | 3 | e2e/parts.spec.ts | parcial: as geradas que o bin Core cita (DIP 8, barra fêmea de 2, barra shrouded de 10) entram no índice, no bin e na busca, com ícone (fase 0); o inspetor ainda só troca entre .fzp existentes (mudar pinos e espaçamento: fase 3) |
-| F-244 | Cortar e religar as tiras da stripboard no quadro | Fritzing › items/stripboard.cpp (clique entre os furos) | falta | 3 | — | parcial: os cortes gravados no .fz valem no netlist; não há como mudá-los |
-| F-245 | Peças paramétricas SIP, mystery part e screw terminal com N pinos | Fritzing › Inspector (items/mysterypart.cpp, screwterminal.cpp) | falta | 3 | — | FRIZING_KICAD §10; spec 01 §8.5–8.6 |
+| F-243 | Pôr peças geradas pela biblioteca e mudar pinos, espaçamento e tamanho no inspetor | Fritzing › Parts › Core (IC, Generic female header, Perfboard, Stripboard) e Inspector › pins, pin spacing, size | feita | 3 | e2e/parts.spec.ts · tests/parametric.test.ts | inspetor das peças geradas: pinos, espaçamento e fileiras de DIP, SIP, mystery part, borne e barras de pinos, e o tamanho colunas.linhas da perfboard e da stripboard (3 a 199), trocando pela peça gerada e mantendo os fios |
+| F-244 | Cortar e religar as tiras da stripboard no quadro | Fritzing › items/stripboard.cpp (clique entre os furos) | feita | 3 | e2e/parts.spec.ts · tests/parametric.test.ts | as tiras aparecem na protoboard; um clique entre dois furos corta ou religa o trecho (buses, como o Stripbit do Fritzing), com desfazer e netlist refeito |
+| F-245 | Peças paramétricas SIP, mystery part e screw terminal com N pinos | Fritzing › Inspector (items/mysterypart.cpp, screwterminal.cpp) | feita | 3 | e2e/parts.spec.ts · tests/parametric.test.ts | core/Parametric porta os geradores do dip.cpp, mysterypart.cpp e screwterminal.cpp; o bin Core já cita mystery_part_sip_3_100mil e screw_terminal_2_3.5mm |
 | F-246 | Logo de texto (Logo) | Fritzing › Inspector (items/logoitem.cpp) | feita | 0 | tests/edit.test.ts · e2e/parts.spec.ts | texto novo regera o SVG e o tamanho |
-| F-247 | Logo de imagem e placa de forma livre (Load image file...) | Fritzing › Inspector (items/logoitem.cpp, resizableboard.cpp) | falta | 3 | — | SVG/PNG/JPG como logo na serigrafia ou no cobre e como contorno da placa |
+| F-247 | Logo de imagem e placa de forma livre (Load image file...) | Fritzing › Inspector (items/logoitem.cpp, resizableboard.cpp) | feita | 3 | e2e/parts.spec.ts | Carregar imagem no inspetor dos logos de imagem (SVG; PNG e JPG vetorizados em preto e branco na PCB, embutidos nas outras vistas) e da placa de forma livre (BoardLogoImageModuleID vira placa, com o contorno tirado da imagem e usado no Gerber) |
 | F-248 | Subpartes do esquemático (relé e chaves com bobina e contatos em símbolos separados) | Fritzing › items/schematicsubpart.cpp | falta | 8 | — | junto com as unidades do KiCad |
 | F-249 | Mover a seleção com as setas | Fritzing › sketchwidget.cpp (moveByArrow) | feita | 0 | e2e/edit.spec.ts | 1 passo de grade com o alinhamento ligado, senão 1 px; Shift multiplica por 10 |
 | F-250 | Mover a vista com Espaço+arrastar ou o botão do meio | Fritzing › sketchwidget.cpp (spaceBarIsPressed) | feita | 0 | e2e/edit.spec.ts | também arrastar o fundo na ferramenta Editar |
@@ -287,14 +287,14 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Tabela | feita | falta | não se aplica | Total |
 |---|---|---|---|---|
-| Menus da barra | 81 | 29 | 19 | 129 |
-| Menus de contexto | 25 | 18 | 1 | 44 |
-| Bins, editor de peças, aba Código e outros docks | 35 | 39 | 4 | 78 |
-| **Total** | **141** | **86** | **24** | **251** |
+| Menus da barra | 108 | 2 | 19 | 129 |
+| Menus de contexto | 43 | 0 | 1 | 44 |
+| Bins, editor de peças, aba Código e outros docks | 58 | 15 | 5 | 78 |
+| **Total** | **209** | **17** | **25** | **251** |
 
-Linhas "falta" por fase: fase 3: 70 · fase 8: 1 · fase 14: 15.
+Linhas "falta" por fase: fase 8: 1 · fase 13: 1 · fase 14: 15.
 
-Cobertura de Vitest nas linhas feitas: 52 de 141; as demais dependem só do E2E.
+Cobertura de Vitest nas linhas feitas: 62 de 209; as demais dependem só do E2E.
 
 ### Cobertura E2E necessária
 
@@ -747,16 +747,16 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-054 | Mover a vista para cima (Pan Up) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Shift+↑ sem seleção move a vista |
 | KC-055 | Fixar biblioteca no topo (Pin Library) | KiCad › Common | falta | 5 | — | — |
 | KC-056 | Plotar (Plot...) | KiCad › Common | falta | 8 | — | P2; parcial: Exportar › Como imagem (PNG, JPG, SVG, PDF) da vista; faltam DXF, HPGL e as opções de plotagem |
-| KC-057 | Imprimir (Print...) | KiCad › Common | falta | 3 | — | Print do Fritzing (§10) |
+| KC-057 | Imprimir (Print...) | KiCad › Common | feita | 3 | e2e/fritzing.spec.ts | Ctrl+P (F-025) |
 | KC-058 | Fechar o editor (Quit) | KiCad › Common | não se aplica | — | — | fecha-se a aba do navegador |
 | KC-059 | Refazer o último zoom (Redo Last Zoom) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Refazer o último zoom |
 | KC-060 | Zerar coordenadas relativas (Reset Local Coordinates) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Espaço zera as coordenadas relativas (dX, dY) no cursor; segurado, ainda arrasta a vista |
-| KC-061 | Reverter (Revert) | KiCad › Common | falta | 3 | — | Revert do Fritzing (§10) |
+| KC-061 | Reverter (Revert) | KiCad › Common | feita | 3 | e2e/fritzing.spec.ts | F-003 |
 | KC-062 | Alinhar texto à direita (Right Justify) | KiCad › Common | falta | 8 | — | — |
 | KC-063 | Salvar (Save) | KiCad › Common | feita | 0 | tests/sketch.test.ts, e2e/circuit.spec.ts | baixa o .fzz |
 | KC-064 | Salvar tudo (Save All) | KiCad › Common | feita | 2 | e2e/ui.spec.ts | Arquivo › Salvar todos (com mais de uma aba) baixa o .fzz de cada sketch alterado |
-| KC-065 | Salvar como (Save As…) | KiCad › Common | falta | 3 | — | Save As do Fritzing (§10) |
-| KC-066 | Salvar uma cópia (Save a Copy...) | KiCad › Common | falta | 3 | — | — |
+| KC-065 | Salvar como (Save As…) | KiCad › Common | feita | 3 | e2e/fritzing.spec.ts | Ctrl+Shift+S (F-008) |
+| KC-066 | Salvar uma cópia (Save a Copy...) | KiCad › Common | feita | 3 | e2e/fritzing.spec.ts | Arquivo › Salvar uma cópia… |
 | KC-067 | Escolher colunas (Select Columns...) | KiCad › Common | falta | 5 | — | árvore de bibliotecas |
 | KC-068 | Visualizador 3D (3D Viewer) | KiCad › Common | falta | 12 | — | P1 |
 | KC-069 | Calculadora (Calculator Tools) | KiCad › Common | falta | 10 | — | P1 |
@@ -1056,9 +1056,9 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
 | Editor de esquemático (KS) | 221 | 33 | 186 | 2 |
-| Ações comuns (KC) | 161 | 80 | 72 | 9 |
+| Ações comuns (KC) | 161 | 84 | 68 | 9 |
 | Gerenciador de projeto (KM) | 22 | 4 | 16 | 2 |
-| Total | 404 | 117 | 274 | 13 |
+| Total | 404 | 121 | 270 | 13 |
 
 | Fase | Linhas de ações |
 |---|---|
@@ -1117,7 +1117,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-013 | Posicionar automaticamente os footprints selecionados (Place Selected Footprints) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-014 | Passar a trilha em roteamento para a próxima camada (Switch Track to Next Layer) | KiCad › PCB Editor | falta | 11 | — | P1; parcial: Mover trilha para a outra face, só depois de traçada |
 | KP-015 | Passar a trilha em roteamento para a camada anterior (Switch Track to Previous Layer) | KiCad › PCB Editor | falta | 11 | — | P1; parcial: Mover trilha para a outra face, só depois de traçada |
-| KP-016 | Ver a placa por baixo (Flip Board View) | KiCad › PCB Editor | falta | 3 | — | View from Below do Fritzing, ausente (seção 10) |
+| KP-016 | Ver a placa por baixo (Flip Board View) | KiCad › PCB Editor | feita | 3 | e2e/fritzing.spec.ts | Roteamento › Ver de baixo (F-105) |
 | KP-017 | Zoom automático ao trocar de footprint (Automatic zoom) | KiCad › PCB Editor | falta | 5 | — | visualizador de footprints |
 | KP-018 | Gráficos em contorno (Sketch Graphic Items) | KiCad › PCB Editor | falta | 10 | — | P2 |
 | KP-019 | Diminuir a opacidade da camada (Decrease Layer Opacity) | KiCad › PCB Editor | falta | 10 | — | P2; parcial: a face não escolhida fica com opacidade fixa de 0,18 |
@@ -1170,7 +1170,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-066 | Inspetor de nets (Net Inspector) | KiCad › PCB Editor | falta | 10 | — | P2; parcial: o painel Projeto lista os nós com a tensão simulada |
 | KP-067 | Mostrar os números dos pads (Show Pad Numbers) | KiCad › PCB Editor | falta | 10 | — | P2; parcial: o nome do pino aparece só sob o cursor |
 | KP-068 | Console de scripts (Scripting Console) | KiCad › PCB Editor | não se aplica | — | — | console Python embutido no wxWidgets; extensões entram pela API da fase 16 |
-| KP-069 | Mostrar o ratsnest (Show Ratsnest) | KiCad › PCB Editor | falta | 3 | — | parcial: ratsnest sempre visível; a camada de ratsnest do Fritzing liga e desliga (seção 10) |
+| KP-069 | Mostrar o ratsnest (Show Ratsnest) | KiCad › PCB Editor | feita | 3 | e2e/fritzing.spec.ts | a camada Ratsnest da legenda e de Exibir › Camadas liga e desliga o ratsnest em cada vista |
 | KP-070 | Textos em contorno (Sketch Text Items) | KiCad › PCB Editor | falta | 10 | — | P2 |
 | KP-071 | Trilhas em contorno (Sketch Tracks) | KiCad › PCB Editor | falta | 10 | — | P2 |
 | KP-072 | Vias em contorno (Sketch Vias) | KiCad › PCB Editor | falta | 10 | — | P2 |
@@ -1302,7 +1302,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-198 | Recorte de zona (Add a Zone Cutout) | KiCad › PCB Editor | falta | 10 | — | P1 |
 | KP-199 | Buscar footprint pela referência e mover (Get and Move Footprint) | KiCad › PCB Editor | falta | 10 | — | parcial: o painel Projeto leva até a peça e a seleciona |
 | KP-200 | Chanfrar linhas (Chamfer Lines...) | KiCad › PCB Editor | falta | 10 | — |  |
-| KP-201 | Aplicar a largura atual às trilhas selecionadas (Change Track Width) | KiCad › PCB Editor | falta | 3 | — | parcial: o inspetor mostra a largura sem editar; o Fritzing troca a largura da trilha no inspetor |
+| KP-201 | Aplicar a largura atual às trilhas selecionadas (Change Track Width) | KiCad › PCB Editor | feita | 3 | e2e/fritzing.spec.ts | inspetor das trilhas selecionadas: lista do Fritzing (8 a 48 mil) e valor livre de 8 a 128 mil, com desfazer; vazio quando diferem |
 | KP-202 | Apagar a trilha inteira (Delete Full Track) | KiCad › PCB Editor | feita | 0 | tests/edit.test.ts | Apagar fio leva a cadeia direta até os conectores; sem o atalho Shift+Del |
 | KP-203 | Cantos dogbone (Dogbone Corners...) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-204 | Duplicar incrementando (Duplicate and Increment) | KiCad › PCB Editor | falta | 10 | — | parcial: Duplicar (Ctrl+D) sem incrementar |
@@ -1670,12 +1670,12 @@ Fase = fase do que falta na seção (0 quando todas as linhas estão feitas). "C
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de PCB | 335 | 27 | 306 | 2 |
+| Editor de PCB | 335 | 30 | 303 | 2 |
 | Visualizador 3D | 40 | 0 | 40 | 0 |
 | Comuns só da PCB | 0 | 0 | 0 | 0 |
 | GerbView | 37 | 0 | 37 | 0 |
 | Calculadora | 9 | 0 | 9 | 0 |
-| **Total** | **421** | **27** | **392** | **2** |
+| **Total** | **421** | **30** | **389** | **2** |
 
 | Fase | 0 | 1 | 2 | 3 | 5 | 6 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | — | Total |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

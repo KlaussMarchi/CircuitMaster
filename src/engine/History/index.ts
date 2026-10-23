@@ -16,6 +16,8 @@ const transforms = (instance: Instance) => Object.values(instance.views).map(sta
 
 const handedness = ([a, b, c, d]: number[]) => Math.sign(a * d - b * c)
 
+const labelLook = (instance: Instance) => JSON.stringify(Object.values(instance.views).map(state => state.label && [state.label.visible, state.label.size, state.label.keys, state.label.transform]))
+
 const mirrored = (old: Instance, next: Instance) => {
     const after = transforms(next)
     return transforms(old).some((matrix, i) => handedness(matrix) !== handedness(after[i] ?? matrix))
@@ -31,6 +33,7 @@ export const describeChange = (before: Doc, after: Doc) => {
     const property = changed.flatMap(([old, next]) => Object.keys({ ...old.properties, ...next.properties }).filter(key => old.properties[key] !== next.properties[key]).map(key => [key, next] as const))[0]
     const moved    = parts(changed.map(([, next]) => next))
     const turned   = changed.filter(([old, next]) => next.moduleIdRef !== WIRE && JSON.stringify(transforms(old)) !== JSON.stringify(transforms(next)))
+    const labeled  = changed.filter(([old, next]) => labelLook(old) !== labelLook(next)).map(([, next]) => next)
 
     if (parts(added).length)
         return t('adicionou {0}', names(parts(added)))
@@ -49,6 +52,9 @@ export const describeChange = (before: Doc, after: Doc) => {
 
     if (property)
         return t('mudou {0} de {1}', nameOf(property[0]).toLowerCase(), property[1].title)
+
+    if (labeled.length)
+        return t('mudou o rótulo de {0}', names(labeled))
 
     if (turned.length)
         return t(turned.some(([old, next]) => mirrored(old, next)) ? 'espelhou {0}' : 'girou {0}', names(turned.map(([, next]) => next)))

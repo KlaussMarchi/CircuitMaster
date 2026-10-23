@@ -1,4 +1,4 @@
-import { test, expect, type App } from './Fixtures'
+import { test, expect, AUTOSAVE_MS, type App } from './Fixtures'
 
 // TIRA DOS PROBLEMAS DO TESTE OS ERROS PROVOCADOS DE PROPÓSITO, CONFERINDO QUE ELES APARECERAM
 const expected = (app: App, patterns: RegExp[]) => {
@@ -59,7 +59,7 @@ test('Worker de PCB que falha no meio do trabalho dá a causa e o pedido seguint
     expect(broken[1]).toMatch(/falhou/)
     expect(broken[2]).toBeNull()
 
-    await page.getByRole('button', { name: 'Criar placa e rotear' }).click()
+    await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('button', { name: 'Criar placa e rotear' }).click()
     await expect.poll(() => page.evaluate(() => cm.store.getState().routing !== null)).toBe(true)
     await page.evaluate(() => cm.store.getState().pcb.worker?.dispatchEvent(new ErrorEvent('error', { message: 'worker morto de propósito' })))
     await expect.poll(() => app.message()).toMatch(/autorouter: .*worker morto de propósito.*tente de novo/)
@@ -89,7 +89,6 @@ test('Indexador que falha volta no pedido seguinte com o índice do cache', asyn
     await expect(panel.locator('.results .t').first()).toHaveText('Resistor')
 })
 
-const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTICO (1,5 s)
 
 const saved = (app: App) => app.page.evaluate(() => cm.store.getState().autosave.getVersions().then(versions => versions.map(version => ({ name: version.name, dirty: version.dirty, count: version.count }))))
 

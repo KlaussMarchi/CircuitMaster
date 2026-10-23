@@ -7,17 +7,19 @@ import { Stage } from '../Stage'
 import { SimulationPanel } from '../SimulationPanel'
 import { SidePanel } from '../SidePanel'
 import { StatusBar } from '../StatusBar'
-import { Dialog } from '../Dialog'
 import { Boundary } from '../Boundary'
 import { Palette } from '../Palette'
-import { Tour } from '../Tour'
 import { getKeyMap, keyOf } from '../Keys'
 import { t } from '../../core/Text'
 
-// EDITOR DE PEÇAS SÓ CARREGA QUANDO ABRE: FORA DO JAVASCRIPT INICIAL (FRIZING_KICAD §8); A PALETA FICA NO INICIAL PARA O PRIMEIRO Ctrl+K NÃO PERDER TECLAS
+// EDITOR DE PEÇAS, DIÁLOGOS E TOUR SÓ CARREGAM QUANDO ABREM: FORA DO JAVASCRIPT INICIAL (FRIZING_KICAD §8); A PALETA FICA NO INICIAL PARA O PRIMEIRO Ctrl+K NÃO PERDER TECLAS
 const PartEditor = lazy(() => import('../PartEditor').then(module => ({ default: module.PartEditor })))
+const Dialog     = lazy(() => import('../Dialog').then(module => ({ default: module.Dialog })))
+const Tour       = lazy(() => import('../Tour').then(module => ({ default: module.Tour })))
 
 const EditorSlot = () => useStore(state => state.editing) ? <Suspense fallback={null}><PartEditor /></Suspense> : null
+const DialogSlot = () => useStore(state => state.dialog !== null && state.dialog !== 'palette') ? <Suspense fallback={null}><Dialog /></Suspense> : null
+const TourSlot   = () => useStore(state => state.tour !== null) ? <Suspense fallback={null}><Tour /></Suspense> : null
 
 const NATIVE = new Set(['click', 'doubleClick', 'resetOrigin'])    // Enter, End E ESPAÇO NUM BOTÃO FOCADO SÃO DO PRÓPRIO BOTÃO
 
@@ -36,7 +38,7 @@ const onKey = (event: KeyboardEvent) => {
 }
 
 // ABA ESCONDIDA OU FECHANDO GRAVA JÁ O SALVAMENTO AUTOMÁTICO AGENDADO
-const onHide = () => document.visibilityState === 'hidden' && void useStore.getState().autosave.flush()
+const onHide = (event: Event) => (event.type === 'pagehide' || document.visibilityState === 'hidden') && void useStore.getState().autosave.flush()    // NA RECARGA A PÁGINA SAI AINDA VISÍVEL
 
 const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -52,7 +54,7 @@ export const App = () => {
     const hidden   = useStore(state => state.leftHidden)
 
     useEffect(() => {
-        useStore.getState().setup().then(() => Promise.all([import('../Output'), import('../Lesson')]).catch(() => null), error => useStore.setState({ message: t('falha ao iniciar: {0}', String(error)) }))    // DEPOIS DA ABERTURA: EXPORTAR E O CARTÃO DIDÁTICO SEGUEM FUNCIONANDO SEM REDE
+        useStore.getState().setup().then(() => Promise.all([import('../Output'), import('../Lesson'), import('../Dialog'), import('../Tour')]).catch(() => null), error => useStore.setState({ message: t('falha ao iniciar: {0}', String(error)) }))    // DEPOIS DA ABERTURA: EXPORTAR E O CARTÃO DIDÁTICO SEGUEM FUNCIONANDO SEM REDE
         window.addEventListener('keydown', onKey)
         document.addEventListener('visibilitychange', onHide)
         window.addEventListener('pagehide', onHide)
@@ -78,10 +80,10 @@ export const App = () => {
             </div>
             <Boundary name="Barra de status" className="status"><StatusBar /></Boundary>
             <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb" hidden onChange={onFile} />
-            <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><Dialog /></Boundary>
+            <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><DialogSlot /></Boundary>
             <Boundary name="Editor de peças" className="modal" close={() => useStore.getState().editPart(null)}><EditorSlot /></Boundary>
             <Boundary name="Paleta de comandos" className="modal" close={() => useStore.setState({ dialog: null })}><Palette /></Boundary>
-            <Boundary name="Tour" className="modal" close={() => useStore.getState().finishTour()}><Tour /></Boundary>
+            <Boundary name="Tour" className="modal" close={() => useStore.getState().finishTour()}><TourSlot /></Boundary>
         </div>
     )
 }

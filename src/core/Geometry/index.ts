@@ -15,7 +15,7 @@ export const invert = (m: Matrix): Matrix => {
     return [m[3] / det, -m[1] / det, -m[2] / det, m[0] / det, (m[2] * m[5] - m[3] * m[4]) / det, (m[1] * m[4] - m[0] * m[5]) / det]
 }
 
-const rotation = (degrees: number, cx = 0, cy = 0): Matrix => {
+export const rotation = (degrees: number, cx = 0, cy = 0): Matrix => {
     const angle = degrees * Math.PI / 180
     const turn: Matrix = [Math.cos(angle), Math.sin(angle), -Math.sin(angle), Math.cos(angle), 0, 0]
     return multiply(multiply(translate(cx, cy), turn), translate(-cx, -cy))

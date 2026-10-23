@@ -51,6 +51,9 @@ definidas em `tools/Fritzing/index.ts`. Não há backend: o plugin `fritzingPart
   página, requisição falha (menos as canceladas pela própria navegação) ou HTTP ≥ 400. Fotos das telas vão para
   `build/ui/`, downloads para `build/e2e/downloads/`. Não edite `src/`, `tsconfig.json` nem `vite.config.ts`
   durante uma rodada: o Vite recarrega as páginas e os testes em andamento quebram.
+- O `globalSetup` dos E2E (`e2e/Fixtures/setup.ts`) indexa o acervo uma vez por navegador e cada contexto de teste
+  começa com esse IndexedDB (`build/e2e/state-*.json`); a indexação a frio fica no `perf` e em "Refazer o índice".
+  Downloads vão para uma pasta por teste.
 - `e2e/perf.spec.ts` roda no build de produção (`playwright.perf.config.ts`), monta uma grade sintética de 1.000
   peças com o próprio `core` e reprova se um orçamento da seção 8 do plano estourar.
 
@@ -79,6 +82,10 @@ ou `error` (spec 06 §2).
   `/fritzing` e o worker `Indexer` para busca e bins) no navegador, `tests/Fixtures` no Node. Peças de pacotes e do
   editor de peças entram por `addBundle` e ficam no IndexedDB `circuitmaster-user` (`ui/Vault`); o localStorage
   guarda só o pequeno (tema, Meus itens, bins).
+- **Peças geradas**: `core/Generator` monta o `.fzp` e o SVG das peças que o Fritzing gera pelo `moduleId` (DIP,
+  barras de pinos, perfboard, stripboard com os cortes em `buses`, net labels, placas, logos) e `core/Parametric`
+  porta os geradores do SIP, da mystery part e do borne; `getParametric` dá ao inspetor as escolhas de pinos,
+  espaçamento e tamanho de cada uma.
 - **Desenho**: `Scene` (matriz de cada instância e terminal de cada conector numa vista) → `getDrawing` (lista de
   desenho: peças, fios, ratsnest, marcas, rótulos) → `ui/Canvas`, que desenha em SVG.
 - **Simulação**: `core/Spice.buildCircuit` gera o deck pelas nets do esquemático → `ui/Simulator` → worker

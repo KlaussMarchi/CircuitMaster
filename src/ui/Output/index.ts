@@ -22,6 +22,7 @@ const MAX_PIXELS = 8000     // LADO MÁXIMO DA IMAGEM EXPORTADA
 const MARGIN     = 10       // PX DE CENA EM VOLTA DO DESENHO
 const QUALITY    = 0.92
 const POINTS     = 72
+const SVG_NS     = 'http://www.w3.org/2000/svg'
 
 const zip = (files: Record<string, string | Uint8Array>) => zipSync(Object.fromEntries(Object.entries(files).map(([name, data]) => [name, typeof data === 'string' ? strToU8(data) : data])))
 
@@ -67,6 +68,14 @@ const getSvgText = async (svg: SVGSVGElement, bounds: Box, flat: boolean) => {
         if (href.startsWith('blob:'))
             image.setAttribute('href', `data:image/svg+xml;base64,${toBase64(encoder.encode(await (await fetch(href)).text()))}`)
     }))
+
+    if (svg.dataset.mirror) {    // A PCB VISTA DE BAIXO SAI ESPELHADA, COMO NO transformPainter DO FRITZING
+        const mirror = document.createElementNS(SVG_NS, 'g')
+        mirror.setAttribute('transform', `matrix(-1 0 0 1 ${bounds[0] + bounds[2]} 0)`)
+        mirror.append(...clone.childNodes)
+        clone.append(mirror)
+        clone.removeAttribute('data-mirror')
+    }
 
     clone.removeAttribute('class')
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
@@ -119,6 +128,18 @@ const IMAGES: Partial<Record<ExportKind, (svg: SVGSVGElement, bounds: Box, base:
         pdf.image(bytes, pixels, 0, 0, size[0] / PX_PER_INCH * POINTS, size[1] / PX_PER_INCH * POINTS)
         return [`${base}.pdf`, pdf.export(), PDF]
     }
+}
+
+// IMPRIMIR A VISTA: A IMAGEM VETORIAL NUMA FOLHA QUE SÓ O @media print MOSTRA (style.css), RETIRADA DEPOIS DO DIÁLOGO
+export const printView = async (svg: SVGSVGElement, bounds: Box) => {
+    const { text } = await getSvgText(svg, bounds, false)
+    const sheet    = Object.assign(document.createElement('div'), { className: 'print-sheet' })
+    const image    = Object.assign(new Image(), { src: `data:image/svg+xml;base64,${toBase64(new TextEncoder().encode(text))}`, alt: '' })
+    sheet.append(image)
+    document.body.append(sheet)
+    await image.decode()
+    window.print()
+    sheet.remove()
 }
 
 // GERA E BAIXA O ARQUIVO PEDIDO NO MENU EXPORTAR; DEVOLVE A MENSAGEM DA BARRA DE STATUS (SPEC 02 §10.4)

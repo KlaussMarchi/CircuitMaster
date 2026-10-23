@@ -13,6 +13,12 @@ const nudge = (state: State, dx: number, dy: number) => {
     state.nudge(dx * step, dy * step)
 }
 
+// Ctrl+F: A BUSCA DO PAINEL DE PEÇAS ACHA TAMBÉM AS PEÇAS DO SKETCH (FRIZING_KICAD §10)
+const findInSketch = (state: State) => {
+    state.setLeft('parts')
+    document.getElementById('part-search')?.focus()
+}
+
 // SETAS: COM SELEÇÃO MOVEM A SELEÇÃO (FRITZING); SEM ELA, O CURSOR DO TECLADO (KICAD); COM Shift, 10 PASSOS OU A VISTA
 const arrow = (dx: number, dy: number) => (state: State) => state.selection.length ? nudge(state, dx, dy) : moveCursor(state, dx, dy)
 const far   = (dx: number, dy: number) => (state: State) => state.selection.length ? nudge(state, 10 * dx, 10 * dy) : panBy(state, dx, dy)
@@ -23,6 +29,8 @@ export const KEY_ACTIONS: KeyAction[] = [
     { id: 'new', label: 'Novo', keys: ['ctrl+n'], apply: state => state.newSketch() },
     { id: 'open', label: 'Abrir…', keys: ['ctrl+o'], apply: () => document.getElementById('open-file')?.click() },
     { id: 'save', label: 'Salvar', keys: ['ctrl+s'], apply: state => void state.save() },
+    { id: 'saveAs', label: 'Salvar como…', keys: ['ctrl+shift+s'], apply: state => void state.saveAs() },
+    { id: 'print', label: 'Imprimir…', keys: ['ctrl+p'], apply: state => void state.print() },
     { id: 'undo', label: 'Desfazer', keys: ['ctrl+z'], apply: state => state.undo() },
     { id: 'redo', label: 'Refazer', keys: ['ctrl+shift+z', 'ctrl+y'], apply: state => state.redo() },
     { id: 'cut', label: 'Recortar', keys: ['ctrl+x'], apply: state => state.cut() },
@@ -31,6 +39,7 @@ export const KEY_ACTIONS: KeyAction[] = [
     { id: 'pasteInPlace', label: 'Colar no lugar', keys: ['ctrl+shift+v'], apply: state => void state.paste(true) },
     { id: 'duplicate', label: 'Duplicar', keys: ['ctrl+d'], apply: state => void state.duplicate() },
     { id: 'selectAll', label: 'Selecionar tudo', keys: ['ctrl+a'], apply: state => state.selectAll() },
+    { id: 'find', label: 'Localizar peça no sketch…', keys: ['ctrl+f'], apply: findInSketch },
     { id: 'remove', label: 'Apagar', keys: ['delete', 'backspace'], apply: state => state.remove(false) },
     { id: 'removeMinus', label: 'Apagar sem fios', keys: ['alt+backspace'], apply: state => state.remove(true) },
     { id: 'escape', label: 'Cancelar, desmarcar', keys: ['escape'], apply: state => state.dialog ? state.setDialog(null) : state.tool !== 'select' ? state.setTool('select') : state.select([]) },
@@ -76,12 +85,17 @@ export const KEY_ACTIONS: KeyAction[] = [
     { id: 'hand', label: 'Editar e mover a vista', keys: ['h'], apply: state => state.setTool('select') },
     { id: 'autoroute', label: 'Autorotear', keys: ['ctrl+shift+a'], apply: state => void state.autoroute() },
     { id: 'drc', label: 'Verificar regras (DRC)', keys: ['ctrl+shift+d'], apply: state => void state.checkRules() },
+    { id: 'sideBottom', label: 'Só a face de baixo clicável', keys: ['ctrl+!'], apply: state => state.view === 'pcbView' && state.setSide('bottom') },
+    { id: 'sideTop', label: 'Só a face de cima clicável', keys: ['ctrl+@'], apply: state => state.view === 'pcbView' && state.setSide('top') },
+    { id: 'sideBoth', label: 'As duas faces de cobre clicáveis', keys: ['ctrl+#'], apply: state => state.view === 'pcbView' && state.setSide('both') },
     { id: 'preferences', label: 'Preferências…', keys: ['ctrl+,'], apply: state => state.setDialog('preferences') }
 ]
 
-const SHOWN: Record<string, string> = { '}': 'Shift+]', '{': 'Shift+[', ')': 'Shift+0', ' ': 'Espaço', escape: 'Esc', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' }
+const SHOWN: Record<string, string> = { '}': 'Shift+]', '{': 'Shift+[', ')': 'Shift+0', '!': 'Shift+1', '@': 'Shift+2', '#': 'Shift+3', ' ': 'Espaço', escape: 'Esc', arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→' }
 
 const capital = (text: string) => text.length === 1 ? text.toUpperCase() : text[0].toUpperCase() + text.slice(1)
+
+export const getKeyAction = (id: string) => KEY_ACTIONS.find(action => action.id === id)
 
 // TECLAS DE CADA AÇÃO: AS ESCOLHIDAS NAS PREFERÊNCIAS NO LUGAR DAS PADRÃO
 export const getKeys = (custom: Record<string, string[]>, id: string) => custom[id] ?? KEY_ACTIONS.find(action => action.id === id)?.keys ?? []

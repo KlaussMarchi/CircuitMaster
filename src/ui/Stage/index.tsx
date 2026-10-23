@@ -155,7 +155,7 @@ export const Stage = () => {
                 <SimChip />
                 <SelectionBar />
                 <Zoom />
-                {view === 'pcbView' && <Layers />}
+                <Layers key={view} />
                 <NoBoard />
                 <Welcome />
             </div>

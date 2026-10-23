@@ -218,13 +218,13 @@ test('Roteamento: vias e fios selecionados pelo menu; autorouter no esquemático
     await expect.poll(() => page.evaluate(() => cm.store.getState().netlist?.getStatus('schematicView').left), { timeout: 60000 }).toBe(0)
 })
 
-test('Camadas da PCB na legenda: um clique liga ou desliga; Exibir › Camadas da PCB mostra e oculta todas', async ({ app, page }) => {
+test('Camadas da PCB na legenda: um clique liga ou desliga; Exibir › Camadas mostra e oculta todas', async ({ app, page }) => {
     await build(app)
     await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('tab', { name: 'Roteamento' }).click()
     await page.getByRole('button', { name: 'Criar placa e rotear' }).click()
     await expect.poll(async () => (await census(app)).left, { timeout: 60000 }).toBe(0)
 
-    const legend = page.getByRole('group', { name: 'Camadas da PCB' })
+    const legend = page.getByRole('group', { name: 'Camadas' })
     const drawn  = () => page.locator('#canvas [data-index]').count()
     const before = await drawn()
     await app.shoot('camadas')
@@ -234,9 +234,9 @@ test('Camadas da PCB na legenda: um clique liga ou desliga; Exibir › Camadas d
     await legend.getByRole('button', { name: 'Cobre de cima' }).click()
     await expect.poll(drawn).toBe(before)
 
-    await app.menu('Exibir', 'Camadas da PCB', 'Ocultar todas as camadas')
-    await expect.poll(() => page.evaluate(() => cm.store.getState().hiddenLayers.length)).toBe(7)
+    await app.menu('Exibir', 'Camadas', 'Ocultar todas as camadas')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().hiddenLayers.pcbView?.length)).toBe(9)
     await expect.poll(drawn).toBe(0)
-    await app.menu('Exibir', 'Camadas da PCB', 'Mostrar todas as camadas')
+    await app.menu('Exibir', 'Camadas', 'Mostrar todas as camadas')
     await expect.poll(drawn).toBe(before)
 })

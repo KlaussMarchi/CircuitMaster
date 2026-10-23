@@ -10,12 +10,15 @@ export const LEVELS: [Level, string, string][] = [
 
 // ITENS DE MENU QUE SÓ APARECEM A PARTIR DO MODO; O RESTO APARECE EM TODOS E A PALETA ACHA TUDO EM QUALQUER MODO
 const ADVANCED: Record<string, Level> = {
-    'Colar no lugar': 2, 'Apagar sem fios': 2, 'Elevar e rebaixar': 2, 'Travar peça': 2, 'Sticky': 2, '100%': 2, 'Fios ortogonais (90°)': 2, 'Camadas da PCB': 2,
+    'Colar no lugar': 2, 'Apagar sem fios': 2, 'Elevar e rebaixar': 2, 'Travar peça': 2, 'Sticky': 2, '100%': 2, 'Fios ortogonais (90°)': 2, 'Camadas': 2,
     'Gravável (PDF)…': 2, 'Gravável (SVG)…': 2, 'Netlist SPICE…': 2, 'Regras do autorouter e DRC…': 2, 'Mover trilha para a outra face': 2, 'Selecionar todas as vias': 2,
     'Selecionar todos os preenchimentos': 2, 'Converter via em dobra': 2, 'Converter dobra em via': 2,
     'Tamanho real': 3, 'Pick-and-place…': 3, 'Netlist IPC-D-356A…': 3, 'Netlist XML…': 3, 'Definir semente de preenchimento de terra': 3, 'Limpar sementes de preenchimento de terra': 3,
-    'Limpar sementes de terra': 3, 'Copiar como texto': 3, 'Cursor': 3, 'Apagar com cliques': 2, 'Seleção por laço': 2, 'Zoom na área arrastada': 2, 'Desfazer o último zoom': 2, 'Refazer o último zoom': 2,
-    'Centralizar no cursor': 2, 'Grade': 2, 'Unidades': 2, 'Selecionar trilhas autoroteáveis': 3, 'Não rotear automaticamente': 3, 'Ocultar serigrafia da peça': 3, 'Mostrar serigrafia da peça': 3
+    'Limpar sementes de terra': 3, 'Escolher sementes…': 3, 'Copiar como texto': 3, 'Cursor': 3, 'Apagar com cliques': 2, 'Seleção por laço': 2, 'Zoom na área arrastada': 2, 'Desfazer o último zoom': 2, 'Refazer o último zoom': 2,
+    'Centralizar no cursor': 2, 'Grade': 2, 'Unidades': 2, 'Selecionar peças travadas': 2, 'Selecionar peças desatualizadas': 2, 'Atualizar peças selecionadas': 2, 'Exportar peça…': 2,
+    'Desligar todos os fios': 2, 'Selecionar trilhas "não rotear"': 3, 'Selecionar todos os jumpers': 2, 'Salvar uma cópia…': 2, 'Selecionar trilhas autoroteáveis': 3, 'Não rotear automaticamente': 3, 'Ocultar serigrafia da peça': 3, 'Mostrar serigrafia da peça': 3,
+    'Ver de baixo': 2, 'As duas faces de cobre clicáveis': 2, 'Só a face de cima clicável': 2, 'Só a face de baixo clicável': 2, 'Mostrar não roteadas': 2, 'Bin em ícones': 2, 'Bin em lista': 2,
+    'Colorir fios pelo comprimento': 3, 'Tamanho da grade…': 3, 'Restaurar a grade padrão': 3
 }
 
 export const levelOf = (label: string): Level => ADVANCED[label] ?? 1

@@ -15,6 +15,7 @@ export const FRITZING = process.env.FRITZING_ROOT ?? path.resolve(import.meta.di
 export const SAMPLES  = path.join(FRITZING, 'fritzing-app/sketches')
 export const SHOTS    = 'build/ui'
 export const WIDTHS   = [1920, 1280, 390]
+export const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTICO: A RECARGA SEMPRE OFERECE RECUPERAR
 
 type Answer = boolean | string
 
@@ -230,7 +231,7 @@ export class App {
 
     async download(action: () => Promise<unknown>) {
         const [file] = await Promise.all([this.page.waitForEvent('download'), action()])
-        const target = path.join('build/e2e/downloads', this.info.project.name, file.suggestedFilename())
+        const target = path.join('build/e2e/downloads', this.info.project.name, this.info.testId, file.suggestedFilename())    // UMA PASTA POR TESTE: EM PARALELO, DOIS sem título.fzz NÃO SE SOBRESCREVEM
         await file.saveAs(target)
         return { name: file.suggestedFilename(), path: target, bytes: fs.readFileSync(target) }
     }

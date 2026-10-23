@@ -171,4 +171,94 @@ describe.skipIf(!HAS_FRITZING)('editor de peças: cópia de trabalho (spec 01 §
         expect(library.getPart('Teste_def_1')?.title).toBeTruthy()
         expect(after?.rect).toEqual(before?.rect)
     })
+
+    it('o mesmo pacote lido de novo (reabrir o .fzz) segue embutido ao salvar e contado como peça própria', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        const files     = draft.export('Teste_def_2')
+        const bundle    = { sketch: null, parts: files.filter(file => file.name.startsWith('part.')), svgs: files.filter(file => file.name.startsWith('svg.')), others: [], bin: null }
+        const library   = new Library(fileSource)
+        library.addBundle(bundle)
+        await library.load(['Teste_def_2'])
+        library.addBundle(bundle)
+
+        expect(library.getPart('Teste_def_2')).toBe(library.bundled.get('Teste_def_2'))
+        expect(library.getBundleFiles(['Teste_def_2']).some(file => file.name.startsWith('part.'))).toBe(true)
+    })
+
+    it('o instantâneo volta ao estado exato: desfazer e refazer no editor (F-201)', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        const before    = draft.snapshot()
+        draft.setField('title', 'outro')
+        draft.setCount(5)
+        const after     = draft.snapshot()
+
+        draft.restore(before)
+        expect(draft.snapshot()).toEqual(before)
+        expect(draft.getConnectors()).toHaveLength(2)
+        draft.restore(after)
+        expect(draft.getField('title')).toBe('outro')
+        expect(draft.getConnectors()).toHaveLength(5)
+    })
+
+    it('conexões internas viram <bus> e saem com o conector apagado; todos os conectores mudam de tipo (F-211, F-173, F-214)', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        draft.setCount(4)
+        draft.setBuses([['connector0', 'connector2'], ['connector1'], ['connector2', 'connector3', 'connector3']])
+        expect(draft.getBuses()).toEqual([['connector0', 'connector2'], ['connector2', 'connector3']])
+
+        draft.setCount(3)
+        expect(draft.getBuses()).toEqual([['connector0', 'connector2']])
+        draft.setBuses([])
+        expect(draft.export('Teste_bus')[0].text).not.toContain('<buses')
+
+        draft.setAllTypes('female')
+        expect(draft.getConnectors().every(connector => connector.type === 'female')).toBe(true)
+    })
+
+    it('passante vira SMD e volta: camada copper0 do .fzp, <p> dos conectores e grupos de cobre do SVG (F-215)', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        const layers    = (svg: string) => [...svg.matchAll(/id="(copper[01])"/g)].map(match => match[1]).sort()
+        expect(draft.isSmd()).toBe(false)
+
+        expect(draft.setSmd(true)).toBe(true)
+        expect(draft.isSmd()).toBe(true)
+        expect(draft.getConnectors().every(connector => connector.pins.pcbView?.map(pin => pin.layer).join() === 'copper1')).toBe(true)
+        expect(layers(draft.getSvgText('pcbView'))).toEqual(['copper1'])
+
+        draft.setSmd(false)
+        expect(draft.isSmd()).toBe(false)
+        expect(draft.getConnectors().every(connector => connector.pins.pcbView?.map(pin => pin.layer).sort().join() === 'copper0,copper1')).toBe(true)
+        expect(layers(draft.getSvgText('pcbView'))).toEqual(['copper0', 'copper1'])
+    })
+
+    it('só nesta vista: as outras vistas copiam a da protoboard, peça e conectores (F-207)', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        draft.onlyView('breadboardView')
+        const views = draft.export('Teste_so')[0].text
+
+        expect(draft.layerIds('schematicView')).toEqual(draft.layerIds('breadboardView'))
+        expect(draft.layerIds('pcbView')).toEqual(draft.layerIds('breadboardView'))
+        expect(draft.getConnectors()[0].pins.pcbView).toEqual(draft.getConnectors()[0].pins.breadboardView)
+        expect(draft.getSvgText('schematicView')).toBe(draft.getSvgText('breadboardView'))
+        expect(views).toContain('<iconView')
+    })
+
+    it('a peça própria regravada com o mesmo moduleId substitui a anterior na biblioteca (F-197)', async () => {
+        const { draft } = await draftOf(RESISTOR)
+        const library   = new Library(fileSource)
+        const install   = (files: ReturnType<PartDraft['export']>) => library.addBundle({ sketch: null, parts: files.filter(file => file.name.startsWith('part.')), svgs: files.filter(file => file.name.startsWith('svg.')), others: [], bin: null })
+        install(draft.export('Teste_proprio'))
+        await library.load(['Teste_proprio'])
+
+        draft.setField('title', 'Regravada')
+        draft.setCount(3)
+        library.forget('Teste_proprio')
+        install(draft.export('Teste_proprio'))
+        await library.load(['Teste_proprio'])
+
+        expect(library.getPart('Teste_proprio')?.title).toBe('Regravada')
+        expect(library.getPart('Teste_proprio')?.connectors).toHaveLength(3)
+        expect(library.getBundleFiles(['Teste_proprio']).filter(file => file.name.startsWith('svg.')).every(file => library.bundleSvgs.filter(other => other.name === file.name).length === 1)).toBe(true)
+    })
 })
+

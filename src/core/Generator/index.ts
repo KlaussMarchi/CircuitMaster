@@ -1,3 +1,4 @@
+import type * as Parametric from '../Parametric'
 import { MIL_PER_INCH, toInches } from '../Units'
 import { childrenOf, parseXml, serializeXml, tagOf, walk, type XmlElement } from '../Xml'
 import { pickFont, type Fonts } from '../Font'
@@ -65,21 +66,29 @@ const RECT_STROKE   = 12.5       // MIL, 0,3175 MM
 
 const textMils = (text: string) => [...text].reduce((sum, char) => sum + (DROID_ASCII[char.charCodeAt(0) - 32] ?? DROID_UPM / 2), 0) / DROID_UPM * LABEL_PT * SCREEN_SCALE * MIL_PER_INCH / 72
 
-// SÍMBOLO DIP NA GRADE DE 0,1 IN; LARGURA PELOS RÓTULOS pinN NAS MÉTRICAS DA DROID SANS (SPEC 01 §8.5)
-const schematicDip = (n: number) => {
-    const half   = n / 2
-    const label  = Math.max(...range(n).map(i => textMils(`pin${i + 1}`)))
-    const w      = 100 * Math.ceil((2 * label + textMils('IC') + 2 * PIN_INDENT) / 100) + 400
-    const h      = 200 + 100 * Math.max(half - 1, 1)
+const MYSTERY_STROKE = 25    // MIL, 2 × RectStrokeWidth: O CÍRCULO DO ? FICA DENTRO DA BORDA (MysteryPart::makeSchematicSvg)
+
+// SÍMBOLO DE CI NA GRADE DE 0,1 IN COM PINOS À ESQUERDA E À DIREITA (genSchematicDIP); LARGURA PELOS RÓTULOS pinN NAS MÉTRICAS DA DROID SANS; A MYSTERY PART GANHA O ? NO CANTO (SPEC 01 §8.5)
+const schematicChip = (lefts: number[], rights: number[], title: string, mystery = false) => {
+    const widest = (ids: number[]) => Math.max(0, ...ids.map(id => textMils(`pin${id + 1}`)))
+    const sides  = [widest(lefts), widest(rights)]
+    const [l, r] = sides.every(Boolean) ? [Math.max(...sides), Math.max(...sides)] : sides
+    const x0     = lefts.length ? 200 : RECT_STROKE / 2
+    const w      = 100 * Math.ceil((l + r + textMils(title) + (l ? PIN_INDENT : 0) + (r ? PIN_INDENT : 0)) / 100) + (lefts.length ? 200 : 0) + (rights.length ? 200 : 0)
+    const x1     = rights.length ? w - 200 : w - RECT_STROKE / 2
+    const h      = 200 + 100 * Math.max(lefts.length - 1, rights.length - 1, 1)
     const pin    = (id: number, y: number, left: boolean) => {
         const [x0, x1] = left ? [0, 200] : [w - 200, w]
         const tx       = left ? -0.05 : w - 0.05
         return `<line x1="${x0 + PIN_HALF}" y1="${y}" x2="${x1 - PIN_HALF}" y2="${y}" stroke="#787878" stroke-width="${2 * PIN_HALF}" stroke-linecap="round"/><rect id="connector${id}pin" x="${x0}" y="${y - PIN_HALF}" width="200" height="${2 * PIN_HALF}" fill="none"/><rect id="connector${id}terminal" x="${tx}" y="${y - PIN_HALF}" width="0.1" height="${2 * PIN_HALF}" fill="none"/><text x="${left ? 100 : w - 100}" y="${y - 20}" font-family="Droid Sans" font-size="34.7" fill="#8c8c8c" text-anchor="middle">${id + 1}</text>`
     }
-    const pins = range(half).flatMap(i => [pin(i, 100 + 100 * i, true), pin(n - 1 - i, 100 + 100 * i, false)])
-    const body = `<rect x="200" y="${RECT_STROKE / 2}" width="${w - 400}" height="${h - RECT_STROKE}" fill="#ffffff" stroke="#000000" stroke-width="${RECT_STROKE}"/><text id="label" x="${w / 2}" y="${h / 2}" font-family="Droid Sans" font-size="48.6" text-anchor="middle">IC</text>`
-    return svgHeader(w, h, MIL_PER_INCH, `<g id="schematic">${body}${pins.join('')}</g>`)
+    const pins = [...lefts.map((id, i) => pin(id, 100 + 100 * i, true)), ...rights.map((id, i) => pin(id, 100 + 100 * i, false))]
+    const body = `<rect x="${x0}" y="${RECT_STROKE / 2}" width="${x1 - x0}" height="${h - RECT_STROKE}" fill="#ffffff" stroke="#000000" stroke-width="${RECT_STROKE}"/><text id="label" x="${(x0 + x1) / 2}" y="${h / 2}" font-family="Droid Sans" font-size="48.6" text-anchor="middle">${title}</text>`
+    const mark = mystery ? `<circle cx="${w - MYSTERY_STROKE - 50}" cy="${MYSTERY_STROKE + 50}" r="50" fill="black"/><text x="${w - MYSTERY_STROKE - 50}" y="${MYSTERY_STROKE + 50 + 100 / 3}" fill="#FFFFFF" font-family="Droid Sans" text-anchor="middle" font-weight="bold" font-size="100">?</text>` : ''
+    return svgHeader(w, h, MIL_PER_INCH, `<g id="schematic">${body}${pins.join('')}${mark}</g>`)
 }
+
+const schematicDip = (n: number) => schematicChip(range(n / 2), range(n / 2).map(i => n - 1 - i), 'IC')
 
 // PIN HEADER NA PROTOBOARD: N PINOS NUMA FILEIRA, PASSO 0,1 IN (SPEC 01 §8.4)
 const breadboardHeader = (form: string, n: number) => {
@@ -112,21 +121,61 @@ const schematicHeader = (form: string, n: number) => {
 const HOLE_PITCH = 100
 
 // PERFBOARD/STRIPBOARD: FURO (X, Y) EM (100 + 100X, 100 + 100Y) MIL, CONECTOR connector{1000Y+X} (SPEC 01 §8.7)
-const breadboardBoard = (x: number, y: number) => {
+const breadboardBoard = (x: number, y: number, strips = '') => {
     const w     = HOLE_PITCH * x + HOLE_PITCH
     const h     = HOLE_PITCH * y + HOLE_PITCH
     const holes = range(y).flatMap(iy => range(x).map(ix => `<circle id="connector${1000 * iy + ix}pin" cx="${100 + 100 * ix}" cy="${100 + 100 * iy}" r="27.5" fill="#3a3a3a" stroke="#c49c59" stroke-width="20"/>`))
-    return svgHeader(w, h, MIL_PER_INCH, `<g id="breadboardbreadboard"><rect width="${w}" height="${h}" fill="#deb675"/>${holes.join('')}</g>`)
+    return svgHeader(w, h, MIL_PER_INCH, `<g id="breadboardbreadboard"><rect width="${w}" height="${h}" fill="#deb675"/>${strips}${holes.join('')}</g>`)
 }
 
-const SVG_RULES: [RegExp, (match: RegExpMatchArray) => string][] = [
+const STRIP_WIDTH = 70          // MIL, LARGURA DA TIRA DE COBRE
+const STRIP_COLOR = '#bc9451'    // COR DO Stripbit DO stripboard.cpp
+
+// STRIPBOARD COM AS TIRAS: UM TRECHO DE COBRE ENTRE CADA PAR DE FUROS LIGADO; O TRECHO CORTADO SOME (Stripbit DO stripboard.cpp)
+export const stripboardSvg = (moduleId: string, properties: Record<string, string>) => {
+    const [, x, y] = moduleId.match(/^(\d+)\.(\d+)Stripboard2?ModuleID$/) ?? []
+    const at       = (id: string) => [Number(id.slice(9)) % 1000, Math.floor(Number(id.slice(9)) / 1000)].map(value => 100 + 100 * value)
+    const strips   = getStrips(moduleId, properties).map(([a, b]) => {
+        const [[x0, y0], [x1, y1]] = [at(a), at(b)]
+        return `<rect x="${Math.min(x0, x1) - (x0 === x1 ? STRIP_WIDTH / 2 : 0)}" y="${Math.min(y0, y1) - (y0 === y1 ? STRIP_WIDTH / 2 : 0)}" width="${x0 === x1 ? STRIP_WIDTH : Math.abs(x1 - x0)}" height="${y0 === y1 ? STRIP_WIDTH : Math.abs(y1 - y0)}" fill="${STRIP_COLOR}"/>`
+    })
+    return x ? breadboardBoard(Number(x), Number(y), strips.join('')) : null
+}
+
+// CORTES DA STRIPBOARD DEPOIS DE CORTAR OU RELIGAR UM TRECHO "x.yh"/"x.yv": A LISTA INTEIRA, COMO O buses QUE O FRITZING GRAVA
+export const toggleCut = (moduleId: string, properties: Record<string, string>, cut: string) => {
+    const cuts = getCuts(moduleId, properties)
+    return [...cuts.has(cut) ? [...cuts].filter(other => other !== cut) : [...cuts, cut]].map(other => `${other} `).join('')
+}
+
+export const SCREW_SPACINGS: Record<string, string> = { '3.5mm': '0.137in (3.5mm)', '5.0mm': '0.197in (5.0mm)', '100mil': '0.1in (2.54mm)', '200mil': '0.2in (5.08mm)', '300mil': '0.3in (7.62mm)' }
+
+// OS DESENHOS PORTADOS DO SIP, DA MYSTERY PART E DO BORNE CARREGAM SÓ QUANDO UMA DESSAS PEÇAS APARECE (needsParametric E setParametric)
+let parametric: typeof Parametric | null = null
+const PARAMETRIC_IMAGE = /(generic_sip|mystery_part|screw_terminal)_/
+
+export const needsParametric = (image: string) => !parametric && PARAMETRIC_IMAGE.test(image)
+
+export const setParametric = (module: typeof Parametric) => {
+    parametric = module
+}
+
+const SVG_RULES: [RegExp, (match: RegExpMatchArray) => string | null][] = [
     [/^pcb\/dip_(\d+)_([\d.]+(?:mil|mm|in))(?:_hs_.*)?_pcb\.svg$/, ([, n, spacing]) => pcbDip(Number(n), spacing)],
     [/^pcb\/(ns)?jumper(?:_(double|alternating))?_(\d+)_([\d.]+(?:mil|mm|in))(?:_hs_.*)?_pcb\.svg$/, ([, ns, variant, n, spacing]) => pcbHeader(!ns, variant ?? '', Number(n), spacing)],
     [/^breadboard\/generic_ic_dip_(\d+)_([\d.]+(?:mil|mm|in))_bread\.svg$/, ([, n, spacing]) => breadboardDip(Number(n), spacing)],
     [/^schematic\/generic_ic_dip_(\d+)_schem\.svg$/, ([, n]) => schematicDip(Number(n))],
     [/^breadboard\/generic_(\w+?)_pin_header_(\d+)_100mil_bread\.svg$/, ([, form, n]) => breadboardHeader(form, Number(n))],
     [/^schematic\/generic_(\w+?)_pin_header_(\d+)_100mil(?:_10thin)?_(?:schem|schematic)\.svg$/, ([, form, n]) => schematicHeader(form, Number(n))],
-    [/^breadboard\/(\d+)\.(\d+)(?:perfboard|stripboard2?)\.svg$/, ([, x, y]) => breadboardBoard(Number(x), Number(y))]
+    [/^breadboard\/(\d+)\.(\d+)(?:perfboard|stripboard2?)\.svg$/, ([, x, y]) => breadboardBoard(Number(x), Number(y))],
+    [/^breadboard\/generic_sip_(\d+)_[\d.]+mil_bread\.svg$/, ([, n]) => parametric?.breadboardSip(Number(n)) ?? null],
+    [/^schematic\/generic_sip_(\d+)_[\d.]+mil_schem\.svg$/, ([, n]) => schematicChip(range(Number(n)), [], 'IC')],
+    [/^breadboard\/mystery_part_(\d+)_sip_100mil_bread\.svg$/, ([, n]) => parametric?.breadboardMysterySip(Number(n)) ?? null],
+    [/^breadboard\/mystery_part_(\d+)_dip_([\d.]+(?:mil|mm|in))_bread\.svg$/, ([, n, spacing]) => parametric?.breadboardMysteryDip(Number(n), toMils(spacing)) ?? null],
+    [/^schematic\/mystery_part_(\d+)_schem\.svg$/, ([, n]) => schematicChip(range(Number(n)), [], '?', true)],
+    [/^breadboard\/screw_terminal_(\d+)_100mil_bread\.svg$/, ([, n]) => parametric?.breadboardScrew(Number(n)) ?? null],
+    [/^schematic\/screw_terminal_(\d+)_100mil_schem\.svg$/, ([, n]) => parametric?.schematicScrew(Number(n)) ?? null],
+    [/^pcb\/screw_terminal_(\d+)_([\d.]+(?:mil|mm|in))_pcb\.svg$/, ([, n, spacing]) => parametric?.pcbScrew(Number(n), toMils(spacing) / MIL_PER_INCH) ?? null]
 ]
 
 export const generateSvg = (image: string) => {
@@ -176,6 +225,34 @@ const dipFzp = (moduleId: string, n: number, spacing: string) => {
     return moduleXml(moduleId, `Generic IC DIP ${n} pins`, 'IC', props, viewXml(images, layers), connectorXml(n, { breadboard: 'breadboard', schematic: 'schematic', pcb: THT_PCB }, 'male', i => `pin${i + 1}`))
 }
 
+const THT = { breadboard: 'breadboard', schematic: 'schematic', pcb: THT_PCB }
+const PIN_NAME = (i: number) => `pin${i + 1}`
+
+// SIP GENÉRICO: N PINOS NUMA FILEIRA, FOOTPRINT jumper (generic_sip_fzpTemplate)
+const sipFzp = (moduleId: string, n: number) => {
+    const images = { iconView: 'icon/dip_icon.svg', breadboardView: `breadboard/generic_sip_${n}_300mil_bread.svg`, schematicView: `schematic/generic_sip_${n}_300mil_schem.svg`, pcbView: `pcb/jumper_${n}_100mil_pcb.svg` }
+    const layers = { iconView: ['icon'], breadboardView: ['breadboard'], schematicView: ['schematic'], pcbView: ['silkscreen', 'copper0', 'copper1'] }
+    const props  = { family: 'Generic IC', package: 'SIP (Single Inline) [THT]', pins: String(n), 'pin spacing': '300mil', 'chip label': 'IC', 'hole size': '', 'editable pin labels': 'true' }
+    return moduleXml(moduleId, `SIP - ${n} pins`, 'U', props, viewXml(images, layers), connectorXml(n, THT, 'male', PIN_NAME))
+}
+
+// MYSTERY PART EM UMA OU DUAS FILEIRAS (mystery_part_sipFzpTemplate, mystery_part_dipFzpTemplate)
+const mysteryFzp = (moduleId: string, row: string, n: number, spacing: string) => {
+    const dip    = row === 'dip'
+    const images = { iconView: 'icon/mystery_part_icon.svg', breadboardView: dip ? `breadboard/mystery_part_${n}_dip_${spacing}_bread.svg` : `breadboard/mystery_part_${n}_sip_100mil_bread.svg`, schematicView: `schematic/mystery_part_${n}_schem.svg`, pcbView: dip ? `pcb/dip_${n}_${spacing}_pcb.svg` : `pcb/jumper_${n}_100mil_pcb.svg` }
+    const layers = { iconView: ['icon'], breadboardView: ['breadboard'], schematicView: ['schematic'], pcbView: ['silkscreen', 'copper0', 'copper1'] }
+    const props  = { family: 'Mystery Part', pins: String(n), layout: dip ? 'Double Row' : 'Single Row', 'pin spacing': spacing, 'chip label': '?', package: 'THT', 'hole size': '', 'editable pin labels': 'true' }
+    return moduleXml(moduleId, `Mystery Part - ${n} pins`, 'U', props, viewXml(images, layers), connectorXml(n, THT, 'male', PIN_NAME))
+}
+
+// BORNE COM PARAFUSO (screw_terminal_fzpTemplate)
+const screwFzp = (moduleId: string, n: number, spacing: string) => {
+    const images = { iconView: 'icon/screw_terminal.svg', breadboardView: `breadboard/screw_terminal_${n}_100mil_bread.svg`, schematicView: `schematic/screw_terminal_${n}_100mil_schem.svg`, pcbView: `pcb/screw_terminal_${n}_${spacing}_pcb.svg` }
+    const layers = { iconView: ['icon'], breadboardView: ['breadboard'], schematicView: ['schematic'], pcbView: ['silkscreen', 'copper0', 'copper1'] }
+    const props  = { family: 'Screw Terminal', Pins: String(n), 'Pin Spacing': SCREW_SPACINGS[spacing] ?? spacing, 'hole size': '', package: 'THT' }
+    return moduleXml(moduleId, `Screw terminal - ${n} pins`, 'J', props, viewXml(images, layers), connectorXml(n, THT, 'male', PIN_NAME))
+}
+
 const boardFzp = (moduleId: string, x: number, y: number, type: string) => {
     const image  = `breadboard/${x}.${y}${type.toLowerCase()}.svg`
     const images = { iconView: image, breadboardView: image, schematicView: image, pcbView: image }
@@ -188,8 +265,58 @@ const boardFzp = (moduleId: string, x: number, y: number, type: string) => {
 const FZP_RULES: [RegExp, (match: RegExpMatchArray) => string][] = [
     [/^generic_(\w+?)_pin_header_(\d+)_([\d.]+(?:mil|mm|in))$/, ([id, form, n, spacing]) => headerFzp(id, form, Number(n), spacing)],
     [/^generic_ic_dip_(\d+)_([\d.]+(?:mil|mm|in))$/, ([id, n, spacing]) => dipFzp(id, Number(n), spacing)],
-    [/^(\d+)\.(\d+)(Perfboard|Stripboard2?)ModuleID$/, ([id, x, y, type]) => boardFzp(id, Number(x), Number(y), type.replace(/2$/, ''))]
+    [/^(\d+)\.(\d+)(Perfboard|Stripboard2?)ModuleID$/, ([id, x, y, type]) => boardFzp(id, Number(x), Number(y), type.replace(/2$/, ''))],
+    [/^generic_sip_(\d+)_[\d.]+mil$/, ([id, n]) => sipFzp(id, Number(n))],
+    [/^mystery_part_(sip|dip)_(\d+)_([\d.]+(?:mil|mm|in))$/, ([id, row, n, spacing]) => mysteryFzp(id, row, Number(n), spacing)],
+    [/^screw_terminal_(\d+)_([\d.]+(?:mil|mm|in))$/, ([id, n, spacing]) => screwFzp(id, Number(n), spacing)]
 ]
+
+const steps = (from: number, to: number, step = 1) => range(Math.floor((to - from) / step) + 1).map(i => String(from + i * step))
+
+const DIP_SPACINGS     = ['300mil', '400mil', '600mil', '900mil']
+const MYSTERY_SPACINGS = ['100mil', '200mil', '300mil', '400mil', '500mil', '600mil', '700mil', '800mil', '900mil']
+const BOARD_SIZE       = [3, 199]    // FUROS POR LADO DA PERFBOARD E DA STRIPBOARD (perfboard.cpp)
+
+type Parametric = { options: Record<string, string[]>, choose: (key: string, value: string) => string | null }
+
+// PEÇA GERADA NO INSPETOR: AS ESCOLHAS DE CADA PROPRIEDADE (VAZIA = VALOR LIVRE) E O moduleId DE CADA UMA (collectValues E genModuleID DE dip.cpp, mysterypart.cpp, screwterminal.cpp, pinheader.cpp, perfboard.cpp)
+const PARAMETRIC: [RegExp, (match: RegExpMatchArray) => Parametric][] = [
+    [/^generic_ic_dip_(\d+)_([\d.]+mil)$/, ([, n, spacing]) => ({
+        options: { pins: steps(4, 128, 2), 'pin spacing': DIP_SPACINGS },
+        choose: (key, value) => key === 'pins' ? `generic_ic_dip_${value}_${spacing}` : `generic_ic_dip_${n}_${value}`
+    })],
+    [/^generic_sip_(\d+)_300mil$/, () => ({ options: { pins: steps(2, 128) }, choose: (_, value) => `generic_sip_${value}_300mil` })],
+    [/^mystery_part_(sip|dip)_(\d+)_([\d.]+mil)$/, ([, row, n, spacing]) => ({
+        options: { pins: row === 'dip' ? steps(4, 128, 2) : steps(1, 128), layout: ['Single Row', 'Double Row'], 'pin spacing': row === 'dip' ? MYSTERY_SPACINGS : ['100mil'] },
+        choose: (key, value) => key === 'layout' ? (value === 'Double Row' ? `mystery_part_dip_${Math.max(4, Number(n) + Number(n) % 2)}_300mil` : `mystery_part_sip_${n}_100mil`) : key === 'pins' ? `mystery_part_${row}_${value}_${spacing}` : `mystery_part_${row}_${n}_${value}`
+    })],
+    [/^screw_terminal_(\d+)_([\d.]+(?:mil|mm))$/, ([, n, spacing]) => ({
+        options: { pins: steps(2, 20), 'pin spacing': Object.values(SCREW_SPACINGS) },
+        choose: (key, value) => key === 'pins' ? `screw_terminal_${value}_${spacing}` : `screw_terminal_${n}_${Object.keys(SCREW_SPACINGS).find(id => SCREW_SPACINGS[id] === value) ?? spacing}`
+    })],
+    [/^generic_(\w+?)_pin_header_(\d+)_([\d.]+(?:mil|mm))$/, ([, form, , spacing]) => ({
+        options: { pins: form.includes('double') ? steps(2, 64, 2) : steps(form.includes('shrouded') ? 6 : 1, 64) },
+        choose: (_, value) => `generic_${form}_pin_header_${value}_${spacing}`
+    })],
+    [/^(\d+)\.(\d+)(Perfboard|Stripboard2?)ModuleID$/, ([, , , type]) => ({
+        options: { size: [] },
+        choose: (_, value) => {
+            const [x, y] = value.split(/[.x×, ]+/).map(Number)
+            return [x, y].every(side => Number.isInteger(side) && side >= BOARD_SIZE[0] && side <= BOARD_SIZE[1]) ? `${x}.${y}${type}ModuleID` : null
+        }
+    })]
+]
+
+export const getParametric = (moduleId: string) => {
+    for (const [pattern, build] of PARAMETRIC) {
+        const match = moduleId.match(pattern)
+
+        if (match)
+            return build(match)
+    }
+
+    return null
+}
 
 export const GENERATED_ROOT = 'generated'    // RAIZ DAS PEÇAS GERADAS NO ÍNDICE: NÃO HÁ ARQUIVO, A Library CAI EM generateFzp
 
@@ -204,6 +331,15 @@ export const generateFzp = (moduleId: string) => {
     return null
 }
 
+// CORTES DA STRIPBOARD: OS LISTADOS EM buses OU, SEM LISTA, TODOS OS DO SENTIDO QUE NÃO É O DAS TIRAS (SPEC 01 §8.7)
+const getCuts = (moduleId: string, properties: Record<string, string>) => {
+    const [, x, y, vertical] = moduleId.match(/^(\d+)\.(\d+)Stripboard(2?)ModuleID$/) ?? []
+    const layout = properties.layout || (vertical ? 'vertical strips' : 'horizontal strips')
+    const listed = (properties.buses ?? '').trim()
+    const cutAll = layout.startsWith('vertical') ? 'h' : layout.startsWith('horizontal') ? 'v' : 'hv'
+    return new Set(listed ? listed.split(/\s+/) : range(Number(x) * Number(y)).flatMap(i => [...cutAll].map(axis => `${i % Number(x)}.${Math.floor(i / Number(x))}${axis}`)))
+}
+
 // TRECHOS DE TIRA LIGADOS DE UMA STRIPBOARD; buses LISTA OS CORTES "x.yh"/"x.yv" (SPEC 01 §8.7)
 export const getStrips = (moduleId: string, properties: Record<string, string>) => {
     const size = moduleId.match(/^(\d+)\.(\d+)Stripboard(2?)ModuleID$/)
@@ -212,10 +348,7 @@ export const getStrips = (moduleId: string, properties: Record<string, string>) 
         return []
 
     const [x, y]  = [Number(size[1]), Number(size[2])]
-    const layout  = properties.layout || (size[3] ? 'vertical strips' : 'horizontal strips')
-    const listed  = (properties.buses ?? '').trim()
-    const cutAll  = layout.startsWith('vertical') ? 'h' : layout.startsWith('horizontal') ? 'v' : 'hv'
-    const cuts    = new Set(listed ? listed.split(/\s+/) : range(x * y).flatMap(i => [...cutAll].map(axis => `${i % x}.${Math.floor(i / x)}${axis}`)))
+    const cuts    = getCuts(moduleId, properties)
     const id      = (ix: number, iy: number) => `connector${1000 * iy + ix}`
 
     return range(x * y).flatMap(i => {
@@ -262,6 +395,9 @@ export const getNetLabel = (moduleId: string, version: number, properties: Recor
     const style     = version <= 4 ? 'legacy' : properties.style === 'connector' || properties.style === 'right' ? 'right' : 'left'
     return { label: properties.label || 'net label', left: direction === 'left', style, divisor: moduleId.includes(OLD_SCHEMATIC) ? 1 : 3 }
 }
+
+// ALINHAMENTO GRAVADO PARA A REGRA DO TEXTO: JUNTO AO CONECTOR OU NA PONTA DE FORA, PELA DIREÇÃO DA SETA (alignForPolicy DO symbolpaletteitem.cpp)
+export const alignForPolicy = (policy: 'outside' | 'connector', left: boolean) => (policy === 'connector') === left ? 'left' : 'right'
 
 // NET LABEL GERADO: CAIXA COM SETA E TEXTO, LARGURA PELAS MÉTRICAS DA FONTE DO ESTILO (SPEC 01 §8.9)
 export const netLabelSvg = ({ label, left, style, divisor }: NetLabel) => {
@@ -387,6 +523,59 @@ export const logoTextSvg = (template: string, text: string, fonts: Fonts) => {
 }
 
 // LOGO COM TAMANHO PRÓPRIO: AS PROPRIEDADES width/height (mm) DA INSTÂNCIA SOBREPÕEM O TAMANHO DO SVG GUARDADO EM shape
+const PNG_DPI   = 90    // PX POR POLEGADA DA IMAGEM SEM RESOLUÇÃO GRAVADA (SVGDPI DO FRITZING)
+const THRESHOLD = 5     // INTENSIDADE × ALFA ACIMA DA QUAL O PIXEL É DESENHO (applyThreshold DO logoitem.cpp)
+
+// IMAGEM EM PRETO E BRANCO VETORIZADA: CADA TRECHO DE PIXELS ACESOS DE UMA LINHA VIRA UM RETÂNGULO DO CAMINHO (imageToSVGPath DO clipperhelpers.h)
+export const rasterLogoSvg = (pixels: Uint8ClampedArray, width: number, height: number, layer: string, color: string) => {
+    const lit  = (x: number, y: number) => {
+        const i = 4 * (y * width + x)
+        return (0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]) * pixels[i + 3] / 255 > THRESHOLD
+    }
+    const runs = range(height).flatMap(y => {
+        const spans: string[] = []
+        let start = -1
+
+        range(width + 1).forEach(x => {
+            const on = x < width && lit(x, y)
+
+            if (on && start < 0)
+                start = x
+
+            if (!on && start >= 0) {
+                spans.push(`M${start} ${y}h${x - start}v1h${start - x}z`)
+                start = -1
+            }
+        })
+
+        return spans
+    })
+    return svgHeader(width, height, PNG_DPI, `<g id="${layer}"><path d="${runs.join('')}" fill="${color}" stroke="none"/></g>`)
+}
+
+// IMAGEM EMBUTIDA, PARA AS VISTAS EM QUE O LOGO É ILUSTRAÇÃO (PROTOBOARD, ESQUEMÁTICO)
+export const embeddedLogoSvg = (url: string, width: number, height: number, layer: string) => svgHeader(width, height, PNG_DPI, `<g id="${layer}"><image width="${width}" height="${height}" href="${url}"/></g>`)
+
+// SVG CARREGADO NUM LOGO: O CONTEÚDO VAI PARA O GRUPO DA CAMADA QUANDO NÃO HÁ UM (LogoItem::loadImage)
+export const layeredSvg = (text: string, layer: string) => {
+    const root = parseXml(text)
+
+    if (!root || tagOf(root) !== 'svg')
+        return null
+
+    let found = false
+    walk(root, element => void (found = found || element.getAttribute('id') === layer))
+
+    if (!found) {
+        const group = root.ownerDocument?.createElement('g') as XmlElement
+        group.setAttribute('id', layer)
+        childrenOf(root).forEach(child => group.appendChild(child))
+        root.appendChild(group)
+    }
+
+    return serializeXml(root)
+}
+
 export const sizeSvg = (text: string, width: number, height: number) => {
     const root = parseXml(text)
 

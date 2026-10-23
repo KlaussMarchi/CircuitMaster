@@ -251,16 +251,35 @@ export class Scene {
         return lines.length ? lines : ['?']
     }
 
-    getLabelBox(modelIndex: string): Box | null {
+    // LARGURA E ALTURA DO RÓTULO ANTES DO GIRO, A PARTIR DA ORIGEM x, y
+    getLabelSize(modelIndex: string): Point | null {
         const label = this.getView(modelIndex)?.label
 
-        if (!label?.visible)
+        if (!label)
             return null
 
         const px    = labelPx(label.size)
         const lines = this.getLabelLines(modelIndex)
-        const width = Math.max(...lines.map(line => line.length)) * px * LABEL_ADVANCE
-        return [label.x, label.y, label.x + width, label.y + lines.length * px * LABEL_LINE + px / 4]
+        return [Math.max(...lines.map(line => line.length)) * px * LABEL_ADVANCE, lines.length * px * LABEL_LINE + px / 4]
+    }
+
+    // GIRO OU ESPELHO DO RÓTULO NA CENA: O transform DO titleGeometry VALE NAS COORDENADAS DO RÓTULO, COM ORIGEM EM x, y (partlabel.cpp)
+    getLabelMatrix(modelIndex: string) {
+        const label = this.getView(modelIndex)?.label
+        return label?.transform ? multiply(multiply(translate(label.x, label.y), label.transform), translate(-label.x, -label.y)) : null
+    }
+
+    // CAIXA DO RÓTULO SEM O GIRO (O ALVO DO CLIQUE, DESENHADO JÁ DENTRO DO GIRO)
+    getLabelRect(modelIndex: string): Box | null {
+        const label = this.getView(modelIndex)?.label
+        const size  = this.getLabelSize(modelIndex)
+        return label?.visible && size ? [label.x, label.y, label.x + size[0], label.y + size[1]] : null
+    }
+
+    getLabelBox(modelIndex: string): Box | null {
+        const rect = this.getLabelRect(modelIndex)
+        const m    = this.getLabelMatrix(modelIndex)
+        return rect && m ? mapBox(m, rect) : rect
     }
 
     // CORPOS DAS PEÇAS, PONTAS DOS PINOS E FIOS DA VISTA PARA O AUTOROUTER DO ESQUEMÁTICO; NOTAS, RÉGUAS E MOLDURA NÃO SÃO OBSTÁCULO (SPEC 03 §8.2)

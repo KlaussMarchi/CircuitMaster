@@ -8,7 +8,10 @@ const SHOWN = 12    // COMANDOS NA LISTA
 
 // TERMOS EM INGLÊS DO FRITZING E DO KICAD PARA CADA RÓTULO: QUEM VEM DE LÁ ACHA PELO NOME QUE CONHECE
 const ALIASES: Record<string, string> = {
-    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Salvar todos': 'save all', 'Copiar como texto': 'copy as text clipboard', 'Apagar com cliques': 'interactive delete tool eraser',
+    'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Localizar peça no sketch…': 'find part in sketch search', 'Selecionar peças travadas': 'select all locked parts', 'Selecionar peças desatualizadas': 'select outdated obsolete parts',
+    'Atualizar peças selecionadas': 'update selected parts swap obsolete', 'Exportar peça…': 'export part fzpz', 'Desligar todos os fios': 'disconnect all wires', 'Selecionar trilhas "não rotear"': 'select all dont autoroute traces',
+    'Selecionar todos os jumpers': 'select all jumpers', 'Abrir recentes': 'open recent files history', 'Limpar recentes': 'clear recent files', 'Reverter': 'revert reload discard changes',
+    'Salvar como…': 'save as rename', 'Salvar uma cópia…': 'save a copy duplicate file', 'Imprimir…': 'print printer paper', 'Salvar todos': 'save all', 'Copiar como texto': 'copy as text clipboard', 'Apagar com cliques': 'interactive delete tool eraser',
     'Seleção por laço': 'lasso polygon select', 'Zoom na seleção': 'zoom to selected objects', 'Zoom na área arrastada': 'zoom to selection area window', 'Desfazer o último zoom': 'undo last zoom', 'Refazer o último zoom': 'redo last zoom',
     'Centralizar na seleção': 'pan to center selected objects', 'Centralizar no cursor': 'center on cursor', 'Grade': 'grid', 'Próxima grade': 'switch to next grid', 'Grade anterior': 'switch to previous grid', 'Alternar grade rápida': 'cycle fast grid',
     'Editar grades…': 'edit grids', 'Colocar a origem da grade': 'grid origin place', 'Origem da grade no cursor': 'grid origin', 'Restaurar a origem da grade': 'reset grid origin', 'Unidades': 'units', 'Polegadas': 'inches imperial',
@@ -33,18 +36,22 @@ const ALIASES: Record<string, string> = {
     'Paleta de comandos': 'command palette', 'Atalhos de teclado': 'keyboard shortcuts hotkeys', 'Sobre o CircuitMaster': 'about', 'Peças': 'parts library bins symbol footprint chooser', 'Projeto': 'project outline parts list nets', 'Problemas': 'problems drc erc violations',
     'Cobre de cima': 'top copper layer f.cu', 'Cobre de baixo': 'bottom copper layer b.cu', 'Serigrafia de cima': 'top silkscreen layer f.silkscreen', 'Serigrafia de baixo': 'bottom silkscreen layer b.silkscreen',
     'Placa': 'board layer edge cuts outline', 'Imagem das peças': 'part image layer fab', 'Ratsnest': 'ratsnest layer airwires', 'Mostrar todas as camadas': 'show all layers', 'Ocultar todas as camadas': 'hide all layers',
+    'Escolher sementes…': 'choose ground fill seeds', 'Camadas': 'layers appearance', 'Protoboards': 'breadboard layer', 'Fios': 'wires layer', 'Rótulos das peças': 'part labels layer', 'Notas': 'notes layer', 'Réguas': 'rulers layer', 'Moldura': 'frame layer sheet', 'Texto': 'text layer',
+    'Colorir fios pelo comprimento': 'color breadboard wires by length', 'Tamanho da grade…': 'set grid size', 'Restaurar a grade padrão': 'restore default grid size', 'Cor de fundo…': 'set background color',
+    'Bin em ícones': 'show parts bin icon view', 'Bin em lista': 'show parts bin list view', 'Mostrar não roteadas': 'show unrouted ratsnest connections', 'Ver de baixo': 'view from below flip board view bottom',
+    'As duas faces de cobre clicáveis': 'set both copper layers clickable', 'Só a face de cima clicável': 'set copper top layer clickable active', 'Só a face de baixo clicável': 'set copper bottom layer clickable active',
     'Modo da interface': 'mode beginner maker professional', 'Iniciante': 'beginner mode', 'Maker': 'maker mode', 'Profissional': 'professional pro mode',
     'Girar': 'rotate', 'Espelhar horizontalmente': 'flip horizontal mirror', 'Espelhar verticalmente': 'flip vertical mirror', 'Travar peça': 'lock part', 'Sticky': 'sticky', 'Mostrar rótulo da peça': 'show part label',
     'Editar (editor de peças)': 'edit part parts editor symbol editor footprint editor', 'Adicionar ao bin': 'add to bin', 'Trazer para frente': 'bring to front', 'Enviar para trás': 'send to back', 'Avançar': 'bring forward raise', 'Recuar': 'send backward lower'
 }
 
-// NOTA DE UM COMANDO: TODO TERMO TEM DE APARECER NO RÓTULO (NAS DUAS LÍNGUAS), NO CAMINHO OU NOS TERMOS EM INGLÊS; NO RÓTULO VALE MAIS, COMEÇO DE PALAVRA MAIS AINDA
+// NOTA DE UM COMANDO: TODO TERMO TEM DE APARECER NO RÓTULO (NAS DUAS LÍNGUAS), NO CAMINHO OU NOS TERMOS EM INGLÊS; NO RÓTULO VALE MAIS, COMEÇO DE PALAVRA MAIS AINDA; NO EMPATE, O RÓTULO MAIS CURTO É O MAIS EXATO
 const score = (command: Command, terms: string[]) => {
     const label = normalize(`${command.entry.label} ${t(command.entry.label)}`)
     const rest  = normalize(`${command.path.join(' ')} ${command.path.map(item => t(item)).join(' ')} ${ALIASES[command.entry.label] ?? ''}`)
     const words = label.split(/[^a-z0-9%]+/)
     const each  = terms.map(term => words.some(word => word.startsWith(term)) ? 4 : label.includes(term) ? 3 : rest.split(/[^a-z0-9%]+/).some(word => word.startsWith(term)) ? 2 : rest.includes(term) ? 1 : 0)
-    return each.every(value => value > 0) ? each.reduce<number>((sum, value) => sum + value, 0) - (command.entry.disabled ? 0.5 : 0) : 0
+    return each.every(value => value > 0) ? each.reduce<number>((sum, value) => sum + value, 0) - (command.entry.disabled ? 0.5 : 0) - label.length / 1000 : 0
 }
 
 // PALETA DE COMANDOS (Ctrl+K): QUALQUER AÇÃO DOS MENUS PELO NOME EM PORTUGUÊS OU PELOS TERMOS DO FRITZING E DO KICAD, COM O CAMINHO E O ATALHO; ENTER EXECUTA

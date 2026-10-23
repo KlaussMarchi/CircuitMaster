@@ -23,7 +23,7 @@ export type WireItem  = { type: 'wire', modelIndex: string, z: number, d: string
 export type NoteItem  = { type: 'note', modelIndex: string, z: number, x: number, y: number, width: number, height: number, html: string }
 export type RatItem   = { from: string, to: string, a: Point, b: Point, color: string }
 export type MarkItem  = { key: string, box: Box | null, point: Point | null, radius: number, color: string, opacity: number }
-export type LabelItem = { modelIndex: string, x: number, y: number, size: number, color: string, font: string, lines: string[], box: Box | null }
+export type LabelItem = { modelIndex: string, x: number, y: number, size: number, color: string, font: string, lines: string[], box: Box | null, rect: Box | null, matrix: Matrix | null }
 export type Drawing   = { items: (PartItem | WireItem | NoteItem)[], ratsnest: RatItem[], marks: MarkItem[], junctions: { point: Point, radius: number }[], labels: LabelItem[], bounds: Box | null }
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
@@ -51,6 +51,9 @@ export const WIRE_COLORS: Record<'breadboardView' | 'schematicView', [string, st
     breadboardView: [['blue', '#418dd9', '#1b5bb3'], ['red', '#cc1414', '#8c0000'], ['black', '#404040', '#000000'], ['yellow', '#fff800', '#d6d63a'], ['green', '#25cc35', '#00a527'], ['grey', '#999999', '#666666'], ['white', '#ffffff', '#999999'], ['orange', '#ef6100', '#ad6a38'], ['ochre', '#a37911', '#846521'], ['cyan', '#33ffc5', '#00a0c6'], ['brown', '#8c3b00', '#6c2710'], ['purple', '#ab58a2', '#7a3a73'], ['pink', '#fa50e6', '#dc00dc']],
     schematicView: [['blue', '#418dd9', '#418dd9'], ['red', '#cc1414', '#cc1414'], ['black', '#404040', '#404040'], ['yellow', '#fff800', '#d6d63a'], ['green', '#25cc35', '#00a527'], ['grey', '#999999', '#666666'], ['orange', '#ff7300', '#d65b00'], ['ochre', '#a37911', '#846521'], ['cyan', '#33ffc5', '#00a0c6'], ['brown', '#8c3b00', '#6c2710'], ['purple', '#ab58a2', '#7a3a73'], ['pink', '#fa50e6', '#dc00dc']]
 }
+
+const LENGTH_COLORS = ['#c0c0c0', '#d10000', '#ff6622', '#ffda21', '#33dd00', '#1133cc', '#4b0082', '#a9a9a9', '#f5f5f5', '#8b4513']    // lengthColorTrans DO wire.cpp DO FRITZING: 100 A 1000 mil
+const LENGTH_SCALE  = 0.111    // MESMO FATOR DO colorForLength: UM PASSO A CADA ~9 px (100 mil)
 
 const CONNECTED   = { color: '#00ff00', opacity: 0.2 }
 const UNCONNECTED = { color: '#ff0000', opacity: 0.3 }
@@ -122,7 +125,10 @@ export const getUpright = (m: Matrix): Point => {
     return [mirrored !== turned ? -1 : 1, turned ? -1 : 1]
 }
 
-const getItem = (scene: Scene, modelIndex: string): (PartItem | WireItem | NoteItem)[] => {
+// COR PADRÃO DO JUMPER PELO COMPRIMENTO (colorForLength DO FRITZING); FIO CURVO OU MAIS LONGO QUE 1000 mil MANTÉM A SUA
+const colorByLength = ([a, b]: [Point, Point], color: string) => LENGTH_COLORS[Math.max(1, Math.round(LENGTH_SCALE * Math.hypot(b[0] - a[0], b[1] - a[1]))) - 1] ?? color
+
+const getItem = (scene: Scene, modelIndex: string, byLength: boolean): (PartItem | WireItem | NoteItem)[] => {
     const state    = scene.getView(modelIndex)
     const moduleId = scene.doc.instances[modelIndex]?.moduleIdRef ?? ''
     const style    = WIRE_STYLE[scene.view as View]
@@ -139,7 +145,8 @@ const getItem = (scene: Scene, modelIndex: string): (PartItem | WireItem | NoteI
     if (scene.isWire(modelIndex)) {
         const color  = state.wire?.color ?? style.color
         const trace  = (state.geometry.wireFlags & (WIRE_FLAGS.pcbView | WIRE_FLAGS.schematicView)) !== 0
-        return ends ? [{ type: 'wire', modelIndex, z: state.geometry.z, d: getWirePath(state.geometry, state.wire?.bezier ?? null), width: milsToPx(state.wire?.mils ?? style.mils), color, opacity: state.wire?.opacity ?? 1, shadow: trace ? null : shadowOf(color), ends }] : []
+        const shown  = byLength && ends && !state.wire?.bezier && scene.view === 'breadboardView' ? colorByLength(ends, color) : color
+        return ends ? [{ type: 'wire', modelIndex, z: state.geometry.z, d: getWirePath(state.geometry, state.wire?.bezier ?? null), width: milsToPx(state.wire?.mils ?? style.mils), color: shown, opacity: state.wire?.opacity ?? 1, shadow: trace ? null : shadowOf(color), ends }] : []
     }
 
     const m        = scene.getMatrix(modelIndex)
@@ -219,13 +226,13 @@ const getLabels = (scene: Scene, shown: string[]): LabelItem[] => shown.flatMap(
     if (!label?.visible || scene.isWire(modelIndex))
         return []
 
-    return [{ modelIndex, x: label.x, y: label.y, size: labelPx(label.size), color: scene.view === 'pcbView' && scene.getView(modelIndex)?.bottom ? SILK_BOTTOM : '#000000', font: LABEL_FONTS[scene.view as View], lines: scene.getLabelLines(modelIndex), box: scene.getLabelBox(modelIndex) }]
+    return [{ modelIndex, x: label.x, y: label.y, size: labelPx(label.size), color: scene.view === 'pcbView' && scene.getView(modelIndex)?.bottom ? SILK_BOTTOM : '#000000', font: LABEL_FONTS[scene.view as View], lines: scene.getLabelLines(modelIndex), box: scene.getLabelBox(modelIndex), rect: scene.getLabelRect(modelIndex), matrix: scene.getLabelMatrix(modelIndex) }]
 })
 
 // LISTA DE DESENHO DE UMA VISTA: PEÇAS E FIOS EM ORDEM DE z, RATSNEST, ESTADO DOS CONECTORES, JUNÇÕES E RÓTULOS; A CAIXA TOTAL INCLUI OS RÓTULOS
-export const getDrawing = (scene: Scene, netlist: Netlist | null): Drawing => {
+export const getDrawing = (scene: Scene, netlist: Netlist | null, byLength = false): Drawing => {
     const shown  = Object.values(scene.doc.instances).filter(instance => scene.isShown(instance)).map(instance => instance.modelIndex)
-    const items  = shown.flatMap(modelIndex => getItem(scene, modelIndex)).sort((a, b) => a.z - b.z)
+    const items  = shown.flatMap(modelIndex => getItem(scene, modelIndex, byLength)).sort((a, b) => a.z - b.z)
     const marks  = netlist ? getMarks(scene, netlist, items) : []
     const labels = getLabels(scene, shown)
     return { items, ratsnest: netlist ? getRatsnest(scene, netlist) : [], marks, junctions: getJunctions(scene, items), labels, bounds: unionBoxes([...shown.map(modelIndex => scene.getBounds(modelIndex)), ...labels.map(label => label.box)]) }

@@ -1,18 +1,27 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { FEATURED, FEATURED_GROUPS, type Featured } from '../../core/Featured'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { FEATURED, FEATURED_GROUPS, normalize, type Featured } from '../../core/Featured'
 import { GENERATED_ROOT, generateSvg } from '../../core/Generator'
 import type { Found } from '../../workers/Indexer'
-import { Icon } from '../Icon'
+import { Icon, type IconName } from '../Icon'
 import { promptBin } from '../Menus'
-import { useStore } from '../Store'
+import { ContextMenu, MenuList, type MenuEntry } from '../ContextMenu'
+import { entryOf, useStore } from '../Store'
 import { t } from '../../core/Text'
+import { centerOnSelection } from '../Navigation'
 
 export const PART_MIME = 'application/x-circuitmaster-part'
 
-type Tab = 'core' | 'sim' | 'mine'
+type Tab = string    // ARQUIVO DO BIN DO ACERVO, MEUS ITENS OU O Temp
 
-const TABS: [Tab, string][] = [['core', 'Core'], ['sim', 'Simulador'], ['mine', 'Meus itens']]
-const MINE = 'Meus itens'
+const CORE     = 'bins/core.fzb'
+const SIM      = 'bins/more/sim.fzb'
+const MINE_TAB = 'mine'
+const TEMP     = 'temp'
+const FIXED    = [CORE, SIM]
+const MINE     = 'Meus itens'
+
+const TABS: [Tab, string][] = [[CORE, 'Core'], [SIM, 'Simulador'], [MINE_TAB, MINE]]
+const VIEWS: [boolean, IconName, string][] = [[false, 'grid', 'Bin em ícones'], [true, 'list', 'Bin em lista']]
 
 const icons = new Map<string, string>()
 
@@ -58,37 +67,110 @@ const usePick = (moduleId: string) => {
     }
 }
 
-const FeaturedTile = ({ item }: { item: Featured }) => {
-    const pick = usePick(item.moduleId)
-    return (
-        <button className="part" title={`${t(item.name)}${item.nosim ? ` (${t('sem modelo de simulação')})` : ''}: ${t('clique e depois clique no quadro, arraste ou dê duplo clique')}`} {...pick}>
-            <Glyph item={item} /><span>{t(item.name)}</span>{item.nosim && <i className="nosim" />}
-        </button>
-    )
+// MENU DA PEÇA NO BIN (EDITAR, EXPORTAR, REMOVER DO BIN DO USUÁRIO, LOCALIZAR NO SKETCH); owner -1 É MEUS ITENS
+const binMenu = (moduleId: string, owner: number | null): MenuEntry[] => {
+    const { doc, editModule, exportPart, removeFromBin, selectWhere } = useStore.getState()
+    const used = Object.values(doc.instances).some(instance => instance.moduleIdRef === moduleId)
+    return [
+        { label: 'Editar peça (editor de peças)', apply: () => void editModule(moduleId) },
+        { label: 'Exportar peça…', apply: () => void exportPart(moduleId) },
+        ...owner !== null ? [{ label: 'Remover do bin', apply: () => removeFromBin(owner, moduleId) }] : [],
+        null,
+        { label: 'Localizar no sketch', disabled: !used, apply: () => {
+            selectWhere(instance => instance.moduleIdRef === moduleId)
+            centerOnSelection(useStore.getState())
+        } }
+    ]
 }
 
-const PartTile = ({ entry }: { entry: Found }) => {
-    const icon = iconOf(entry)
-    const pick = usePick(entry.moduleId)
-    return (
-        <button className="part" title={`${entry.title}\n${entry.family}`} {...pick}>
-            {icon ? <img src={icon} alt="" loading="lazy" draggable={false} /> : <svg viewBox="0 0 64 64" aria-hidden><rect x="14" y="14" width="36" height="36" rx="4" /></svg>}
-            <span>{entry.title}</span>
-        </button>
-    )
+type Menu = { x: number, y: number, items: MenuEntry[] }
+
+const MenuContext = createContext<(menu: Menu) => void>(() => {})
+
+const useMenu = (moduleId: string, owner: number | null) => {
+    const open = useContext(MenuContext)
+    return (event: MouseEvent) => {
+        event.preventDefault()
+        open({ x: event.clientX, y: event.clientY, items: binMenu(moduleId, owner) })
+    }
 }
 
-const ResultRow = ({ entry }: { entry: Found }) => {
+// PEÇA NO BIN EM ÍCONE (GRADE) OU EM LINHA (LISTA), COMO NO Show Bin in Icon/List View DO FRITZING
+const Item = ({ moduleId, art, name, sub, list, owner }: { moduleId: string, art: ReactNode, name: string, sub: string, list: boolean, owner: number | null }) => {
+    const pick = usePick(moduleId)
+    const menu = useMenu(moduleId, owner)
+
+    if (list)
+        return <li><button className="result" title={`${name}\n${sub}`} onContextMenu={menu} {...pick}>{art}<span className="grow"><span className="t">{name}</span><span className="f">{sub}</span></span></button></li>
+
+    return <button className="part" title={`${name}\n${sub}`} onContextMenu={menu} {...pick}>{art}<span>{name}</span></button>
+}
+
+const artOf = (entry: Found, featured: Featured | undefined, list: boolean) => {
+    const icon = featured ? null : iconOf(entry)
+
+    if (featured)
+        return list ? <span className="glyph"><Glyph item={featured} /></span> : <Glyph item={featured} />
+
+    if (icon)
+        return <img src={icon} alt="" loading="lazy" draggable={false} />
+
+    return list ? <span className="glyph" /> : <svg viewBox="0 0 64 64" aria-hidden><rect x="14" y="14" width="36" height="36" rx="4" /></svg>
+}
+
+const FoundItem = ({ entry, list, owner }: { entry: Found, list: boolean, owner: number | null }) => {
     const featured = FEATURED.find(item => item.moduleId === entry.moduleId)
-    const icon     = featured ? null : iconOf(entry)
-    const pick     = usePick(entry.moduleId)
+    return <Item moduleId={entry.moduleId} art={artOf(entry, featured, list)} name={featured ? t(featured.name) : entry.title} sub={featured ? entry.title : entry.family} list={list} owner={owner} />
+}
+
+const FeaturedItem = ({ item, list }: { item: Featured, list: boolean }) => {
+    const hint = [item.nosim ? t('sem modelo de simulação') : '', t('clique e depois clique no quadro, arraste ou dê duplo clique')].filter(Boolean).join(' · ')
+    return <Item moduleId={item.moduleId} art={list ? <span className="glyph"><Glyph item={item} /></span> : <><Glyph item={item} />{item.nosim && <i className="nosim" />}</>} name={t(item.name)} sub={hint} list={list} owner={null} />
+}
+
+const Parts = ({ entries, list, owner = null }: { entries: Found[], list: boolean, owner?: number | null }) => {
+    const items = entries.map(entry => <FoundItem key={`${entry.root}/${entry.path}/${entry.moduleId}`} entry={entry} list={list} owner={owner} />)
+    return list ? <ul className="results">{items}</ul> : <div className="parts-grid">{items}</div>
+}
+
+const SKETCH_HITS = 8    // PEÇAS DO SKETCH MOSTRADAS NA BUSCA
+
+const locate = (modelIndex: string) => {
+    useStore.getState().select([modelIndex])
+    centerOnSelection(useStore.getState())
+}
+
+// PEÇAS DO SKETCH QUE CASAM COM A BUSCA (RÓTULO, TÍTULO E PROPRIEDADES), ANTES DO ACERVO: CLIQUE SELECIONA E CENTRALIZA (LOCALIZAR PEÇA NO SKETCH)
+const InSketch = ({ query }: { query: string }) => {
+    const doc     = useStore(state => state.doc)
+    const library = useStore(state => state.library)
+    const hits    = useMemo(() => {
+        const terms = normalize(query).split(/\s+/).filter(Boolean)
+        return Object.values(doc.instances).filter(instance => instance.moduleIdRef !== 'WireModuleID').filter(instance => {
+            const part = library.getPart(instance.moduleIdRef)
+            const text = normalize([instance.title, part?.title ?? '', ...Object.values({ ...part?.properties, ...instance.properties })].join(' '))
+            return terms.every(term => text.includes(term))
+        })
+    }, [doc, library, query])
+
+    if (!hits.length)
+        return null
+
     return (
-        <li>
-            <button className="result" title={`${entry.title}\n${entry.family}`} {...pick}>
-                {featured ? <span className="glyph"><Glyph item={featured} /></span> : icon ? <img src={icon} alt="" loading="lazy" draggable={false} /> : <span className="glyph" />}
-                <span className="grow"><span className="t">{featured?.name ?? entry.title}</span><span className="f">{featured ? entry.title : entry.family}</span></span>
-            </button>
-        </li>
+        <>
+            <h3 className="h3">{t('No sketch')}<span className="n muted">{hits.length}</span></h3>
+            <ul className="results" aria-label={t('No sketch')}>
+                {hits.slice(0, SKETCH_HITS).map(instance => (
+                    <li key={instance.modelIndex}>
+                        <button className="result" title={t('Selecionar e centralizar {0}', instance.title)} onClick={() => locate(instance.modelIndex)}>
+                            <span className="glyph"><Icon name="search" /></span>
+                            <span className="grow"><span className="t">{instance.title}</span><span className="f">{library.getPart(instance.moduleIdRef)?.title}</span></span>
+                        </button>
+                    </li>
+                ))}
+            </ul>
+            <h3 className="h3">{t('No acervo')}</h3>
+        </>
     )
 }
 
@@ -111,21 +193,38 @@ const removeBin = (index: number) => {
         useStore.getState().deleteBin(index)
 }
 
-// PAINEL DE PEÇAS: BUSCA (ATALHO /), BÁSICOS SUGERIDOS PRIMEIRO E A BIBLIOTECA DO FRITZING EM SEÇÕES; MEUS ITENS E OS BINS DO USUÁRIO (DESIGN.md §5, SPEC 01 §7)
+// PEÇAS DO SKETCH QUE NÃO SÃO DO ACERVO (VIERAM NO .fzz OU DO EDITOR), COMO O BIN Temp DO FRITZING; CHAVE TEXTUAL PARA O SELETOR NÃO RENDERIZAR A CADA MUDANÇA
+const tempIds = ({ library, doc }: ReturnType<typeof useStore.getState>) => {
+    const own = [...library.bundled.keys()].filter(moduleId => library.getPart(moduleId) === library.bundled.get(moduleId))
+
+    if (!own.length)
+        return ''
+
+    const used = new Set(Object.values(doc.instances).map(instance => instance.moduleIdRef))
+    return own.filter(moduleId => used.has(moduleId)).join('\n')
+}
+
+// PAINEL DE PEÇAS: BUSCA (ATALHO /), BÁSICOS SUGERIDOS PRIMEIRO, OS BINS DO ACERVO EM ABAS E SEÇÕES, MEUS ITENS, OS BINS DO USUÁRIO E O Temp (DESIGN.md §5, SPEC 01 §7)
 export const Library = () => {
     const catalog             = useStore(state => state.catalog)
+    const library             = useStore(state => state.library)
     const bins                = useStore(state => state.bins)
     const indexed             = useStore(state => state.indexed)
     const ready               = useStore(state => state.ready)
     const mine                = useStore(state => state.mine)
     const userBins            = useStore(state => state.userBins)
     const imported            = useStore(state => state.imported)
+    const list                = useStore(state => state.preferences.binList)
+    const openBins            = useStore(state => state.preferences.openBins)
+    const temp                = useStore(tempIds)
     const input               = useRef<HTMLInputElement>(null)
     const [text, setText]     = useState('')
     const [found, setFound]   = useState<Found[]>([])
     const [owned, setOwned]   = useState<Found[]>([])
-    const [tab, setTab]       = useState<Tab>('core')
+    const [tab, setTab]       = useState<Tab>(CORE)
     const [opened, setOpened] = useState<string[]>([])
+    const [more, setMore]     = useState(false)
+    const [menu, setMenu]     = useState<Menu | null>(null)
     const query               = text.trim()
 
     useEffect(() => {
@@ -164,55 +263,96 @@ export const Library = () => {
         }
     }, [kept, catalog, ready])
 
-    const featured   = FEATURED.filter(item => tab === 'core' || !item.nosim)
-    const sections   = tab === 'mine' ? [] : bins[tab === 'core' ? 0 : 1]?.sections ?? []
+    const extra      = bins.filter(bin => !FIXED.includes(bin.file))
+    const shown      = extra.filter(bin => openBins.includes(bin.file))
+    const tempParts  = useMemo(() => temp ? temp.split('\n').flatMap(moduleId => library.bundled.get(moduleId) ?? []).map(entryOf) : [], [temp, library])
+    const current    = tab === TEMP && !tempParts.length ? CORE : tab
+    const bin        = bins.find(other => other.file === current)
+    const featured   = current === CORE || current === SIM ? FEATURED.filter(item => current === CORE || !item.nosim) : []
+    const sections   = bin?.sections ?? []
     const members    = (ids: string[]) => ids.flatMap(moduleId => owned.find(entry => entry.moduleId === moduleId) ?? imported.find(entry => entry.moduleId === moduleId) ?? [])
     const mineGroups = [[MINE, mine, -1] as const, ...userBins.map((bin, i) => [bin.title, bin.moduleIds, i] as const)]
-    const total      = tab === 'mine' ? kept.length : featured.length + sections.reduce((sum, section) => sum + section.entries.length, 0)
-    const flip       = (title: string) => setOpened(opened.includes(title) ? opened.filter(other => other !== title) : [...opened, title])
+    const total      = current === MINE_TAB ? kept.length : current === TEMP ? tempParts.length : featured.length + sections.reduce((sum, section) => sum + section.entries.length, 0)
+    const flip       = (key: string) => setOpened(opened.includes(key) ? opened.filter(other => other !== key) : [...opened, key])
     const results    = query ? found : []
+    const choose     = (id: Tab) => {
+        setTab(id)
+        setText('')
+    }
+    const openBin    = (file: string) => {
+        useStore.getState().setPreferences({ openBins: [...new Set([...openBins, file])] })
+        choose(file)
+    }
+    const closeBin   = (file: string) => {
+        useStore.getState().setPreferences({ openBins: openBins.filter(other => other !== file) })
+
+        if (current === file)
+            choose(CORE)
+    }
+    const tabs: [Tab, string][] = [...TABS, ...tempParts.length ? [[TEMP, 'Temp'] as [Tab, string]] : []]
 
     return (
         <section className="lp" aria-label={t('Peças')}>
             <div className="lp-head">
                 <label className="search">
                     <Icon name="search" />
-                    <input ref={input} type="search" placeholder={t('Buscar peça')} aria-label={t('Buscar peça')} autoComplete="off" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => event.key === 'Escape' && setText('')} />
+                    <input ref={input} id="part-search" type="search" placeholder={t('Buscar peça')} aria-label={t('Buscar peça')} autoComplete="off" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => event.key === 'Escape' && setText('')} />
                     {query ? <button className="icon-btn" style={{ width: 22, height: 22 }} aria-label={t('Limpar busca')} onClick={() => setText('')}><Icon name="close" /></button> : <kbd>/</kbd>}
                 </label>
-                <div className="tabs" role="tablist">
-                    {TABS.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={!query && tab === id} onClick={() => { setTab(id); setText('') }}>{t(label)}</button>)}
+                <div className="bin-tabs">
+                    <div className="tabs" role="tablist">
+                        {tabs.map(([id, label]) => <button key={id} className="tab" role="tab" aria-selected={!query && current === id} title={id === TEMP ? t('peças do sketch que não estão no acervo') : undefined} onClick={() => choose(id)}>{t(label)}</button>)}
+                        {shown.map(other => (
+                            <span key={other.file} className="bin-tab">
+                                <button className="tab" role="tab" aria-selected={!query && current === other.file} onClick={() => choose(other.file)}>{other.title}</button>
+                                <button className="x" aria-label={t('Fechar o bin {0}', other.title)} onClick={() => closeBin(other.file)}><Icon name="close" /></button>
+                            </span>
+                        ))}
+                    </div>
+                    {extra.length > 0 && (
+                        <div className="relative">
+                            <button className="icon-btn" aria-label={t('Abrir bin')} aria-expanded={more} title={t('Abrir bin')} onClick={() => setMore(!more)}><Icon name="plus" /></button>
+                            {more && <div className="absolute right-0 top-8 z-[60]"><MenuList items={extra.map((other): MenuEntry => ({ label: other.title, checked: openBins.includes(other.file), apply: () => openBins.includes(other.file) ? closeBin(other.file) : openBin(other.file) }))} close={() => setMore(false)} left /></div>}
+                        </div>
+                    )}
                 </div>
                 <p className="count">
                     {query ? t(results.length === 1 ? '{0} resultado' : '{0} resultados', results.length) : t('{0} peças', total)}
                     {!indexed.ready && <span className="num">· {t('indexando')} {indexed.done}/{indexed.total || '…'}</span>}
+                    <span className="grow" />
+                    {VIEWS.map(([value, icon, label]) => <button key={label} className="icon-btn sm" aria-label={t(label)} aria-pressed={list === value} title={t(label)} onClick={() => useStore.getState().setPreferences({ binList: value })}><Icon name={icon} /></button>)}
                 </p>
             </div>
-            <div className="lp-body">
-                {query && (results.length ? <ul className="results">{results.map(entry => <ResultRow key={`${entry.root}/${entry.path}/${entry.moduleId}`} entry={entry} />)}</ul> : <div className="empty">{t('Nenhuma peça para “{0}”. Tente “resistor”, “fonte”, “LED” ou “555”.', query)}</div>)}
-                {!query && tab !== 'mine' && FEATURED_GROUPS.map(group => {
-                    const items = featured.filter(item => item.group === group)
-                    return items.length > 0 && <div key={group} className="parts-group"><h3>{t(group)}</h3><div className="parts-grid">{items.map(item => <FeaturedTile key={item.moduleId} item={item} />)}</div></div>
-                })}
-                {!query && tab !== 'mine' && sections.length > 0 && <h3 className="h3">{tab === 'core' ? t('Biblioteca completa') : t('Biblioteca do simulador')}</h3>}
-                {!query && tab !== 'mine' && sections.map(section => (
-                    <Section key={section.title} title={section.title} count={section.entries.length} open={opened.includes(section.title)} flip={() => flip(section.title)}>
-                        <div className="parts-grid">{section.entries.map(entry => <PartTile key={`${entry.root}/${entry.path}`} entry={entry} />)}</div>
-                    </Section>
-                ))}
-                {!query && tab === 'mine' && mineGroups.map(([title, ids, index]) => (
-                    <div key={`${title}-${index}`} className="parts-group">
-                        <h3>{index < 0 ? t(title) : title}<span className="n muted">{ids.length}</span></h3>
-                        <div className="bin-actions">
-                            <button className="btn sm" disabled={!ids.length} onClick={() => index < 0 ? useStore.getState().exportMine() : useStore.getState().exportBin(index)}>{t('Exportar .fzbz')}</button>
-                            {index >= 0 && <button className="btn sm" onClick={() => renameBin(index)}>{t('Renomear')}</button>}
-                            {index >= 0 && <button className="btn sm" onClick={() => removeBin(index)}>{t('Apagar')}</button>}
+            <MenuContext value={setMenu}>
+                <div className="lp-body">
+                    {query && <InSketch query={query} />}
+                    {query && (results.length ? <Parts entries={results} list /> : <div className="empty">{t('Nenhuma peça para “{0}”. Tente “resistor”, “fonte”, “LED” ou “555”.', query)}</div>)}
+                    {!query && FEATURED_GROUPS.map(group => {
+                        const items = featured.filter(item => item.group === group).map(item => <FeaturedItem key={item.moduleId} item={item} list={list} />)
+                        return items.length > 0 && <div key={group} className="parts-group"><h3>{t(group)}</h3>{list ? <ul className="results">{items}</ul> : <div className="parts-grid">{items}</div>}</div>
+                    })}
+                    {!query && featured.length > 0 && sections.length > 0 && <h3 className="h3">{current === CORE ? t('Biblioteca completa') : t('Biblioteca do simulador')}</h3>}
+                    {!query && sections.map(section => section.title ? (
+                        <Section key={section.title} title={section.title} count={section.entries.length} open={opened.includes(`${current}/${section.title}`)} flip={() => flip(`${current}/${section.title}`)}>
+                            <Parts entries={section.entries} list={list} />
+                        </Section>
+                    ) : <Parts key="" entries={section.entries} list={list} />)}
+                    {!query && current === TEMP && <Parts entries={tempParts} list={list} />}
+                    {!query && current === MINE_TAB && mineGroups.map(([title, ids, index]) => (
+                        <div key={`${title}-${index}`} className="parts-group">
+                            <h3>{index < 0 ? t(title) : title}<span className="n muted">{ids.length}</span></h3>
+                            <div className="bin-actions">
+                                <button className="btn sm" disabled={!ids.length} onClick={() => index < 0 ? useStore.getState().exportMine() : useStore.getState().exportBin(index)}>{t('Exportar .fzbz')}</button>
+                                {index >= 0 && <button className="btn sm" onClick={() => renameBin(index)}>{t('Renomear')}</button>}
+                                {index >= 0 && <button className="btn sm" onClick={() => removeBin(index)}>{t('Apagar')}</button>}
+                            </div>
+                            {ids.length ? <Parts entries={members(ids)} list={list} owner={index} /> : <div className="empty">{t('Vazio. Use “Adicionar ao bin” no menu de uma peça ou abra um .fzpz/.fzbz.')}</div>}
                         </div>
-                        {ids.length ? <div className="parts-grid">{members(ids).map(entry => <PartTile key={entry.moduleId} entry={entry} />)}</div> : <div className="empty">{t('Vazio. Use “Adicionar ao bin” no menu de uma peça ou abra um .fzpz/.fzbz.')}</div>}
-                    </div>
-                ))}
-                {!query && tab === 'mine' && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => promptBin([])}><Icon name="plus" />{t('Novo bin')}</button>}
-            </div>
+                    ))}
+                    {!query && current === MINE_TAB && <button className="btn sm" style={{ marginTop: 12 }} onClick={() => promptBin([])}><Icon name="plus" />{t('Novo bin')}</button>}
+                </div>
+            </MenuContext>
+            {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} close={() => setMenu(null)} />}
         </section>
     )
 }

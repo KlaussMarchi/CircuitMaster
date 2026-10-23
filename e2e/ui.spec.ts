@@ -1,4 +1,4 @@
-import { test, expect, WIDTHS, type App } from './Fixtures'
+import { test, expect, AUTOSAVE_MS, WIDTHS, type App } from './Fixtures'
 
 const THEMES = ['dark', 'light']
 
@@ -238,7 +238,9 @@ test('Modos: Iniciante esconde os itens avançados, a paleta acha tudo, o modo f
     await expect(lesson).toHaveAttribute('open', '')
     await expect(lesson).toContainText('lei de Ohm')
 
+    await page.waitForTimeout(AUTOSAVE_MS)
     await app.open()
+    await page.getByRole('dialog', { name: 'Recuperar trabalho não salvo' }).getByRole('button', { name: 'Descartar' }).click()
     expect(await page.evaluate(() => cm.store.getState().level)).toBe(1)
     await app.menu('Exibir', 'Modo da interface', 'Profissional')
     await page.getByRole('navigation', { name: 'Menu principal' }).getByRole('button', { name: 'Editar', exact: true }).click()
@@ -441,8 +443,8 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
 
     await page.keyboard.press('Control+k')
     const palette = page.getByRole('dialog', { name: 'Command palette' })
-    await palette.getByRole('combobox', { name: 'Search command' }).fill('copy')
-    await expect(palette.getByRole('option').first()).toContainText('Copy')
+    await palette.getByRole('combobox', { name: 'Search command' }).fill('undo history')
+    await expect(palette.getByRole('option').first()).toContainText('Undo history')
     await scan('Palette')
     await page.keyboard.press('Escape')
 
@@ -465,7 +467,7 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
     await page.evaluate(() => cm.store.getState().openSample('core/Button.fzz'))
     await expect.poll(() => app.message()).toBe('Button.fzz opened')
     await page.evaluate(() => cm.store.getState().setView('pcbView'))
-    await expect(page.locator('[data-drc]').first().or(page.getByRole('group', { name: 'PCB layers' }))).toBeVisible()
+    await expect(page.locator('[data-drc]').first().or(page.getByRole('group', { name: 'Layers' }))).toBeVisible()
     await scan('PCB')
 
     for (const panel of ['Routing', 'Document']) {

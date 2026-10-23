@@ -19,4 +19,6 @@ export const VIEW_LABELS: Record<typeof VIEWS[number], string> = {
     pcbView: 'PCB'
 }
 
+export const VIEW_BACKGROUNDS: Record<typeof VIEWS[number], string> = { breadboardView: '#ffffff', schematicView: '#ffffff', pcbView: '#333333' }    // ratsnestcolors.xml DO FRITZING
+
 export const getLayerZ = (view: ViewName, layer: string) => 1.5 + Math.max(0, VIEW_LAYERS[view].indexOf(layer))

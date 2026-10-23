@@ -753,6 +753,11 @@ pela vista; o ícone pode reutilizar o SVG de breadboard.
 
 ## 7. INDEXADOR DE PEÇAS (REQUISITOS PARA O CIRCUITMASTER)
 
+O indexador lê todos os `.fzb` de `fritzing-parts/bins`: Core e Simulador ficam fixos à frente e os outros abrem em
+abas pelo "+" (as abertas ficam gravadas); a aba Temp mostra as peças do sketch que não são do acervo. Pôr uma peça
+não espera o índice inteiro: o pedido de localização é respondido assim que o arquivo dela é lido, e o indexador lê 4
+arquivos por vez para deixar conexões livres para o resto do app.
+
 1. Varredura recursiva das pastas da seção 1.1; arquivo inválido é registrado e ignorado.
 2. Para cada `.fzp` guardar: `moduleId`, título, label, família, propriedades normalizadas, tags, taxonomia,
    autor, url, vistas → `image` e camadas, conectores (id, nome, tipo, `<p>` por vista), barramentos,
