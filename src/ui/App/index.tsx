@@ -40,6 +40,9 @@ const onKey = (event: KeyboardEvent) => {
 // ABA ESCONDIDA OU FECHANDO GRAVA JÁ O SALVAMENTO AUTOMÁTICO AGENDADO
 const onHide = (event: Event) => (event.type === 'pagehide' || document.visibilityState === 'hidden') && void useStore.getState().autosave.flush()    // NA RECARGA A PÁGINA SAI AINDA VISÍVEL
 
+// SOLTAR ALGO FORA DO QUADRO NÃO DEIXA O NAVEGADOR ABRIR O QUE FOI ARRASTADO (ISSO TROCARIA DE PÁGINA E O APP VOLTARIA PEDINDO PARA RECUPERAR O TRABALHO)
+const onStray = (event: DragEvent) => event.preventDefault()
+
 const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -58,10 +61,14 @@ export const App = () => {
         window.addEventListener('keydown', onKey)
         document.addEventListener('visibilitychange', onHide)
         window.addEventListener('pagehide', onHide)
+        window.addEventListener('dragover', onStray)
+        window.addEventListener('drop', onStray)
         return () => {
             window.removeEventListener('keydown', onKey)
             document.removeEventListener('visibilitychange', onHide)
             window.removeEventListener('pagehide', onHide)
+            window.removeEventListener('dragover', onStray)
+            window.removeEventListener('drop', onStray)
         }
     }, [])
 

@@ -29,16 +29,16 @@ describe('escala de tempo do circuito pelo deck (spec 04 §5.5)', () => {
         near(ring?.settling, 4 / (22 / (2 * 10e-3)))
     })
 
-    it('períodos das fontes PULSE e SIN e a janela de cada modelo de teste', () => {
+    it('períodos das fontes PULSE e SIN e a janela automática', () => {
         const square = getTiming(`${RC}\nVV2 5 0 PULSE(0 5 0 1m 1m 500m 1 0)`)
         const sine   = getTiming('VV1 1 0 SIN(0 0.5 1k 0 0 0)\nRR1 1 0 1k')
 
         expect(square.sources.map(source => [source.kind, source.period])).toEqual([['pulse', 1]])
         expect(sine.sources.map(source => [source.kind, source.period])).toEqual([['sin', 1e-3]])
-        expect(getWindow(getTiming(RC), 'step')).toEqual({ stop: 0.6, points: 500 })
-        expect(getWindow(getTiming(RLC), 'step')?.stop).toBe(6e-3)
-        expect(getWindow(square, 'square')?.stop).toBe(3)
-        expect(getWindow(sine, 'sine')).toEqual({ stop: 5e-3, points: 500 })
-        expect(getWindow(getTiming('VV1 1 0 DC 5\nRR1 1 0 1k'), 'auto')).toBeNull()
+        expect(getWindow(getTiming(RC))).toEqual({ stop: 0.6, points: 500 })
+        expect(getWindow(getTiming(RLC))?.stop).toBe(6e-3)
+        expect(getWindow(square)?.stop).toBe(3)
+        expect(getWindow(sine)).toEqual({ stop: 3e-3, points: 500 })
+        expect(getWindow(getTiming('VV1 1 0 DC 5\nRR1 1 0 1k'))).toBeNull()
     })
 })

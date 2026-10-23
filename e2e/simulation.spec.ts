@@ -9,15 +9,19 @@ const effect = (app: App, modelIndex: string) => app.page.evaluate(modelIndex =>
 const probes = (app: App) => app.page.evaluate(() => cm.store.getState().doc.probes.map(probe => probe.kind))
 
 for (const bench of BENCHES)
-    test(`Circuito de teste "${bench.title}" abre ligado, com pontas, e simula no transitório`, async ({ app, page }) => {
+    test(`Circuito de teste "${bench.title}" abre ligado, com pontas, e simula`, async ({ app, page }) => {
+        const still = bench.id === 'led'
         await app.menu('Simulação', 'Circuitos de teste', bench.title)
-        await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
+        await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe(still ? 'op' : 'tran')
         expect((await probes(app)).length).toBe(bench.probes.length)
-        await expect(page.getByRole('img', { name: 'Formas de onda da simulação no tempo' })).toBeVisible()
+        await expect(page.getByRole('img', { name: still ? 'Valores de regime da simulação' : 'Formas de onda da simulação no tempo' })).toBeVisible()
 
-        const dock = page.getByRole('region', { name: 'Simulação' })
-        await expect(dock.getByLabel('Medidas').getByText(/Inicial → final|Ganho|Período/).first()).toBeVisible()
-        await expect(dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { selected: true })).toHaveCount(1)
+        await page.evaluate(id => cm.store.getState().selectProbe(id), `P${bench.probes.findLastIndex(([kind]) => kind === 'voltage') + 1}`)
+        await expect(page.getByRole('complementary', { name: 'Inspetor' }).getByText(still ? 'Nada muda no tempo neste circuito: cada valor é o de regime (ponto de operação).' : /Inicial → final|Ganho|Período/).first()).toBeVisible()
+        expect(await page.evaluate(() => {
+            const { result, step } = cm.store.getState().simulation
+            return result?.circuit.simulated.some(modelIndex => result.getEffect(modelIndex, step).smoke)
+        })).toBe(false)
     })
 
 test('Pontas V, A e V·A, LED aceso no ponto de operação, multímetro, fumaça e parar', async ({ app, page }) => {
@@ -70,7 +74,7 @@ test('Pontas V, A e V·A, LED aceso no ponto de operação, multímetro, fumaça
     await expect.poll(async () => (await probes(app)).length).toBe(0)
 })
 
-test('Transitório: reproduzir, pausar, instante, janela e teste gravados no .fzz', async ({ app, page }) => {
+test('Transitório: reproduzir, pausar, instante, sinal da fonte e janela gravados no .fzz; Automático volta à janela do circuito', async ({ app, page }) => {
     await app.menu('Simulação', 'Circuitos de teste', 'Carga e descarga (onda quadrada)')
     await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
     const dock = page.getByRole('region', { name: 'Simulação' })
@@ -83,8 +87,9 @@ test('Transitório: reproduzir, pausar, instante, janela e teste gravados no .fz
     await expect.poll(step).toBeGreaterThan(0)
     await dock.getByRole('button', { name: 'Pausar' }).click()
 
-    await dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { name: 'Senoide' }).click()
-    await expect.poll(() => page.evaluate(() => Object.values(cm.store.getState().doc.projectProperties).join(' '))).toContain('sine')
+    await page.mouse.click(...await app.center('1'))
+    await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('tablist', { name: 'Sinal da fonte' }).getByRole('tab', { name: 'Senoide' }).click()
+    await expect.poll(() => page.evaluate(() => cm.store.getState().doc.instances['1'].properties.circuitmaster_signal)).toBe('sine')
     await expect.poll(() => app.simulated()).toBe('tran')
     const end = dock.getByRole('textbox', { name: 'Fim da janela' })
     await end.fill('5')
@@ -100,7 +105,18 @@ test('Transitório: reproduzir, pausar, instante, janela e teste gravados no .fz
     app.answers.push(true)
     await app.menu('Arquivo', 'Novo')
     await app.upload(saved.path)
-    await expect.poll(() => page.evaluate(() => Object.values(cm.store.getState().doc.projectProperties).join(' '))).toContain('custom')
+    await expect.poll(() => page.evaluate(() => {
+        const { doc } = cm.store.getState()
+        return [doc.projectProperties.circuitmaster_stop_time_s, Object.values(doc.instances).flatMap(instance => instance.properties.circuitmaster_signal ?? [])]
+    })).toEqual(['5ms', ['sine']])
+
+    await expect.poll(() => app.simulated()).toBe('tran')
+    await dock.getByRole('button', { name: 'Automático' }).click()
+    await expect(dock.getByRole('textbox', { name: 'Início da janela' })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => {
+        const analysis = cm.store.getState().simulation.result?.circuit.analysis
+        return analysis?.type === 'tran' ? analysis.t1 : null
+    })).toBeCloseTo(3)
 })
 
 test('Chave: selo abre e fecha; comutação no tempo programada no inspetor', async ({ app, page }) => {
@@ -141,41 +157,39 @@ test('Osciloscópio ligado ao circuito mostra o traço no transitório', async (
     await expect.poll(async () => Object.values((await effect(app, scope))?.scope ?? {}).flat().length, { timeout: 30000 }).toBeGreaterThan(0)
 })
 
-test('Painel único: abre sozinho ao simular, curvas com busca e caixa, medidas da curva escolhida, teste e opções no cabeçalho', async ({ app, page }) => {
-    const dock     = page.getByRole('region', { name: 'Simulação' })
-    const curves   = dock.getByLabel('Curvas')
-    const readings = dock.getByLabel('Medidas')
+test('Painel limpo: abre sozinho ao simular, só as pontas do usuário em pílulas com filtro, medidas no cartão da ponta, janela no cabeçalho e opções na aba Documento', async ({ app, page }) => {
+    const dock   = page.getByRole('region', { name: 'Simulação' })
+    const pills  = dock.getByRole('group', { name: 'Curvas' }).getByRole('button')
+    const filter = dock.getByRole('searchbox', { name: 'Filtrar curvas' })
+    const panel  = page.getByRole('complementary', { name: 'Inspetor' })
     await page.evaluate(() => cm.store.getState().setShow({ chart: false }))
     await expect(dock.getByRole('button', { name: 'Abrir simulação' })).toHaveAttribute('aria-expanded', 'false')
 
-    await app.menu('Simulação', 'Circuitos de teste', 'RLC série com sobressinal')
+    await app.menu('Simulação', 'Circuitos de teste', 'Carga do capacitor (RC)')
     await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
     await expect(dock.getByRole('button', { name: 'Recolher simulação' })).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByRole('img', { name: 'Formas de onda da simulação no tempo' })).toBeVisible()
-    await expect(readings).toContainText('Sobressinal')
+    await expect(pills).toHaveText(['P1 V', 'P2 I'])
+    await expect(dock).toContainText('P1 V: τ =')
     await app.shoot('painel-simulacao')
 
-    const boxes = curves.getByRole('checkbox')
-    const total = await boxes.count()
-    expect(total).toBeGreaterThan(1)
-    await curves.getByRole('searchbox', { name: 'Buscar curva' }).fill('P1')
-    await expect(boxes).toHaveCount(await curves.locator('.curve').filter({ hasText: 'P1' }).count())
-    await curves.getByRole('searchbox', { name: 'Buscar curva' }).fill('')
-    await expect(boxes).toHaveCount(total)
+    await filter.fill('P2')
+    await expect(pills).toHaveText(['P2 I'])
+    await filter.fill('')
+    await pills.first().click()
+    await expect(pills.first()).toHaveAttribute('aria-pressed', 'false')
+    expect(await page.evaluate(() => cm.store.getState().simulation.hidden)).toEqual(['p:P1:v'])
+    await pills.first().click()
+    await expect(pills.first()).toHaveAttribute('aria-pressed', 'true')
 
-    const label = await curves.locator('.curve').nth(1).textContent() ?? ''
-    await curves.locator('.curve').nth(1).click()
-    await expect(readings.getByRole('heading')).toHaveText(label)
-    const shown = () => page.evaluate(() => cm.store.getState().simulation.series.length)
-    await boxes.nth(1).click()
-    const before = await shown()
-    await boxes.nth(1).click()
-    await expect.poll(shown).not.toBe(before)
+    await page.evaluate(() => cm.store.getState().selectProbe('P1'))
+    await expect(panel.getByLabel('Medidas da tensão')).toContainText('Constante τ (63%)')
+    await expect(panel.getByLabel('Medidas da tensão')).toContainText('1ª ordem')
 
-    await dock.getByRole('tablist', { name: 'Teste' }).getByRole('tab', { name: 'Manual' }).click()
+    await expect(dock.getByRole('textbox', { name: 'Início da janela' })).toHaveCount(0)
+    await dock.getByRole('textbox', { name: 'Fim da janela' }).fill('20')
+    await dock.getByRole('textbox', { name: 'Fim da janela' }).press('Enter')
     await expect(dock.getByRole('textbox', { name: 'Início da janela' })).toBeVisible()
-    await dock.getByRole('button', { name: 'Mais opções da simulação' }).click()
-    await expect(dock.getByRole('dialog', { name: 'Opções da simulação' })).toContainText('Amostragem do teste manual')
-    await page.keyboard.press('Escape')
-    await expect(dock.getByRole('dialog', { name: 'Opções da simulação' })).toHaveCount(0)
+    await page.getByRole('tab', { name: 'Documento' }).click()
+    await expect(panel.getByLabel('Opções da simulação')).toContainText('Janela manual')
 })

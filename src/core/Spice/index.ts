@@ -4,10 +4,11 @@ import { Netlist } from '../Netlist'
 import type { Part } from '../Part'
 import type { Instance } from '../Sketch'
 import { getSymbol, parseSi } from '../Properties'
-import { getTiming, getWindow, joinTiming, spiceNumber, type Preset, type Timing } from '../Timing'
+import { getTiming, getWindow, joinTiming, spiceNumber, type Timing } from '../Timing'
 
 export type Initial  = 'op' | 'zero'
-export type Mode     = Preset | 'custom'
+export type Mode     = 'auto' | 'custom'
+export type Signal   = 'dc' | 'step' | 'ramp' | 'sine' | 'square'
 export type Analysis = { type: 'op' } | { type: 'tran', t0: number, t1: number, step: number, steps: number, interval: number, mode: Mode, initial: Initial }
 export type Meter    = { node: string | null, current: string | null, sign: number, open: boolean }
 export type Circuit  = { deck: string, source: string, nodes: Map<string, string>, simulated: string[], analysis: Analysis, meters: Map<string, Meter> }
@@ -22,12 +23,19 @@ const TOKEN         = /\{([^{}]*)\}/
 
 export const START_KEY   = 'circuitmaster_start_time_s'    // JANELA DO TRANSITÓRIO ESCOLHIDA PELO USUÁRIO; O FRITZING IGNORA (SPEC 04 §9)
 export const STOP_KEY    = 'circuitmaster_stop_time_s'
-export const PRESET_KEY  = 'circuitmaster_preset'          // MODELO DE TESTE DO TRANSITÓRIO (SPEC 04 §5.5)
 export const INITIAL_KEY = 'circuitmaster_initial'         // zero: CAPACITORES E INDUTORES DESCARREGADOS EM t = 0 (UIC)
 export const SWITCH_KEY  = 'circuitmaster_switching'       // COMUTAÇÃO PROGRAMADA DAS CHAVES NO TRANSITÓRIO, EM JSON (SPEC 04 §8.10)
-export const MODES: Mode[] = ['auto', 'step', 'square', 'sine', 'custom']
-
-export const PROJECT_DEFAULTS: Record<string, string> = { simulator_time_step_mode: 'false', simulator_number_of_steps: '400', simulator_time_step_s: '1us', simulator_animation_time_s: '3s', simulator_spice_options: '', [START_KEY]: '', [STOP_KEY]: '', [PRESET_KEY]: '', [INITIAL_KEY]: '' }
+export const SIGNAL_KEY    = 'circuitmaster_signal'       // SINAL DA FONTE DE TENSÃO: CONTÍNUO, DEGRAU, RAMPA, SENOIDE OU ONDA QUADRADA (PEDIDO DO USUÁRIO, 2026-10-23)
+export const FREQUENCY_KEY = 'circuitmaster_frequency'    // FREQUÊNCIA DA SENOIDE E DA ONDA QUADRADA; VAZIA, SAI DA CONSTANTE DE TEMPO DO CIRCUITO
+export const RAMP_KEY      = 'circuitmaster_ramp'         // DURAÇÃO DA RAMPA; VAZIA, 5τ
+export const SIGNALS: [Signal, string, string][] = [
+    ['dc', 'Contínuo', 'Tensão constante: o circuito em regime.'],
+    ['step', 'Degrau', 'De 0 à tensão da fonte em t = 0, com o circuito descarregado: subida, τ e sobressinal.'],
+    ['ramp', 'Rampa', 'Sobe de 0 à tensão da fonte ao longo da duração (automática: 5 constantes de tempo do circuito).'],
+    ['sine', 'Senoide', 'Amplitude igual à tensão da fonte; frequência automática na de corte do circuito: ganho e fase.'],
+    ['square', 'Onda quadrada', 'De 0 à tensão da fonte; período automático de 10 constantes de tempo: carga e descarga.']
+]
+export const PROJECT_DEFAULTS: Record<string, string> = { simulator_time_step_mode: 'false', simulator_number_of_steps: '400', simulator_time_step_s: '1us', simulator_animation_time_s: '3s', simulator_spice_options: '', [START_KEY]: '', [STOP_KEY]: '', [INITIAL_KEY]: '' }
 
 // AS VARIANTES AC DO MULTÍMETRO NÃO TÊM <spice> NO ACERVO: USAM O MODELO DA VARIANTE DC (SPEC 04 §8.6)
 const AC_SPICE: Record<string, string[]> = {
@@ -178,23 +186,16 @@ export const replaceIlimit = (deck: string) => {
 
         const [name, input, pos, neg, out] = fields
         const target = `${model.gain}*(V(${input})+${model.in_offset})`
-        return [`B${name.slice(1)}p ${pos} ${out} I=min(max((${target}-V(${out}))/${model.r_out_source},0),${model.i_limit_source})`, `B${name.slice(1)}n ${out} ${neg} I=min(max((V(${out})-${target})/${model.r_out_sink},0),${model.i_limit_sink})`]
+        return [`B${name.slice(1)}p ${pos} ${out} I=min(max(0,(${target}-V(${out}))/${model.r_out_source}),${model.i_limit_source})`, `B${name.slice(1)}n ${out} ${neg} I=min(max(0,(V(${out})-${target})/${model.r_out_sink}),${model.i_limit_sink})`]    // NO EMPATE A DERIVADA DO max DO NGSPICE É A DO 2º ARGUMENTO: COM CORRENTE ZERO (CARGA SÓ CAPACITIVA) A SAÍDA MANTÉM 1/r E NÃO FICA SOLTA
     }).join('\n')
 }
 
 export const projectValue = (doc: Doc, key: string) => doc.projectProperties[key] ?? PROJECT_DEFAULTS[key]
 
-// MODELO DE TESTE DO PROJETO; SEM ELE, UMA JANELA GRAVADA PELO USUÁRIO É PERSONALIZADA E O RESTO É AUTOMÁTICO
-export const getMode = (doc: Doc): Mode => {
-    const value = projectValue(doc, PRESET_KEY) as Mode
+// JANELA DO PROJETO: MANUAL QUANDO O USUÁRIO DIGITOU O FIM DO TEMPO DE SIMULAÇÃO, SENÃO AUTOMÁTICA
+export const getMode = (doc: Doc): Mode => parseSi(projectValue(doc, STOP_KEY), 's') !== null ? 'custom' : 'auto'
 
-    if (MODES.includes(value))
-        return value
-
-    return parseSi(projectValue(doc, STOP_KEY), 's') !== null ? 'custom' : 'auto'
-}
-
-// JANELA E PASSO DO TRANSITÓRIO: PERSONALIZADO USA A JANELA E O PASSO DO USUÁRIO; AUTOMÁTICO USA A DOS OSCILOSCÓPIOS OU A ESCALA DE TEMPO DO CIRCUITO (SEM NENHUMA, 0–10 s); OS OUTROS MODELOS SÓ A ESCALA. DEGRAU PARTE DO CIRCUITO DESCARREGADO; ANIMAÇÃO NEGATIVA É TEMPO REAL E ZERO MOSTRA O FIM DE UMA VEZ (SPEC 04 §5.2, §5.5)
+// JANELA E PASSO DO TRANSITÓRIO: MANUAL USA A JANELA E O PASSO DO USUÁRIO; AUTOMÁTICO USA A DOS OSCILOSCÓPIOS OU A ESCALA DE TEMPO DO CIRCUITO COM OS SINAIS DAS FONTES (SEM NENHUMA, 0–10 s); ANIMAÇÃO NEGATIVA É TEMPO REAL E ZERO MOSTRA O FIM DE UMA VEZ (SPEC 04 §5.2, §5.5)
 export const getTransient = (doc: Doc, library: Library, simulated: string[], timing: Timing): Extract<Analysis, { type: 'tran' }> => {
     const scopes = simulated.map(modelIndex => doc.instances[modelIndex]).filter(instance => (library.getPart(instance.moduleIdRef)?.properties.family ?? '').toLowerCase().includes('oscilloscope'))
     const ranges = scopes.map(instance => {
@@ -203,13 +204,11 @@ export const getTransient = (doc: Doc, library: Library, simulated: string[], ti
         return [hpos, hpos + 10 * (parseSi(getProperty(part, instance, 'time/div'), 's') ?? 0)]
     })
 
-    const mode      = getMode(doc)
     const start     = parseSi(projectValue(doc, START_KEY), 's') ?? 0
     const stop      = parseSi(projectValue(doc, STOP_KEY), 's')
-    const custom    = mode === 'custom' && stop !== null && stop > start && start >= 0
-    const auto      = mode === 'auto' || (mode === 'custom' && !custom)
+    const custom    = stop !== null && stop > start && start >= 0
     const asked     = parseSi(projectValue(doc, 'simulator_number_of_steps')) || 400
-    const window    = custom || (auto && ranges.length) ? null : getWindow(timing, auto ? 'auto' : mode as Preset, auto ? asked : undefined)
+    const window    = custom || ranges.length ? null : getWindow(timing, asked)
     const scoped    = ranges.length && Math.max(...ranges.map(range => range[1])) > 0
     const t0        = custom ? start : window || !ranges.length ? WINDOW[0] : Math.min(...ranges.map(range => range[0]))
     const t1        = custom && stop !== null ? stop : window ? window.stop : scoped ? Math.max(...ranges.map(range => range[1])) : WINDOW[1]
@@ -219,8 +218,8 @@ export const getTransient = (doc: Doc, library: Library, simulated: string[], ti
     const steps     = Math.max(1, Math.round((t1 - t0) / step))
     const animation = parseSi(projectValue(doc, 'simulator_animation_time_s'), 's') ?? 0
     const interval  = animation < 0 ? (t1 - t0) * 1000 / steps : animation * 1000 / steps
-    const initial   = mode === 'step' || (mode === 'custom' && projectValue(doc, INITIAL_KEY) === 'zero') ? 'zero' : 'op'
-    return { type: 'tran', t0, t1, step, steps, interval, mode, initial }
+    const initial   = custom && projectValue(doc, INITIAL_KEY) === 'zero' ? 'zero' : 'op'
+    return { type: 'tran', t0, t1, step, steps, interval, mode: custom ? 'custom' : 'auto', initial }
 }
 
 // DIRETIVA DO TRANSITÓRIO; COM O CIRCUITO DESCARREGADO, UIC USA OS IC=0 DOS CAPACITORES E INDUTORES EM VEZ DO PONTO DE OPERAÇÃO
@@ -303,6 +302,34 @@ const switchLines = (instance: Instance, nodes: Map<string, string>, plan: Plan,
     return wave + variants.flatMap(([moduleId, pressed, tag]) => contacts(moduleId).map(([a, b, ohms], i) => `B${title}_${tag}${i} ${a} ${b} I=${volts(a, b)}*(${G_OPEN}+${1 / ohms - G_OPEN}*${share(pressed)})\n`)).join('')
 }
 
+const VOLTAGE   = /^(V.*?\s)(?:DC\s+)?\{voltage\}\s*$/i    // LINHA DA FONTE DE TENSÃO DO ACERVO (FONTE DC, BATERIA, FONTE DE BANCADA) QUE GANHA O SINAL
+const EDGE      = 1e-3    // FRAÇÃO DO PERÍODO (OU DA ESCALA) NAS BORDAS DO DEGRAU E DA ONDA QUADRADA
+const SCALE     = 1e-3    // s, ESCALA DE TEMPO DE UM CIRCUITO SEM CONSTANTE DE TEMPO (SÓ RESISTORES)
+const RAMP_TAUS = 5       // DURAÇÃO PADRÃO DA RAMPA EM ESCALAS DE TEMPO DO CIRCUITO
+
+export const isVoltageSource = (part: Part | undefined) => part !== undefined && getSpice(part).lines.some(line => VOLTAGE.test(line))
+
+export const signalOf = (instance: Instance): Signal => SIGNALS.find(([id]) => id === instance.properties[SIGNAL_KEY])?.[0] ?? 'dc'
+
+// ESCALA DE TEMPO DO CIRCUITO COM AS FONTES CONTÍNUAS: A MAIOR CONSTANTE DE TEMPO, SENÃO O PERÍODO DA RESSONÂNCIA MAIS LENTA
+const scaleOf = (timing: Timing) => Math.max(0, ...timing.constants) || Math.max(0, ...timing.resonances.map(item => 1 / item.frequency)) || SCALE
+
+const rampOf = (instance: Instance, scale: number) => parseSi(instance.properties[RAMP_KEY] ?? '', 's') ?? RAMP_TAUS * scale
+
+// A TENSÃO DA FONTE TROCADA PELO SINAL ESCOLHIDO NELA; COMEÇANDO EM 0, O PONTO DE OPERAÇÃO DE t = 0 JÁ É O CIRCUITO EM REPOUSO
+export const signalWave = (instance: Instance, volts: string, scale: number) => {
+    const signal = signalOf(instance)
+    const sine   = signal === 'sine'
+    const period = 1 / (parseSi(instance.properties[FREQUENCY_KEY] ?? '', 'Hz') ?? (sine ? 1 / (2 * Math.PI * scale) : 1 / (10 * scale)))
+    const ramp   = rampOf(instance, scale)
+    const edge   = (signal === 'square' ? period : scale) * EDGE
+
+    return signal === 'step'   ? `PWL(0 0 ${edge} ${volts})` :
+           signal === 'ramp'   ? `PWL(0 0 ${ramp} ${volts})` :
+           signal === 'sine'   ? `SIN(0 ${volts} ${1 / period} 0 0 0)` :
+           signal === 'square' ? `PULSE(0 ${volts} 0 ${edge} ${edge} ${period / 2 - edge} ${period} 0)` : `DC ${volts}`
+}
+
 // DECK DO NGSPICE A PARTIR DO GRAFO: PEÇAS COM <spice> LIGADAS A ALGUMA NET COM 2+ MEMBROS, MAIS UMA FONTE DE 0 V POR PONTA DE CORRENTE (SPEC 04 §2–§4, §8.7)
 export const buildCircuit = (doc: Doc, library: Library, netlist: Netlist, transient: boolean): Circuit => {
     const ground    = getNets(doc, library, netlist)[0]?.[0] ?? null
@@ -333,17 +360,22 @@ export const buildCircuit = (doc: Doc, library: Library, netlist: Netlist, trans
 
     const plans    = transient ? getSwitching(doc) : {}
     const timed    = (instance: Instance) => plans[instance.modelIndex] && library.getPart(plans[instance.modelIndex].pressed) && library.getPart(plans[instance.modelIndex].released) ? plans[instance.modelIndex] : null
-    const linesFor = (ramp: number | 'pressed' | 'released') => simulated.map(instance => {
+    const linesFor = (ramp: number | 'pressed' | 'released', scale: number | null = null) => simulated.map(instance => {
         const part = library.getPart(instance.moduleIdRef) as Part
         const plan = timed(instance)
-        return plan ? switchLines(instance, nodes, plan, library, part.properties['switch status'] === 'Pressed', ramp) : substitute(getSpice(part).lines.map(line => `${line}\n`).join(''), resolver(part, instance, nodes))
+        const own  = getSpice(part).lines.map(line => scale !== null ? line.replace(VOLTAGE, (_, head: string) => head + signalWave(instance, '{voltage}', scale)) : line)
+        return plan ? switchLines(instance, nodes, plan, library, part.properties['switch status'] === 'Pressed', ramp) : substitute(own.map(line => `${line}\n`).join(''), resolver(part, instance, nodes))
     })
     const sources  = placed.map(({ id, a, b }) => `${probeSource(id)} ${a} ${b} DC 0\n`)
     const models   = [...new Map(simulated.map(instance => getSpice(library.getPart(instance.moduleIdRef) as Part).models.join('\n')).filter(Boolean).map(model => [model.toLowerCase(), model] as const)).values()]
     const indexes  = simulated.map(instance => instance.modelIndex)
-    const timing   = transient ? joinTiming((['pressed', 'released'] as const).map(state => getTiming(linesFor(state).join('') + sources.join('')))) : null
+    const timingOf = (scale: number | null) => joinTiming((['pressed', 'released'] as const).map(state => getTiming(linesFor(state, scale).join('') + sources.join(''))))
+    const scale    = transient ? scaleOf(timingOf(null)) : null
+    const base     = scale !== null ? timingOf(scale) : null
+    const ramps    = scale !== null ? simulated.filter(instance => signalOf(instance) === 'ramp' && isVoltageSource(library.getPart(instance.moduleIdRef))).map(instance => rampOf(instance, scale)) : []
+    const timing   = base && { ...base, events: [...base.events, ...ramps] }    // O FIM DA RAMPA CONTA COMO COMUTAÇÃO: A JANELA VAI ATÉ ACOMODAR DEPOIS DELE
     const analysis = timing ? getTransient(doc, library, indexes, timing) : { type: 'op' as const }
-    const lines    = linesFor(analysis.type === 'tran' ? analysis.step * RAMP : 'pressed')
+    const lines    = linesFor(analysis.type === 'tran' ? analysis.step * RAMP : 'pressed', scale)
     const command  = analysis.type === 'tran' ? tranCommand(analysis) : '.OP'
     const options  = projectValue(doc, 'simulator_spice_options')
     const deck     = [TITLE, lines.join('') + sources.join(''), ...models, '.option savecurrents', '.option interp', ...options ? [options] : [], command, '*.TRAN 1ms 100ms', '* .AC DEC 100 100 1MEG', '.END'].join('\n')

@@ -196,16 +196,14 @@ export const joinTiming = (timings: Timing[]): Timing => ({
     events: [...new Set(timings.flatMap(timing => timing.events))]
 })
 
-export type Preset = 'auto' | 'step' | 'square' | 'sine'
 export type Window = { stop: number, points: number }
 
 const SETTLE     = 6         // CONSTANTES DE TEMPO ATÉ A RESPOSTA DE 1ª ORDEM FICAR A 0,25% DO FINAL
 const MARGIN     = 1.5       // FOLGA SOBRE A ACOMODAÇÃO DE 2ª ORDEM
 const UNDAMPED   = 10        // PERÍODOS MOSTRADOS DE UMA RESSONÂNCIA SEM PERDAS
-const PULSES     = 3         // PERÍODOS DA ONDA QUADRADA
-const CYCLES     = 5         // PERÍODOS DA SENOIDE
+const PULSES     = 3         // PERÍODOS MOSTRADOS DA FONTE MAIS LENTA
 const PER_CYCLE  = 40        // AMOSTRAS POR PERÍODO DA OSCILAÇÃO MAIS RÁPIDA
-const POINTS     = 500       // AMOSTRAS DOS MODELOS DE TESTE
+const POINTS     = 500       // AMOSTRAS DA JANELA AUTOMÁTICA
 const MAX_POINTS = 20000
 const LIMITS     = [1e-9, 1e4]    // s
 
@@ -218,16 +216,16 @@ const nice = (value: number) => {
     return NICE.map(factor => Number((factor * base).toPrecision(12))).find(candidate => candidate >= value * (1 - SLACK)) ?? 10 * base
 }
 
-// JANELA DE CADA MODELO DE TESTE: DEGRAU ATÉ ACOMODAR (6τ OU 1,5× A ACOMODAÇÃO DE 2ª ORDEM), ONDA QUADRADA EM 3 PERÍODOS DO PULSO, SENOIDE EM 5 PERÍODOS, AUTOMÁTICO O MAIOR DE TODOS, SEMPRE ATÉ ACOMODAR DEPOIS DA ÚLTIMA COMUTAÇÃO PROGRAMADA; AMOSTRAS PARA 40 POR OSCILAÇÃO; NULO SEM ESCALA NENHUMA (SPEC 04 §5.5)
-export const getWindow = (timing: Timing, preset: Preset, points = POINTS): Window | null => {
+// JANELA AUTOMÁTICA: ATÉ ACOMODAR (6τ OU 1,5× A ACOMODAÇÃO DE 2ª ORDEM) E PELO MENOS 3 PERÍODOS DA FONTE MAIS LENTA, SEMPRE ATÉ ACOMODAR DEPOIS DA ÚLTIMA COMUTAÇÃO PROGRAMADA; AMOSTRAS PARA 40 POR OSCILAÇÃO; NULO SEM ESCALA NENHUMA (SPEC 04 §5.5)
+export const getWindow = (timing: Timing, points = POINTS): Window | null => {
     const tau      = Math.max(0, ...timing.constants)
     const settle   = Math.max(SETTLE * tau, ...timing.resonances.map(item => Number.isFinite(item.settling) ? MARGIN * item.settling : UNDAMPED / item.frequency), 0)
-    const longest  = (kind: Source['kind'] | null, count: number) => Math.max(0, ...timing.sources.filter(item => !kind || item.kind === kind).map(item => item.delay + count * item.period))
+    const periods  = Math.max(0, ...timing.sources.map(item => item.delay + PULSES * item.period))
     const last     = Math.max(0, ...timing.events)
-    const after    = (span: number) => last ? Math.max(span, last + (settle || last)) : span
-    const options  = { step: after(settle || longest(null, PULSES)), square: after(longest('pulse', PULSES) || settle), sine: after(longest('sin', CYCLES) || Math.max(settle, longest(null, PULSES))), auto: after(Math.max(settle, longest(null, PULSES))) }
+    const span     = Math.max(settle, periods)
+    const wanted   = last ? Math.max(span, last + (settle || last)) : span
     const fastest  = Math.min(...timing.sources.map(item => item.period), ...timing.resonances.map(item => 1 / item.frequency))
-    const stop     = options[preset] > 0 ? nice(Math.min(LIMITS[1], Math.max(LIMITS[0], options[preset]))) : 0
+    const stop     = wanted > 0 ? nice(Math.min(LIMITS[1], Math.max(LIMITS[0], wanted))) : 0
 
     if (!stop)
         return null

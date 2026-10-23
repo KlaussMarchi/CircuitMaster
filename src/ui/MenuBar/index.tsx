@@ -9,8 +9,6 @@ import { needsBoard, type ExportKind } from '../Export'
 import { useStore } from '../Store'
 import { getKeyAction, shortcutOf } from '../Keys'
 import { BENCHES } from '../../engine/Bench'
-import { getMode } from '../../core/Spice'
-import { TESTS } from '../SimulationPanel'
 import { LAYER_GROUPS } from '../Layers'
 import { LEVELS } from '../Modes'
 import { LANGUAGES, t } from '../../core/Text'
@@ -220,19 +218,15 @@ const routingMenu = (state: State): MenuEntry[] => {
 
 const PROBE_ITEMS: [string, ProbeKind][] = [['Ponta de tensão', 'voltage'], ['Ponta de corrente', 'current'], ['Ponta de tensão e corrente', 'both']]
 
-const simulationMenu = (state: State): MenuEntry[] => {
-    const mode = getMode(state.doc)
-    return [
-        { label: state.simulation.enabled ? 'Parar a simulação' : 'Simular', apply: state.toggleSimulation },
-        { label: 'Teste', items: TESTS.map(([id, label]): MenuEntry => ({ label, checked: mode === id, apply: () => state.setTest(id) })) },
-        { label: 'Painel de simulação', checked: state.show.chart, apply: () => state.setShow({ chart: !state.show.chart }) },
-        null,
-        ...PROBE_ITEMS.map(([label, kind]): MenuEntry => ({ label, checked: state.tool === kind, disabled: state.view === 'pcbView', apply: () => state.setTool(kind) })),
-        { label: 'Remover todas as pontas de prova', disabled: !state.doc.probes.length, apply: () => state.removeProbes(state.doc.probes.map(probe => probe.id)) },
-        null,
-        { label: 'Circuitos de teste', items: BENCHES.map(bench => ({ label: bench.title, apply: () => void state.openBench(bench.id) })) }
-    ]
-}
+const simulationMenu = (state: State): MenuEntry[] => [
+    { label: state.simulation.enabled ? 'Parar a simulação' : 'Simular', apply: state.toggleSimulation },
+    { label: 'Painel de simulação', checked: state.show.chart, apply: () => state.setShow({ chart: !state.show.chart }) },
+    null,
+    ...PROBE_ITEMS.map(([label, kind]): MenuEntry => ({ label, checked: state.tool === kind, disabled: state.view === 'pcbView', apply: () => state.setTool(kind) })),
+    { label: 'Remover todas as pontas de prova', disabled: !state.doc.probes.length, apply: () => state.removeProbes(state.doc.probes.map(probe => probe.id)) },
+    null,
+    { label: 'Circuitos de teste', items: BENCHES.map(bench => ({ label: bench.title, apply: () => void state.openBench(bench.id) })) }
+]
 
 const helpMenu = (state: State): MenuEntry[] => [
     { label: 'Paleta de comandos', shortcut: shortcutOf(state.keys, 'palette'), apply: () => useStore.setState({ dialog: 'palette' }) },

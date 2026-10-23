@@ -6,7 +6,9 @@ import type { Point } from '../../core/Geometry'
 import { getSymbol, parseSi } from '../../core/Properties'
 import { getProperty, getSpice, type Circuit } from '../../core/Spice'
 import type { Vectors } from '../../core/Ngspice'
+import { getElements, getTiming, type Source } from '../../core/Timing'
 import { milsToPx } from '../../core/Units'
+import { getReport } from '../Response'
 
 export type Trace   = { color: string, points: Point[], label: string, marker: number, at: Point }
 export type Effect  = { smoke: boolean, color: string | null, light: number, display: string[] | null, arrow: 'cw' | 'ccw' | null, scope: Partial<Record<'breadboardView' | 'schematicView', Trace[]>> | null }
@@ -101,6 +103,8 @@ export class Simulation {
     vectors: Vectors
     steps: number
     still: boolean | null = null
+    lasting = new Map<string, boolean>()
+    stimulus: { source: Source | null, input: Float64Array | null, driven: Set<string>, events: number[] } | null = null
 
     constructor(doc: Doc, library: Library, circuit: Circuit, vectors: Vectors) {
         this.doc     = doc
@@ -114,6 +118,38 @@ export class Simulation {
     isStill() {
         this.still ??= this.circuit.analysis.type === 'op' || Object.entries(this.vectors).every(([name, values]) => name === 'time' || isFlat(...span(values), STILL))
         return this.still
+    }
+
+    // FONTE QUE DÁ O ESTÍMULO (SENOIDE ANTES DE PULSO), A TENSÃO NOS TERMINAIS DELA E OS NÓS LIGADOS A FONTES, QUE NÃO SÃO SAÍDA; UM NÓ FORA DAS NETS É O INTERNO ENTRE A FONTE E A RESISTÊNCIA INTERNA, QUE LEVA AO TERMINAL; AS FONTES DE 0 V DAS PONTAS NÃO CONTAM
+    getStimulus() {
+        if (this.stimulus)
+            return this.stimulus
+
+        const elements = getElements(this.circuit.deck)
+        const nets     = new Set(this.circuit.nodes.values())
+        const supplies = elements.filter(element => element.kind === 'v' && !/^vprobe_/i.test(element.name))
+        const timing   = getTiming(this.circuit.deck)
+        const source   = timing.sources.find(item => item.kind === 'sin') ?? timing.sources.find(item => item.kind === 'pulse') ?? null
+        const outer    = (node: string) => (nets.has(node) ? node : elements.find(element => element.kind === 'r' && element.nodes.includes(node))?.nodes.find(other => other !== node) ?? node).toLowerCase()
+        const nodes    = (supplies.find(element => element.name === source?.name)?.nodes ?? []).map(outer)
+        const input    = nodes.length === 2 ? Float64Array.from(this.getNodeSeries(nodes[0]), (value, i) => value - this.getNodeSeries(nodes[1])[i]) : null
+        this.stimulus  = { source, input, driven: new Set(supplies.flatMap(element => element.nodes.map(outer))), events: timing.events }
+        return this.stimulus
+    }
+
+    // RESPOSTA DE UMA CURVA AO ESTÍMULO: GANHO E FASE COM SENOIDE, DEGRAU COM PULSO, COMUTAÇÃO OU NA JANELA TODA; NULA NO REGIME (SPEC 04 §8.8)
+    getResponse(values: ArrayLike<number>) {
+        const time     = this.vectors.time
+        const stimulus = this.getStimulus()
+        return time && this.circuit.analysis.type === 'tran' && !this.isStill() ? getReport(time, values, stimulus.source, stimulus.input, stimulus.events) : null
+    }
+
+    // CORRENTE ACIMA DO LIMITE TAMBÉM NA SEGUNDA METADE DA JANELA: O PICO DE CARGA DE UM CAPACITOR NO COMEÇO DO DEGRAU NÃO É CURTO, A SOBRECARGA DE CADA CICLO DE UMA SENOIDE É
+    isLasting(modelIndex: string, limit: number) {
+        if (!this.lasting.has(modelIndex))
+            this.lasting.set(modelIndex, Array.from({ length: Math.ceil(this.steps / 2) }, (_, i) => this.steps - 1 - i).some(step => Math.abs(this.getCurrent(modelIndex, step)) > limit))
+
+        return this.lasting.get(modelIndex) as boolean
     }
 
     getTime(step: number) {
@@ -327,7 +363,8 @@ export class Simulation {
 
         if (family === 'source') {
             const current = this.getCurrent(modelIndex, step)
-            const short   = Math.abs(current) > SAFETY * this.getMax(modelIndex, 'voltage') / this.getMax(modelIndex, 'internal resistance')
+            const limit   = SAFETY * this.getMax(modelIndex, 'voltage') / this.getMax(modelIndex, 'internal resistance')
+            const short   = Math.abs(current) > limit && this.isLasting(modelIndex, limit)
             const lab     = part.moduleId.includes('LabDCPowerSupply')
             return { ...effect, smoke: short, display: lab ? [toDisplay(this.getBetween(keyOf(modelIndex, 'connector0'), keyOf(modelIndex, 'connector1'), step)), toDisplay(-current)] : null }
         }

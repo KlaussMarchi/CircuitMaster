@@ -36,21 +36,24 @@ teste de clareza de cada função existente. Fase 2 do plano `FRIZING_KICAD.md` 
 | Inspetor (`ui/SidePanel`) | Propriedades (`ui/Inspector`), Roteamento (`ui/RoutingPanel`) e Documento (`ui/ProjectPanel`) |
 | Barra de status (`ui/StatusBar`) | vista, peças, ligações pendentes, a última mensagem, o autorouter em andamento, as coordenadas do cursor (do Maker em diante, §11) e o zoom |
 
-Até 1280 px os painéis estreitam e curvas e medidas da doca dividem a coluna da esquerda; até 860 px (celular) o
+Até 1280 px os painéis estreitam; até 860 px (celular) o
 trilho vira barra inferior, os painéis viram folhas sobre o quadro e a doca empilha.
 
 ## 3. DECISÕES DO USUÁRIO
 
 1. **Abre no Esquemático**: o app, o sketch novo e o arquivo aberto (`START_VIEW` em `ui/Store`).
-2. **Uma simulação só**: saiu o seletor DC/Transitório. Simular roda o transitório na janela do teste; se todo vetor
-   fica parado (até 10⁻⁴ do nível, `Simulation.isStill()`), mostra o regime sem animação e diz a causa quando o teste
-   pedia variação. Os valores sobre o circuito seguem o instante corrente; editar com o simulador ligado retoma do
+2. **Uma simulação só**: saiu o seletor DC/Transitório. Simular roda o transitório na janela automática; se todo
+   vetor fica parado (até 10⁻⁴ do nível, `Simulation.isStill()`), mostra o regime sem animação e diz como fazer
+   variar (o sinal na fonte de tensão). Os valores sobre o circuito seguem o instante corrente; editar com o simulador ligado retoma do
    passo corrente; o `.fzz` segue gravando as propriedades `simulator_*` (spec 04 §5.1).
-3. **Um painel de simulação só**, aberto sozinho ao simular: no cabeçalho o teste (Automático, Degrau, Onda quadrada,
-   Senoide, Manual), o fim da janela (o Manual mostra início e fim ali), reproduzir/pausar, a barra de tempo e "⋯"
-   (animação, valores sobre o circuito, amostragem do manual, opções do SPICE); no corpo as curvas (busca, caixa,
-   cor; o nome escolhe a curva medida), o gráfico sempre visível e as medidas da curva escolhida (no cursor, média,
-   RMS, pico a pico e, quando valem, período, subida, τ, sobressinal, acomodação, ζ, ganho e fase).
+3. **Um painel de simulação só**, aberto sozinho ao simular. **Decisão do usuário de 2026-10-23**, que substitui a
+   primeira forma: o estímulo fica na própria fonte de tensão (controle Sinal no inspetor: Contínuo, Degrau, Rampa,
+   Senoide, Onda quadrada; spec 04 §5.5) e o painel fica o mais limpo possível: no cabeçalho o tempo de simulação
+   (digitar o fim o fixa, com o início ao lado e Automático para voltar), reproduzir/pausar e a barra de tempo; no
+   topo do corpo só as pontas que o usuário pôs, uma pílula por curva que mostra ou esconde, com filtro; embaixo o
+   gráfico. As medidas (média, RMS, pico a pico e, quando valem, período, subida, τ, sobressinal, acomodação, ζ,
+   ganho e fase) vão para o cartão da ponta no inspetor; animação, valores sobre o circuito, janela manual e opções
+   do SPICE, para a aba Documento.
 4. **As análises do KiCad (fase 9) entram nesse painel** como formas de ver o resultado; o seletor de análise antes de
    simular não volta.
 
@@ -203,9 +206,9 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Trocar de vista | clica em Protoboard, Esquemático ou PCB na barra superior |
 | Simular | clica em Simular |
 | Medir um fio ou terminal | clica em V, A ou V·A e no fio |
-| Ver a carga de um capacitor | Simular e Degrau no painel |
-| Ver o ganho de um amplificador | Simular e Senoide no painel |
-| Ver as medidas de uma curva | clica no nome da curva no painel |
+| Ver a carga de um capacitor | clica na fonte, Degrau em Sinal e Simular |
+| Ver o ganho de um amplificador | clica na fonte, Senoide em Sinal e Simular |
+| Ver as medidas de uma curva | clica na ponta de prova no quadro |
 | Escolher a janela de tempo | digita o fim da janela no cabeçalho do painel |
 | Abrir ou fechar uma chave na simulação | clica no selo acima da chave |
 | Programar a chave no tempo | seleciona e "Programar comutação" no inspetor |
@@ -242,11 +245,11 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 |---|---|---|
 | Começar a desenhar no esquemático | 1 (o app abria na protoboard) | 0 |
 | Ver o circuito no tempo | 2 (Transitório + Simular) | 1 (Simular) |
-| Gráfico e medidas depois de simular | 0 a 1 (trocar de aba) | 0 |
-| Trocar o teste para Degrau | 2, só com Transitório ligado | 1 |
+| Gráfico e medidas depois de simular | 0 a 1 (trocar de aba) | 0 o gráfico; 1 as medidas (clicar na ponta) |
+| Trocar o estímulo para Degrau | 2, só com Transitório ligado | 1 (Degrau na fonte selecionada) |
 | Ver τ, sobressinal e acomodação | 1 (aba Resposta) | 0 |
 | Janela manual | 3 | 1 |
-| Opções raras da simulação | 1 + rolar | 1 ("⋯") |
+| Opções raras da simulação | 1 + rolar | 1 (aba Documento) |
 | Achar uma ação sem saber o menu | percorrer os menus | 2 (Ctrl+K e o nome) |
 | Criar a placa a partir da PCB vazia | 2 (aba Roteamento + botão) | 1 (o botão no quadro) |
 | DRC depois de mexer na placa | 1 a 2 (Roteamento › Verificar) | 0 |
@@ -263,8 +266,8 @@ Fotos do antes em `build/ui-antes/`; do depois em `build/ui/`.
 | Cartão didático: família certa, fallback da descrição e fórmulas com valores | `tests/lesson.test.ts` |
 | Tabela de ações e teclas: mapa, troca e padrão | `tests/keys.test.ts` |
 | Dicionário do inglês: toda chave de `t('…')` traduzida, mesmos `{0}`, nenhuma tradução sobrando | `tests/text.test.ts` |
-| Do esquemático vazio ao gráfico em um clique; Degrau, Onda quadrada sem pulso, regime | `e2e/circuit.spec.ts` |
-| Painel único: curvas, medidas da curva escolhida, teste e "⋯" no cabeçalho | `e2e/simulation.spec.ts` |
+| Do esquemático vazio ao gráfico em um clique; Sinal da fonte (Degrau, Onda quadrada, Contínuo), regime | `e2e/circuit.spec.ts` |
+| Painel limpo: pílulas das pontas com filtro, medidas no cartão da ponta, janela manual e Automático, opções na aba Documento | `e2e/simulation.spec.ts` |
 | Paleta de comandos em português e em inglês | `e2e/ui.spec.ts` |
 | Modos: Iniciante esconde, a paleta acha, fica na recarga | `e2e/ui.spec.ts` |
 | Preferências: roda, fio curvo, atalho trocado nos menus e na recarga | `e2e/ui.spec.ts` |

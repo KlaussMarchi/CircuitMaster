@@ -345,20 +345,13 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
 .tread { color: var(--text); font-size: 12px; min-width: 96px; text-align: right; margin-right: 6px; }
 .dock .toggle .ic { transition: transform .2s; }
 .dock.collapsed .toggle .ic { transform: rotate(180deg); }
-.dock-ctl .seg { margin-right: 8px; }
-.sim-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(220px, 280px); border-top: 1px solid var(--border); }
-.sim-col { min-width: 0; min-height: 0; overflow: auto; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: var(--control) transparent; }
-.sim-col.curves { border-right: 1px solid var(--border); }
-.sim-col.readings { border-left: 1px solid var(--border); }
-.sim-col h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-.curve-list li { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.curve-list input { accent-color: var(--accent); flex: none; }
-.curve-list .dot-s { margin: 0; flex: none; }
-.curve { flex: 1; min-width: 0; text-align: left; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.curve:hover { color: var(--text); }
-.curve.current { color: var(--text); text-decoration: underline 1px var(--accent); text-underline-offset: 5px; }
-.more-wrap { position: relative; }
-.sim-more { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 70; width: 320px; max-height: 60vh; overflow: auto; padding: 4px 14px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-float); }
+.sim-body { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.sim-body .scope { flex: 1; }
+.sim-curves { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px 2px; flex: none; }
+.sim-curves .search { width: 168px; height: 28px; }
+.pill.curve { height: 28px; padding: 0 12px; border: 1px solid transparent; background: var(--pill-neutral-bg); color: var(--text); cursor: pointer; }
+.pill.curve[aria-pressed=false] { background: none; border-color: var(--control); color: var(--muted); }
+.pill.curve[aria-pressed=false] .dot-s { opacity: .35; }
 .scope { position: relative; min-width: 0; min-height: 0; padding: 4px 4px 0 0; }
 .scope svg { width: 100%; height: 100%; display: block; }
 .scope text { font-family: var(--font); fill: var(--muted); font-size: 11px; }
@@ -392,7 +385,6 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
 .chipb[aria-pressed="true"] { color: var(--text); border-color: var(--soft); }
 .chipb .dot-s { margin: 0; }
 .chipb:hover { color: var(--text); }
-.verdict { color: var(--soft); font-size: 12px; line-height: 17px; }
 
 /* ───────── Inspetor ───────── */
 .inspector { display: flex; flex-direction: column; overflow: hidden; }
@@ -451,7 +443,7 @@ details.sec[open] > summary h3::after { content: '▾'; }
 .event .in.time { padding: 0 0 0 8px; }
 .lcd { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; padding: 8px 12px; border-radius: 6px; background: var(--well); border: 1px solid var(--border); font-size: 26px; line-height: 32px; white-space: pre; color: var(--text); }
 .lcd small { font-size: 13px; color: var(--muted); }
-.sec > .seg { justify-content: flex-start; margin-left: -12px; }
+.sec > .seg { justify-content: flex-start; flex-wrap: wrap; margin-left: -12px; }
 .meter-l { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 .nopart { padding: 8px 0 4px; color: var(--muted); }
 .nopart b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
@@ -583,10 +575,6 @@ details.sec[open] > summary h3::after { content: '▾'; }
   .insp-tabs .tab { padding: 0 6px; font-size: 12.5px; }
   .insp-tabs .tab::after { left: 6px; right: 6px; }
   .menubar .menu:nth-child(n+6) { display: none; }
-  .sim-body { grid-template-columns: minmax(170px, 210px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
-  .sim-body .scope { grid-column: 2; grid-row: 1 / 3; }
-  .sim-col.curves { grid-row: 1; border-bottom: 1px solid var(--border); }
-  .sim-col.readings { grid-column: 1; grid-row: 2; border-left: 0; border-right: 1px solid var(--border); }
 }
 
 /* ───────── Celular ───────── */
@@ -607,11 +595,8 @@ details.sec[open] > summary h3::after { content: '▾'; }
   .tools { flex-wrap: wrap; min-width: 0; }
   .dock-head { flex-wrap: wrap; }
   .dock-ctl { flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
-  .dock-ctl .seg { flex-wrap: wrap; justify-content: flex-start; }
-  .sim-body { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: minmax(min-content, auto); overflow: auto; }
-  .sim-body .scope { grid-column: auto; grid-row: auto; min-height: 220px; }
-  .sim-col.readings { grid-column: auto; grid-row: auto; }
-  .sim-col.curves, .sim-col.readings { border: 0; border-bottom: 1px solid var(--border); }
+  .sim-body { overflow: auto; }
+  .sim-body .scope { min-height: 220px; }
   .doc { order: -1; width: 100%; margin-left: 0; }
   .dock { height: auto; max-height: none; }
   .scope { height: 200px; }

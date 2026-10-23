@@ -87,6 +87,9 @@ export const getTone = (time: ArrayLike<number>, values: ArrayLike<number>, freq
 
 const wrap = (degrees: number) => ((degrees + 180) % 360 + 360) % 360 - 180
 
+// GANHO COM SINAL: NEGATIVO QUANDO A SAÍDA ESTÁ EM OPOSIÇÃO DE FASE (INVERSOR)
+export const signedGain = (gain: Gain) => Math.abs(gain.phase) > 90 ? -gain.gain : gain.gain
+
 // GANHO DE UM AMPLIFICADOR ENTRE DUAS SÉRIES NA FREQUÊNCIA DA ENTRADA: RAZÃO DAS AMPLITUDES, EM dB, E DEFASAGEM DA SAÍDA EM (−180°, 180°]
 export const getGain = (time: ArrayLike<number>, input: ArrayLike<number>, output: ArrayLike<number>, frequency: number, from: number): Gain | null => {
     const a = getTone(time, input, frequency, from)

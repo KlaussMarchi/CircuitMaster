@@ -7,9 +7,8 @@ import { exportBinBundle, readFile, type Bundle, type BundleFile, type Instance,
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
-import { formatSi } from '../../core/Properties'
 import { apply, boxesTouch, unionBoxes, type Matrix, type Point } from '../../core/Geometry'
-import { INITIAL_KEY, PRESET_KEY, START_KEY, STOP_KEY, SWITCH_KEY, buildCircuit, getSwitching, projectValue, resumeCircuit, type Event, type Mode } from '../../core/Spice'
+import { FREQUENCY_KEY, RAMP_KEY, SIGNAL_KEY, SWITCH_KEY, buildCircuit, getSwitching, resumeCircuit, type Event } from '../../core/Spice'
 import { FONT_FILES } from '../../core/Font'
 import { getArtwork, pickBoard } from '../../core/Cam'
 import { getGroupOf, type Violation } from '../../core/Drc'
@@ -51,7 +50,7 @@ export type Show       = { values: boolean, chart: boolean }
 export type Sheet      = { id: number, name: string, doc: Doc, saved: Doc, stored: boolean, file: Uint8Array | null, past: Doc[], future: Doc[], viewports: Partial<Record<View, Viewport>>, view: View, selection: string[], probe: string | null, drc: Checked | null }
 export type Recent     = { name: string, time: number }
 export type Editing    = { moduleId: string, modelIndex: string | null }
-export type Simulating = { enabled: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, series: string[], focus: string | null }
+export type Simulating = { enabled: boolean, busy: boolean, result: Simulation | null, error: string | null, step: number, playing: boolean, started: number, hidden: string[] }
 
 type State = {
     catalog: Catalog
@@ -180,7 +179,6 @@ type State = {
     showTour: (level: Level) => void
     finishTour: () => void
     setHiddenLayers: (ids: string[]) => void
-    setTest: (mode: Mode) => void
     selectProbe: (id: string | null) => void
     addProbe: (probe: Omit<Probe, 'id'>) => void
     updateProbe: (id: string, patch: Partial<Probe>) => void
@@ -281,7 +279,7 @@ const GRID_RANGE                 = [0.001, 1]    // in, COMO O QDoubleValidator 
 const DEBOUNCE  = 200    // MS ENTRE A ÚLTIMA MUDANÇA E A NOVA SIMULAÇÃO (SPEC 04 §5.4)
 const DRC_DELAY = 600    // MS ENTRE A ÚLTIMA MUDANÇA NA PCB E O DRC AUTOMÁTICO
 
-const IDLE: Simulating = { enabled: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, series: [], focus: null }
+const IDLE: Simulating = { enabled: false, busy: false, result: null, error: null, step: 0, playing: false, started: 0, hidden: [] }
 
 const blankSheet = (): Omit<Sheet, 'id'> => {
     const doc = emptyDoc()
@@ -1019,14 +1017,6 @@ export const useStore = create<State>((set, get) => {
             set({ level, tour: get().toured.includes(level) ? get().tour : level, message: t('modo {0}: {1}; a paleta (Ctrl+K) acha tudo em qualquer modo', t(LEVELS.find(([id]) => id === level)?.[1] ?? ''), t(LEVELS.find(([id]) => id === level)?.[2] ?? '')) })
         },
 
-        // TESTE DO TRANSITÓRIO NO PROJETO; O MANUAL COMEÇA DA JANELA QUE ESTAVA VALENDO (SPEC 04 §5.5)
-        setTest: mode => {
-            const { doc, simulation, setProjectProperties } = get()
-            const analysis = simulation.result?.circuit.analysis.type === 'tran' ? simulation.result.circuit.analysis : null
-            const kept: Record<string, string> = mode === 'custom' && analysis && !projectValue(doc, STOP_KEY) ? { [START_KEY]: formatSi(analysis.t0, 's', 6), [STOP_KEY]: formatSi(analysis.t1, 's', 6), simulator_number_of_steps: String(analysis.steps), simulator_time_step_mode: 'false', [INITIAL_KEY]: analysis.initial } : {}
-            setProjectProperties({ [PRESET_KEY]: mode, ...kept })
-        },
-
         // SIMULAR LIGA E ABRE O PAINEL; PARAR DESLIGA E LIMPA O RESULTADO (FRIZING_KICAD §5, DECISÃO 2)
         toggleSimulation: () => {
             const enabled = !get().simulation.enabled
@@ -1512,7 +1502,7 @@ export const useStore = create<State>((set, get) => {
             const previous = simulation.result
             const before   = previous?.circuit.analysis
             const after    = circuit.analysis
-            const same     = before?.type === 'tran' && after.type === 'tran' && before.t0 === after.t0 && before.t1 === after.t1 && before.step === after.step && before.initial === after.initial && !simulation.error
+            const same     = before?.type === 'tran' && after.type === 'tran' && before.t0 === after.t0 && before.t1 === after.t1 && before.step === after.step && before.initial === after.initial && !simulation.error && previous !== null && stimulusOf(previous.doc) === stimulusOf(doc)
             const keep     = same && previous && simulation.step > 0 && simulation.step < previous.steps - 1 ? simulation.step : 0
 
             if (!circuit.simulated.length)
@@ -1772,6 +1762,9 @@ const getGroundNets = (doc: Doc, library: Library, netlist: Netlist) => {
 
     return nets
 }
+
+// SINAIS ESCOLHIDOS NAS FONTES: TROCAR O SINAL RECOMEÇA O TRANSITÓRIO EM VEZ DE CONTINUAR DO PASSO CORRENTE
+const stimulusOf = (doc: Doc) => Object.values(doc.instances).map(instance => [SIGNAL_KEY, FREQUENCY_KEY, RAMP_KEY].map(key => instance.properties[key] ?? '').join()).join('|')
 
 const signature = (doc: Doc) => [...Object.values(doc.instances).filter(instance => instance.moduleIdRef !== WIRE).map(instance => `${instance.modelIndex}:${instance.moduleIdRef}:${instance.title}:${JSON.stringify(instance.properties)}`), ...doc.probes.map(probe => `${probe.id}:${probe.kind}:${probe.key}:${probe.flip}`), JSON.stringify(doc.projectProperties)].join('|')
 

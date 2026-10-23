@@ -59,9 +59,22 @@ test('Worker de PCB que falha no meio do trabalho dá a causa e o pedido seguint
     expect(broken[1]).toMatch(/falhou/)
     expect(broken[2]).toBeNull()
 
+    // O WORKER MORRE LOGO DEPOIS DE RECEBER O PEDIDO DE ROTEAR: NO MEIO DO TRABALHO, POR MAIS RÁPIDO QUE O ROTEADOR SEJA
+    await page.evaluate(() => {
+        const pcb     = cm.store.getState().pcb
+        const request = pcb.request.bind(pcb)
+        pcb.request = ((message: Parameters<typeof request>[0], progress: Parameters<typeof request>[1]) => {
+            const pending = request(message, progress)
+
+            if ((message as { type: string }).type === 'route') {
+                pcb.request = request
+                pcb.worker?.dispatchEvent(new ErrorEvent('error', { message: 'worker morto de propósito' }))
+            }
+
+            return pending
+        }) as typeof request
+    })
     await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('button', { name: 'Criar placa e rotear' }).click()
-    await expect.poll(() => page.evaluate(() => cm.store.getState().routing !== null)).toBe(true)
-    await page.evaluate(() => cm.store.getState().pcb.worker?.dispatchEvent(new ErrorEvent('error', { message: 'worker morto de propósito' })))
     await expect.poll(() => app.message()).toMatch(/autorouter: .*worker morto de propósito.*tente de novo/)
     expect(await page.evaluate(() => cm.store.getState().routing)).toBeNull()
 

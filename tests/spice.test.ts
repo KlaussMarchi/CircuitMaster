@@ -8,8 +8,9 @@ import { readBundle } from '../src/core/Sketch'
 import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import type { Point } from '../src/core/Geometry'
-import { PRESET_KEY, buildCircuit, substitute } from '../src/core/Spice'
+import { FREQUENCY_KEY, SIGNAL_KEY, buildCircuit, substitute } from '../src/core/Spice'
 import { Ngspice, type Vectors } from '../src/core/Ngspice'
+import { getTiming } from '../src/core/Timing'
 import { Simulation, toDisplay } from '../src/engine/Simulation'
 import { createInstance, createWire } from '../src/engine/Edit'
 import { ROOTS } from '../tools/Fritzing'
@@ -160,26 +161,46 @@ describe.skipIf(!HAS_FRITZING)('simulação com ngspice em WASM (spec 04)', () =
         expect(sim.getEffect('3', 0).light).toBeGreaterThan(0)
     })
 
-    it('Simular decide sozinho: o transitório parado é mostrado como regime; degrau, fonte pulsada ou senoidal varia (spec 04 §5.1)', async () => {
+    it('Simular decide sozinho: a fonte contínua dá o regime; o sinal escolhido na fonte, a fonte pulsada ou a senoidal varia (spec 04 §5.1, §5.5)', async () => {
         const library = makeLibrary()
         const parts   = ['77c36646df552e9fe72f360837f556ccleg', 'ResistorModuleID', '100milCeramicCapacitorModuleID', 'DCPulseSourceModuleID', '1_SinePowerSupplyModuleID', 'WireModuleID']
         await library.load(parts)
 
-        const analysis = async (source: string, preset: string) => {
+        const simulate = async (source: string, signal: Record<string, string>) => {
             const created = [source, 'ResistorModuleID', '100milCeramicCapacitorModuleID'].reduce((current, moduleId, i) => createInstance(current, library, moduleId, everywhere([200 * i, 0])), emptyDoc())
-            const start: Doc = { ...created, projectProperties: { [PRESET_KEY]: preset } }
+            const start: Doc = { ...created, instances: { ...created.instances, 1: { ...created.instances['1'], properties: { ...created.instances['1'].properties, ...signal } } } }
             const wired   = [['1/connector1', '2/connector0'], ['2/connector1', '3/connector0'], ['3/connector1', '1/connector0']].reduce((current, [a, b]) => createWire(current, library, 'schematicView', a, b), start)
             const netlist = new Netlist(wired, library, await loadWasm())
             netlist.update()
             const circuit = buildCircuit(wired, library, netlist, true)
-            return new Simulation(wired, library, circuit, (await session()).run(circuit.deck).vectors).isStill() ? 'op' : 'tran'
+            return { circuit, sim: new Simulation(wired, library, circuit, (await session()).run(circuit.deck).vectors) }
         }
+        const analysis = async (source: string, signal: string) => (await simulate(source, { [SIGNAL_KEY]: signal })).sim.isStill() ? 'op' : 'tran'
 
-        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'auto')).toBe('op')
-        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'square')).toBe('op')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'dc')).toBe('op')
         expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'step')).toBe('tran')
-        expect(await analysis('DCPulseSourceModuleID', 'auto')).toBe('tran')
-        expect(await analysis('1_SinePowerSupplyModuleID', 'sine')).toBe('tran')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'ramp')).toBe('tran')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'sine')).toBe('tran')
+        expect(await analysis('77c36646df552e9fe72f360837f556ccleg', 'square')).toBe('tran')
+        expect(await analysis('DCPulseSourceModuleID', 'dc')).toBe('tran')
+        expect(await analysis('1_SinePowerSupplyModuleID', 'dc')).toBe('tran')
+
+        const step   = await simulate('77c36646df552e9fe72f360837f556ccleg', { [SIGNAL_KEY]: 'step' })
+        const sine   = await simulate('77c36646df552e9fe72f360837f556ccleg', { [SIGNAL_KEY]: 'sine' })
+        const square = await simulate('77c36646df552e9fe72f360837f556ccleg', { [SIGNAL_KEY]: 'square', [FREQUENCY_KEY]: '50Hz' })
+        const ramp   = await simulate('77c36646df552e9fe72f360837f556ccleg', { [SIGNAL_KEY]: 'ramp' })
+        const tau    = Math.max(...getTiming(step.circuit.deck).constants)
+        const last   = (result: typeof step) => result.sim.steps - 1
+
+        expect(step.circuit.deck).toMatch(/ PWL\(0 0 \S+ 9V?\)/)
+        expect(step.circuit.analysis).toMatchObject({ type: 'tran', initial: 'op' })
+        expect(step.sim.getBetween(keyOf('3', 'connector1'), keyOf('3', 'connector0'), 0)).toBeCloseTo(0, 6)
+        expect(Math.abs(step.sim.getBetween(keyOf('3', 'connector1'), keyOf('3', 'connector0'), last(step)))).toBeGreaterThan(8.9)
+        expect(sine.circuit.deck).toMatch(/ SIN\(0 9V? (\S+) 0 0 0\)/)
+        expect(Number(sine.circuit.deck.match(/ SIN\(0 9V? (\S+) /)?.[1])).toBeCloseTo(1 / (2 * Math.PI * tau), -1)
+        expect(square.circuit.deck).toMatch(/ PULSE\(0 9V? 0 \S+ \S+ \S+ 0.02 0\)/)
+        expect(square.circuit.analysis.type === 'tran' && square.circuit.analysis.t1).toBeGreaterThanOrEqual(0.06)
+        expect(ramp.circuit.analysis.type === 'tran' && ramp.circuit.analysis.t1).toBeGreaterThan(5 * tau)
     })
 
     it('fonte de bancada: ilimit trocado por fontes B, tensão constante e corrente limitada (spec 04 §10.1)', async () => {
@@ -211,6 +232,28 @@ describe.skipIf(!HAS_FRITZING)('simulação com ngspice em WASM (spec 04)', () =
         expect(-heavy.sim.getCurrent('1', 0)).toBeCloseTo(0.1, 4)
         expect(heavy.sim.getBetween('1/connector0', '1/connector1', 0)).toBeCloseTo(1, 2)
         expect(heavy.sim.getEffect('1', 0).display).toEqual([toDisplay(heavy.sim.getBetween('1/connector0', '1/connector1', 0)), toDisplay(-heavy.sim.getCurrent('1', 0))])
+    })
+
+    it('fonte de bancada com carga RC: sem corrente em regime a saída não fica solta e o transitório converge, contínuo ou em degrau (spec 04 §10.1)', async () => {
+        const library = makeLibrary()
+        const parts   = ['1_LabDCPowerSupplyModuleID', 'ResistorModuleID', 'SmallElectrolyticCapacitorModuleID', 'WireModuleID']
+        await library.load(parts)
+
+        for (const signal of ['dc', 'step']) {
+            const created = parts.slice(0, 3).reduce((current, moduleId, i) => createInstance(current, library, moduleId, everywhere([300 * i, 0])), emptyDoc())
+            const placed: Doc = { ...created, instances: { ...created.instances, 1: { ...created.instances['1'], properties: { [SIGNAL_KEY]: signal } }, 2: { ...created.instances['2'], properties: { resistance: '1kΩ' } }, 3: { ...created.instances['3'], properties: { capacitance: '100µF' } } } }
+            const wired   = [['1/connector0', '2/connector0'], ['2/connector1', '3/connector1'], ['3/connector0', '1/connector1']].reduce((current, [a, b]) => createWire(current, library, 'schematicView', a, b), placed)
+            const netlist = new Netlist(wired, library, await loadWasm())
+            netlist.update()
+
+            const circuit = buildCircuit(wired, library, netlist, true)
+            const result  = (await session()).run(circuit.deck)
+            const sim     = new Simulation(wired, library, circuit, result.vectors)
+
+            expect(result.error, circuit.deck).toBeNull()
+            expect(circuit.deck).toMatch(/I=min\(max\(0,/)
+            expect(sim.getBetween('3/connector1', '3/connector0', sim.steps - 1), signal).toBeCloseTo(12, 1)
+        }
     })
 
     it.skipIf(!fs.existsSync(XSPICE) || !fs.existsSync(ANALOG))('fonte de bancada: as fontes B reproduzem o ilimit do XSPICE nativo (spec 04 §10.1)', async () => {

@@ -109,23 +109,27 @@ guardado no navegador (`cm-theme`).
   pinos, espaçamento e tamanho no inspetor; na stripboard, um clique entre dois furos corta ou religa a tira. Logos de
   imagem e a placa de forma livre carregam SVG, PNG ou JPG pelo inspetor.
 - **Simulação**: as ferramentas V, A e V·A do quadro colocam pontas de prova num fio ou terminal. **Simular** roda,
-  numa ação, o ponto de operação e o transitório na janela do teste; se nada no circuito varia no tempo, mostra o
-  regime direto, sem animação. Os valores aparecem no circuito e o painel de simulação abre embaixo, um só:
-  - **no cabeçalho**, o teste num controle segmentado — Automático (janela pela escala de tempo do circuito), Degrau
-    (parte descarregado: carga do capacitor e sobressinal), Onda quadrada (três períodos da fonte pulsada), Senoide
-    (cinco períodos, para amplificadores) ou Manual (início e fim ali mesmo) —, o fim da janela (digite e escolha s,
-    ms, µs ou ns; "auto" volta ao cálculo), reproduzir/pausar, a barra de tempo e "⋯" com a duração da animação (3 s
-    ou tempo real), os valores sobre o circuito, a amostragem do Manual e as opções do SPICE;
-  - **à esquerda, as curvas** (pontas, tensão de cada nó e corrente de cada fonte), com busca, caixa para mostrar ou
-    esconder e a cor; o nome escolhe a curva medida;
-  - **no centro, o gráfico**, sempre visível;
-  - **à direita, as medidas** da curva escolhida: valor no cursor, média, RMS e pico a pico e, quando valem, período,
-    valor inicial e final, subida 10–90%, τ, sobressinal, acomodação a ±2%, ζ, ganho (V/V e dB), fase e nível DC.
+  numa ação, o ponto de operação e o transitório; se nada no circuito varia no tempo, mostra o regime direto, sem
+  animação. O que varia é escolhido na própria fonte de tensão (fonte DC, bateria, fonte de bancada): clique nela e
+  escolha o **Sinal** no inspetor — Contínuo (padrão), Degrau (de 0 à tensão da fonte com o circuito descarregado:
+  carga do capacitor, τ e sobressinal), Rampa, Senoide ou Onda quadrada —, com a frequência ou a duração ali mesmo
+  (vazias, saem da escala de tempo do circuito). Os valores aparecem no circuito e o painel de simulação abre
+  embaixo, um só:
+  - **no cabeçalho**, o tempo de simulação (automático pela escala do circuito e pelos sinais; digite o fim e escolha
+    s, ms, µs ou ns para fixar, com o início ao lado e o botão Automático para voltar), reproduzir/pausar e a barra
+    de tempo;
+  - **no topo**, só as pontas que você pôs: uma pílula por curva (P1 V, P2 I…) que mostra ou esconde, com filtro;
+  - **embaixo, o gráfico**.
+
+  As medidas ficam no cartão da ponta (clique na ponta): valor no passo, média, RMS e pico a pico e, quando valem,
+  período, valor inicial e final, subida 10–90%, τ, sobressinal, acomodação a ±2%, ζ, ganho (V/V e dB), fase e nível
+  DC. Duração da animação (3 s ou tempo real), valores sobre o circuito, amostragem e início da janela manual e
+  opções do SPICE ficam na aba Documento.
 
   O gráfico tem tensões à esquerda e correntes à direita, leitura sob o cursor e clique para ir ao instante. Simulação
-  › Circuitos de teste (ou a tela inicial) abre RC, onda quadrada, RLC com sobressinal, amplificador inversor com
+  › Circuitos de teste (ou a tela inicial) abre LED com resistor, RC, onda quadrada, filtro passa-baixa, RLC com sobressinal, amplificador inversor com
   amp-op, emissor comum com transistor e chave temporizada, já ligados no esquemático e na protoboard, com as pontas
-  e o teste certo. Mudar o circuito durante o transitório
+  e o sinal certo na fonte. Mudar o circuito durante o transitório
   continua a simulação do instante em que ela estava.
 - **PCB**: desenhada com as cores do Altium (cobre de cima vermelho, de baixo azul, pads passantes prateados,
   serigrafia amarela, placa preta). Ambas/Topo/Base no cabeçalho esmaecem a outra face (e escolhem a face das

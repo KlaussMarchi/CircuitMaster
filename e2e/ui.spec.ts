@@ -192,7 +192,7 @@ test('Paleta de comandos: Ctrl+K acha ações em português e em inglês, mostra
     await expect(input).toBeFocused()
     await app.shoot('paleta')
 
-    for (const [query, label, path] of [['copy', 'Copiar', 'Editar'], ['gerber', 'Gerber estendido (RS-274X)…', 'Arquivo › Exportar › Para produção'], ['autoroute', 'Autorotear', 'Roteamento'], ['undo history', 'Histórico de desfazer', 'Editar'], ['degrau', 'Degrau', 'Simulação › Teste']]) {
+    for (const [query, label, path] of [['copy', 'Copiar', 'Editar'], ['gerber', 'Gerber estendido (RS-274X)…', 'Arquivo › Exportar › Para produção'], ['autoroute', 'Autorotear', 'Roteamento'], ['undo history', 'Histórico de desfazer', 'Editar'], ['passa-baixa', 'Filtro passa-baixa (RC)', 'Simulação › Circuitos de teste']]) {
         await input.fill(query)
         await expect(first.locator('.label')).toHaveText(label)
         await expect(first.locator('.path')).toHaveText(path)
@@ -452,15 +452,23 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
     await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
     await page.evaluate(() => cm.store.getState().pause())
     await scan('Simulation')
-    await page.getByRole('button', { name: 'More simulation options' }).click()
+    const inspector = page.getByRole('complementary', { name: 'Inspector' })
+    await page.evaluate(() => cm.store.getState().selectProbe('P1'))
+    await expect(inspector.getByLabel('Voltage measurements')).toBeVisible()
+    await scan('Probe')
+    await page.mouse.click(...await app.center('1'))
+    await expect(inspector.getByRole('tablist', { name: 'Source signal' })).toBeVisible()
+    await scan('Source signal')
+    await page.evaluate(() => cm.store.getState().setProjectProperties({ circuitmaster_stop_time_s: '1s' }))
+    await inspector.getByRole('tab', { name: 'Document' }).click()
+    await expect(inspector.getByLabel('Simulation options')).toContainText('Manual window')
     await scan('Simulation options')
-    await page.keyboard.press('Escape')
+    await inspector.getByRole('tab', { name: 'Properties' }).click()
 
     await page.evaluate(() => {
         const { doc, select } = cm.store.getState()
         select([Object.values(doc.instances).find(instance => instance.moduleIdRef === 'ResistorModuleID')?.modelIndex ?? ''])
     })
-    const inspector = page.getByRole('complementary', { name: 'Inspector' })
     await inspector.getByText('How it works').click()
     await scan('Inspector')
 

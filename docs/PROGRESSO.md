@@ -3,7 +3,7 @@
 Memória do trabalho do plano `FRIZING_KICAD.md` (pasta acima do repositório). Ler ao começar; atualizar ao fim de
 cada item.
 
-**Fase atual: 3 — restante do Fritzing** (a fase 2 terminou em 2026-10-22; seções no fim do arquivo).
+**Fase atual: pedidos do usuário de 2026-10-23, depois a fase 5** (a fase 4 terminou em 2026-10-23, commit `34fd68b`; seções no fim do arquivo).
 
 ## Fase 0 — base de testes e auditoria (fechada em 2026-10-21)
 
@@ -560,6 +560,97 @@ fase 3 em "falta".
   rodou na bateria. Próximo passo: rodar de novo na tomada e, se crescer, achar o vazamento (candidatos novos desta
   fase: o `early`/`waiting` do indexador, as variantes de stripboard e logo no `Library.variants`, que nunca são
   apagadas, e os instantâneos do editor de peças).
-- Fase 4 escrita e sem commit: `core/Sexpr`, `tools/KiCad`, `dataServer` no `vite.config.ts`, `tests/sexpr.test.ts`
-  (verde, ~80 s), `e2e/kicad.spec.ts` (ainda não rodado), spec 07, README, `CLAUDE.md`, `THIRD_PARTY.md`. Falta: rodar o
-  `npm run verify` na tomada, o clone limpo e o commit da fase 4; depois seguir para a fase 5.
+- Fase 4: commit `34fd68b` (2026-10-23), com o `verify` verde. Fora dele, ainda sem commit: `core/KicadSymbol` (leitura
+  e desenho de símbolos do KiCad, com `extends`, unidades e De Morgan) e `tests/kicad.test.ts` (7 testes contra o
+  `sym export svg`), começo da fase 5.
+
+## Pedidos do usuário (2026-10-23) — antes de seguir a fase 5
+
+Bugs (regressões, primeiro):
+
+1. **A simulação parou de funcionar.**
+2. **A fonte mostra "bolinhas" durante a simulação**, do nada.
+3. **Ao arrastar um item, aparece uma pergunta para salvar** (o usuário chamou de "parte de tutorial") que interrompe o
+   trabalho: tirar.
+4. A simulação tem de estar certa (conferir contra o ngspice nativo e os circuitos clássicos).
+
+Decisões novas do usuário (substituem a decisão 3 da seção 5 do plano no que conflitam):
+
+5. **O tipo de excitação fica na própria fonte de tensão**: clicar na fonte escolhe contínuo (padrão), degrau, rampa,
+   senoide etc. Sai do painel do gráfico.
+6. **O painel do gráfico fica o mais limpo possível**: o gráfico, no topo a lista das pontas que o usuário colocou
+   (tensão e corrente dos componentes que ele escolheu e puxou), só elas, com filtro, e o tempo de simulação.
+7. **Uma aba de circuitos prontos para testar**, de esquemático, de protoboard e de PCB: LED com resistor, RC, RLC,
+   filtro passa-baixa…, didáticos; ao simular, a forma de onda aparece certa (subida, sobressinal).
+
+### Plano para os pedidos de 2026-10-23
+
+- **Sinal na fonte** (pedido 5): a fonte de tensão ganha no inspetor o controle "Sinal": Contínuo (padrão), Degrau,
+  Rampa, Senoide e Onda quadrada, com os parâmetros de cada um ali mesmo (amplitude, frequência, tempo da rampa…),
+  gravados como propriedade da instância (`circuitmaster_signal` e afins; o Fritzing ignora). O deck SPICE troca o
+  `DC v` da fonte por `PWL`, `SIN` ou `PULSE`; Degrau parte do circuito descarregado (UIC). O seletor global de teste
+  sai; a janela automática passa a vir das fontes e da escala de tempo do circuito; o tempo de simulação continua
+  digitável no painel. Os circuitos de teste passam a usar o sinal da fonte em vez do teste global.
+- **Painel limpo** (pedido 6): no topo, as pontas que o usuário pôs (V, A, V·A), uma pílula por curva que liga e
+  desliga, e o tempo de simulação; embaixo, o gráfico com cursor. Saem as curvas automáticas (tensão de cada nó,
+  corrente de cada fonte) e a coluna de medidas, que vai para o cartão da ponta no inspetor (clicar na ponta mostra
+  valor no cursor, média, RMS, subida, τ, sobressinal…). Opções raras (animação, SPICE) vão para a aba Documento.
+- **Circuitos prontos** (pedido 7): item "Prontos" no trilho, com cartões didáticos (LED com resistor, RC, RLC,
+  passa-baixa, amplificador, transistor, chave…), cada um com Esquemático, Protoboard e PCB (a PCB abre com a placa
+  criada e roteada); ao abrir, já simula com as pontas certas.
+- **Fumaça da fonte** (pedido 2): a fonte só "queima" se o curto continuar no regime; o pico de corrente de um
+  capacitor descarregado no primeiro instante do degrau não conta.
+- **Pergunta ao arrastar** (pedido 3): não reproduzida. Blindar: soltar fora do quadro não deixa o navegador abrir a
+  imagem arrastada (o que recarregaria o app e abriria "Recuperar trabalho não salvo"), e a imagem da peça no bin não
+  é arrastável sozinha. Confirmar com o usuário qual janela era.
+- **Simulação parou** (pedido 1): o LED com resistor montado à mão e os circuitos de teste simulam certo aqui
+  (12,6 mA no LED de 220 Ω). Confirmar com o usuário o circuito e o navegador.
+
+### Feito (2026-10-23)
+
+- **Sinal na fonte de tensão** (pedido 5): a fonte DC, as baterias e a fonte de bancada ganham no inspetor o
+  controle **Sinal** (Contínuo, Degrau, Rampa, Senoide, Onda quadrada), com a frequência ou a duração da rampa ali
+  mesmo (vazias = automáticas pela escala de tempo do circuito: senoide na frequência de corte, quadrada de período
+  10τ, rampa de 5τ), gravado na instância (`circuitmaster_signal`, `circuitmaster_frequency`, `circuitmaster_ramp`;
+  o Fritzing ignora). O deck troca a tensão da linha `V… {voltage}` por `PWL`, `SIN` ou `PULSE` partindo de 0, então
+  o Degrau sai do circuito em repouso sem UIC e as outras fontes seguem em regime. Saíram o seletor "Teste" do
+  painel, o submenu Simulação › Teste, `circuitmaster_preset` e o `setTest`; a janela é automática (escala do circuito
+  e sinais, até acomodar depois do fim da rampa) ou manual (digitar o fim; botão Automático volta). Trocar o sinal
+  recomeça o transitório em vez de continuar do passo corrente. Spec 04 §5.1, §5.3, §5.5, §9, README, spec 05.
+- **Circuitos de teste com o sinal na própria fonte** (plano do pedido 7): novos "LED com resistor" (regime, ≈ 13 mA)
+  e "Filtro passa-baixa (RC)" (senoide automática na fc: 71% e −45°); RC e RLC por Degrau na fonte, carga e descarga
+  por Onda quadrada de 1 Hz na fonte (a fonte de pulso saiu do circuito de teste).
+
+- **Painel de simulação limpo** (pedido 6): no cabeçalho o tempo de simulação e a reprodução; no topo só as pontas
+  que o usuário pôs, uma pílula por curva (mostra ou esconde) com filtro; embaixo o gráfico. Saíram as curvas
+  automáticas (tensão de cada nó, corrente de cada fonte, canais dos instrumentos), a coluna de medidas (foi para o
+  cartão da ponta no inspetor, com média, RMS, pico a pico, τ, sobressinal, ganho e fase) e o "⋯" (animação, valores
+  sobre o circuito, janela manual e SPICE foram para a aba Documento, que carrega sob demanda: o JS inicial voltou a
+  708 KB). O estímulo e a resposta de uma curva viraram métodos da `Simulation` (`getStimulus`, `getResponse`).
+
+### Bugs achados e corrigidos (2026-10-23)
+
+1. **Fonte de bancada com carga só capacitiva não simulava** (provável "a simulação parou", pedido 1): com corrente
+   zero em regime as duas fontes B do `ilimit` ficavam no empate do `max`, cuja derivada no ngspice é a do segundo
+   argumento (`inpptree.c`): `max(x/r, 0)` dava condutância zero e a saída ficava solta. O ngspice acusava "Transient
+   op failed, timestep too small" (R 220 Ω + C) ou deixava a saída em 0 V no degrau (1 kΩ + 100 µF). Agora
+   `max(0, x/r)`. Teste: `tests/spice.test.ts` "fonte de bancada com carga RC" (falha sem a correção).
+2. **Fumaça ("bolinhas") na fonte no começo da simulação** (pedido 2): a regra do Fritzing queimava a fonte em
+   qualquer passo com $|I| > 0{,}1\cdot V/R_{int}$, e o pico de carga de um capacitor descarregado ligado direto na
+   fonte (o antigo teste Degrau com UIC, ou o Degrau novo) passa de 5 A por alguns passos. Agora a fonte só queima se
+   a sobrecarga também aparece na segunda metade da janela (`Simulation.isLasting`): o curto real (LED sem resistor)
+   e a sobrecarga de cada ciclo de uma senoide continuam queimando. Teste: `tests/bench.test.ts` (RC sem fumaça) e o
+   E2E de cada circuito de teste (nenhuma fumaça). Não reproduzi o circuito exato do usuário: confirmar.
+3. **Soltar algo fora do quadro** deixava o navegador abrir o que foi arrastado: `dragover`/`drop` na janela evitam
+   (`ui/App`).
+
+### Pendências dos pedidos de 2026-10-23
+
+- Pedido 3 (pergunta de salvar ao arrastar): o app não tem `beforeunload`; "Fechar … sem salvar?" só sai ao fechar
+  uma aba de sketch. A hipótese mais forte é o servidor de desenvolvimento recarregando a página a cada arquivo que eu
+  editava enquanto o usuário testava (a recarga traz "Recuperar trabalho não salvo"), o que também explicaria a
+  simulação quebrada no meio das edições. Confirmar com o usuário qual janela era.
+- Pedido 7 (aba "Prontos" no trilho, com esquemático, protoboard e PCB roteada).
+- A janela automática não enxerga a fonte de bancada: o `ilimit` fica aberto para a escala de tempo, e um RC nela cai
+  na janela de 10 s.
+
