@@ -463,6 +463,7 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
     await inspector.getByRole('tab', { name: 'Document' }).click()
     await expect(inspector.getByLabel('Simulation options')).toContainText('Manual window')
     await scan('Simulation options')
+    await page.evaluate(() => cm.store.getState().undo())    // SEM ALTERAÇÃO PENDENTE, A RECARGA DO FIM NÃO OFERECE RECUPERAR
     await inspector.getByRole('tab', { name: 'Properties' }).click()
 
     await page.evaluate(() => {

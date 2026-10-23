@@ -105,6 +105,12 @@ guardado no navegador (`cm-theme`).
   usuário e as peças importadas ou criadas ficam guardados no navegador.
 - **Bins**: Core, Simulador, Meus itens e os bins do Fritzing pelo "+" (em ícones ou em lista); o clique direito numa
   peça do bin edita, exporta, remove ou localiza no sketch.
+- **Peças do KiCad**: a busca do painel de peças acha também os 22.905 símbolos das bibliotecas do KiCad 10, depois
+  das peças do Fritzing ("KiCad · Timer"). O símbolo vira o esquemático, o footprint do símbolo vira a PCB (pads,
+  furos e serigrafia, conferidos contra o `kicad-cli`) e a protoboard sai do contorno do footprint; os símbolos
+  genéricos sem footprint (resistor, capacitores, indutor, diodo, LED, cristal, trimpot, TO-92) ganham um passante
+  que cabe na protoboard. O `.fzz` gravado leva a peça inteira, com "KiCad (CC BY-SA 4.0)" como autor, e o Fritzing
+  a abre.
 - **Peças geradas**: CI DIP e SIP, mystery part, borne com parafuso, barras de pinos, perfboard e stripboard mudam
   pinos, espaçamento e tamanho no inspetor; na stripboard, um clique entre dois furos corta ou religa a tira. Logos de
   imagem e a placa de forma livre carregam SVG, PNG ou JPG pelo inspetor.

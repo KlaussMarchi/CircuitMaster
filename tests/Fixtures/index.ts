@@ -1,9 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { ROOTS, getListings, listFiles } from '../../tools/Fritzing'
+import { ROOTS as FRITZING, getListings, listFiles } from '../../tools/Fritzing'
+import { ROOTS as KICAD } from '../../tools/KiCad'
 import { Library, type PartLocation, type Source } from '../../src/core/Library'
 import { loadNetlistWasm } from '../../src/core/Netlist'
 import { FONT_FILES } from '../../src/core/Font'
+
+const ROOTS: Record<string, string> = { ...FRITZING, 'kicad-symbols': KICAD.symbols, 'kicad-footprints': KICAD.footprints }    // RAÍZES DO Source: O ACERVO DO FRITZING E AS BIBLIOTECAS DO KICAD (core/KicadPart)
 
 export const HAS_FRITZING = fs.existsSync(ROOTS.parts)
 

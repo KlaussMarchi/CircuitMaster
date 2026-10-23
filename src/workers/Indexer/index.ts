@@ -2,6 +2,8 @@ import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
 import { haystackOf, prepare, rankParts, type Words } from '../../core/Search'
 import { GENERATED_ROOT, generateFzp } from '../../core/Generator'
+import { normalize } from '../../core/Featured'
+import { KICAD_SYMBOLS, kicadId, symbolPath } from '../../core/KicadPart'
 import { scope, serve } from '../Serve'
 
 type Listing = { root: string, path: string, size: number, mtime: number }
@@ -34,6 +36,7 @@ const CONCURRENCY  = 4       // LEITURAS AO MESMO TEMPO: O NAVEGADOR ABRE 6 CONE
 const PROGRESS     = 100
 const BATCH        = 1000    // PEÇAS LIDAS POR GRAVAÇÃO DO CACHE: RECARREGAR NO MEIO DA PRIMEIRA INDEXAÇÃO NÃO PERDE O QUE JÁ FOI LIDO
 const SEARCH_MAX   = 300
+const KICAD_MAX    = 100     // SÍMBOLOS DO KICAD NO FIM DE CADA BUSCA
 const BINS         = [['Core', 'bins/core.fzb'], ['Simulador', 'bins/more/sim.fzb']]    // À FRENTE, NESTA ORDEM; OS OUTROS BINS DO ACERVO SEGUEM PELO TÍTULO
 const ENGINE_FAULT = 'InternalError'
 const FETCH_MS     = 15000    // LEITURA PRESA NO SERVIDOR VIRA UMA SEGUNDA TENTATIVA EM VEZ DE PRENDER A INDEXAÇÃO
@@ -192,13 +195,29 @@ const readBins = async () => {
     scope.postMessage({ type: 'bin', bins })
 }
 
-// BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR
-const search = (text: string) => again(() => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins)).slice(0, SEARCH_MAX).map(strip)
+let kicad: Entry[] = []
+
+// SÍMBOLOS DO KICAD NA BUSCA UNIFICADA: O RESUMO QUE O SERVIDOR MONTA (BIBLIOTECA, NOME, DESCRIÇÃO, PALAVRAS-CHAVE), SEM LER CADA ARQUIVO (SPEC 08 §5)
+const readKicad = async () => {
+    const rows: string[][] = JSON.parse(await fetchText('/kicad/symbols-index.json') ?? '[]')
+    kicad = rows.map(([library, name, description, keywords]) => ({ moduleId: kicadId(library, name), root: KICAD_SYMBOLS, path: symbolPath(library, name), title: name, family: `KiCad · ${library}`, label: '', kind: 'part', icon: '', obsolete: false, properties: { description, keywords }, haystack: normalize(`${library} ${name} ${description} ${keywords}`) }))
+}
+
+// SÍMBOLOS COM TODOS OS TERMOS: O NOME IGUAL AO PRIMEIRO TERMO, DEPOIS O QUE COMEÇA POR ELE, NOMES CURTOS ANTES; SEM A NOTA DO ACERVO, QUE NÃO CABE NO ORÇAMENTO COM 23 MIL SÍMBOLOS
+const searchKicad = (text: string) => {
+    const terms = normalize(text).split(/\s+/).filter(Boolean)
+    const rank  = (entry: Entry) => entry.title.toLowerCase() === terms[0] ? 0 : entry.title.toLowerCase().startsWith(terms[0]) ? 1 : 2
+    return terms.length ? kicad.filter(entry => terms.every(term => entry.haystack.includes(term))).sort((a, b) => rank(a) - rank(b) || a.title.length - b.title.length || a.title.localeCompare(b.title)).slice(0, KICAD_MAX) : []
+}
+
+// BUSCA DO ACERVO PELA NOTA DE core/Search, COM OS BINS CORE E SIMULADOR, E OS SÍMBOLOS DO KICAD DEPOIS
+const search = (text: string) => [...again(() => rankParts(entries.filter(entry => !entry.obsolete), words, text, inBins)).slice(0, SEARCH_MAX), ...searchKicad(text)].map(strip)
 
 const indexed = index()
 
 indexed.catch(() => {})    // A FALHA DO ÍNDICE CHEGA A CADA PEDIDO PELO await, NÃO COMO REJEIÇÃO SEM DONO
 indexed.then(readBins).catch(() => {})
+const symbols = indexed.then(readKicad).catch(() => {})    // A BUSCA ESPERA OS SÍMBOLOS DO KICAD: SEM ISSO A PRIMEIRA BUSCA DEPOIS DE ABRIR NÃO OS VÊ
 
 // PEDIDO QUE ESPERA AS PEÇAS APARECEREM NA LEITURA; O ÍNDICE PRONTO TAMBÉM O LIBERA (PEÇA GERADA OU INEXISTENTE)
 const arrival = (moduleIds: string[]) => new Promise<void>(resolve => {
@@ -217,7 +236,7 @@ serve<{ type: string, text: string, family: string, moduleIds: string[] }>(async
     await indexed
 
     if (data.type === 'search')
-        return search(data.text)
+        return symbols.then(() => search(data.text))
 
     if (data.type === 'family')
         return entries.filter(entry => !entry.obsolete && entry.family.toLowerCase() === data.family.toLowerCase()).map(strip)

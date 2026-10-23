@@ -56,7 +56,7 @@ export class Catalog implements Source {
 
     locate = (moduleIds: string[]) => this.request<Record<string, PartLocation>>({ type: 'locate', moduleIds }, {})
 
-    read = (root: string, path: string) => fetchText(`/fritzing/${root}/${path}`)
+    read = (root: string, path: string) => fetchText(root.startsWith('kicad-') ? `/kicad/${root.slice(6)}/${path}` : `/fritzing/${root}/${path}`)    // AS BIBLIOTECAS DO KICAD (kicad-symbols, kicad-footprints) VÊM DE /kicad
 
     has = (root: string, path: string) => this.svgs.has(`${root}/${path}`)
 

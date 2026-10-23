@@ -3,7 +3,7 @@
 Memória do trabalho do plano `FRIZING_KICAD.md` (pasta acima do repositório). Ler ao começar; atualizar ao fim de
 cada item.
 
-**Fase atual: pedidos do usuário de 2026-10-23, depois a fase 5** (a fase 4 terminou em 2026-10-23, commit `34fd68b`; seções no fim do arquivo).
+**Fase atual: 5 — bibliotecas do KiCad como peças** (a fase 4 terminou em 2026-10-23, commit `34fd68b`; os pedidos do usuário de 2026-10-23 em `ca2feb3` e `82bb7ed`; seções no fim do arquivo).
 
 ## Fase 0 — base de testes e auditoria (fechada em 2026-10-21)
 
@@ -657,4 +657,40 @@ Decisões novas do usuário (substituem a decisão 3 da seção 5 do plano no qu
   simulação quebrada no meio das edições. Confirmar com o usuário qual janela era.
 - A janela automática não enxerga a fonte de bancada: o `ilimit` fica aberto para a escala de tempo, e um RC nela cai
   na janela de 10 s.
+
+## Fase 5 — bibliotecas do KiCad como peças
+
+Spec `docs/specs/08-KICAD-PARTS-SPEC.md`. São 103 linhas da matriz (editor de símbolos e de footprints, navegadores
+e gerenciadores de bibliotecas, assistente e verificadores); vai em commits parciais.
+
+### Feito (2026-10-23)
+
+- **Footprint** (`core/KicadFootprint`): pads (passante, SMD, oval, `roundrect`, girado, furo deslocado e oblongo,
+  sem metal) e `fp_*`; PCB no padrão do Fritzing (os passantes nos dois cobres pelo `copper0` dentro do `copper1`, o
+  furo pelo anel que o CAM lê) e protoboard pelo F.Fab. Oráculo: pads e furos de 9 footprints iguais ao `kicad-cli fp
+  export svg`.
+- **Peça de três vistas** (`core/KicadPart`): `kicad:<Biblioteca>:<Símbolo>[@<Lib>:<Footprint>]`; footprint
+  escolhido, do campo ou o padrão passante que casa com o `ki_fp_filters` dos genéricos; pacote montado pela
+  `Library` por import dinâmico (JS inicial intacto) e gravado no `.fzz`. Geometria comum em `core/KicadDraw`.
+- **Busca unificada**: o servidor monta `symbols-index.json` (0,3 s) e o indexador acha os símbolos depois das peças
+  do Fritzing (até 100, busca simples para caber nos 50 ms).
+- Teste: `tests/kicad.test.ts` (21), `e2e/kicad.spec.ts` "Busca unificada" (busca, põe, três vistas, `.fzz`).
+
+### Bugs achados e corrigidos (fase 5)
+
+1. **As boas-vindas engoliam o clique de quem escolheu uma peça** no sketch vazio: o cartão cobre o centro do quadro.
+   Agora some enquanto há peça escolhida para pôr (`ui/Welcome`). Teste: `e2e/kicad.spec.ts` (põe no centro do
+   quadro vazio).
+2. **A primeira busca depois de abrir não via os símbolos do KiCad**: ela rodava antes de o resumo chegar e não
+   voltava a rodar. A busca espera o resumo (`workers/Indexer`).
+
+### Próximo
+
+- Trocar o footprint no inspetor (KP-146), entre os que casam com o `ki_fp_filters`; o `moduleId` já aceita.
+- `<spice>` das peças básicas do KiCad (R, C, L, D, LED, transistores) para simular (seção 12: "simula quando tem
+  modelo").
+- Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
+  `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
+- Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.
+- SMD na protoboard numa placa adaptadora (seção 12).
 

@@ -46,6 +46,12 @@ os arquivos S-expression (`.kicad_sch`, `.kicad_pcb`, `.kicad_sym`, `.kicad_mod`
 crus e o `Prettify` portado do KiCad (spec 07). Os testes do oráculo usam o `kicad-cli` do `PATH` (ou `KICAD_CLI`),
 gravando em `build/kicad/`, e são pulados sem ele.
 
+Símbolo e footprint viram peça de três vistas (spec 08): `moduleId` `kicad:<Biblioteca>:<Símbolo>[@<Lib>:<Footprint>]`;
+a `Library` vê só o prefixo e chama `core/KicadPart.readKicadPart` por import dinâmico (fora do JavaScript inicial),
+que monta o `.fzp` e os SVG (`core/KicadSymbol`, `core/KicadFootprint`) como pacote. O `Source` lê as raízes
+`kicad-symbols` e `kicad-footprints` (em `/kicad/symbols` e `/kicad/footprints` no navegador). O indexador busca os
+símbolos no `symbols-index.json` que o servidor de dados monta, depois das peças do Fritzing.
+
 ## Testes
 
 - Quase todo `describe` tem `skipIf(!HAS_FRITZING)`: sem o acervo os testes são pulados, não falham.

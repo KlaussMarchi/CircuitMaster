@@ -5,14 +5,15 @@ import { t } from '../../core/Text'
 
 const STEPS: [string, string][] = [['Peças', 'escolha à esquerda e clique no quadro (ou arraste)'], ['Fios', 'clique num terminal, clique para dobrar e clique no terminal de destino'], ['Vista', 'arraste o fundo para mover; a roda dá zoom'], ['Medir', 'escolha V, A ou V·A na barra, clique num fio e aperte Simular'], ['Qualquer ação', 'Ctrl+K e o nome dela, em português ou em inglês']]
 
-// QUADRO VAZIO: COMO COMEÇAR, ABRIR UM ARQUIVO, VER OS EXEMPLOS OU ABRIR UM CIRCUITO DE TESTE
+// QUADRO VAZIO: COMO COMEÇAR, ABRIR UM ARQUIVO, VER OS EXEMPLOS OU ABRIR UM CIRCUITO DE TESTE; SAI DA FRENTE QUANDO UMA PEÇA FOI ESCOLHIDA PARA PÔR (O CLIQUE NO CENTRO DO QUADRO É DELA)
 export const Welcome = () => {
     const empty   = useStore(state => Object.keys(state.doc.instances).length === 0)
     const ready   = useStore(state => state.ready)
     const asked   = useStore(state => state.welcome)
+    const placing = useStore(state => state.placing)
     const { setPanel, openBench } = useStore.getState()
 
-    if (!(empty || asked) || !ready)
+    if (!(empty || asked) || !ready || placing)
         return null
 
     return (
