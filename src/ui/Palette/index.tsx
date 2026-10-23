@@ -31,7 +31,7 @@ const ALIASES: Record<string, string> = {
     'Preencher com cobre': 'copper fill pour zone', 'Remover preenchimento': 'remove copper fill unfill zones', 'Limpar sementes de terra': 'clear ground fill seeds', 'Mover trilha para a outra face': 'move trace to other side layer',
     'Não rotear automaticamente': "don't autoroute", 'Selecionar todas as trilhas': 'select all traces tracks', 'Selecionar todos os fios': 'select all wires', 'Selecionar trilhas autoroteáveis': 'select autoroutable traces',
     'Selecionar todas as vias': 'select all vias', 'Selecionar todos os preenchimentos': 'select all copper fills', 'Apagar trilhas autoroteadas': 'delete autorouted traces', 'Apagar fios autoroteados': 'delete autorouted wires',
-    'Simular': 'simulate run simulation spice ngspice', 'Parar a simulação': 'stop simulation', 'Painel de simulação': 'simulation panel plot scope',
+    'Simular': 'simulate run simulation spice ngspice', 'Parar a simulação': 'stop simulation', 'Painel de simulação': 'simulation panel plot scope', 'Prontos': 'ready made circuits demos benches examples',
     'Ponta de tensão': 'voltage probe', 'Ponta de corrente': 'current probe', 'Ponta de tensão e corrente': 'voltage current probe', 'Remover todas as pontas de prova': 'remove all probes',
     'Paleta de comandos': 'command palette', 'Atalhos de teclado': 'keyboard shortcuts hotkeys', 'Sobre o CircuitMaster': 'about', 'Peças': 'parts library bins symbol footprint chooser', 'Projeto': 'project outline parts list nets', 'Problemas': 'problems drc erc violations',
     'Cobre de cima': 'top copper layer f.cu', 'Cobre de baixo': 'bottom copper layer b.cu', 'Serigrafia de cima': 'top silkscreen layer f.silkscreen', 'Serigrafia de baixo': 'bottom silkscreen layer b.silkscreen',

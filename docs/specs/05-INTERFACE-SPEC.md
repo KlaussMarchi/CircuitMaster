@@ -30,7 +30,7 @@ teste de clareza de cada função existente. Fase 2 do plano `FRIZING_KICAD.md` 
 |---|---|
 | Barra superior (`ui/Topbar`) | marca, menus (`ui/MenuBar`), as três vistas em abas e o botão Simular/Parar |
 | Trilho (`ui/Rail`) | Peças, Projeto e Problemas (com o número de alertas), tema e atalhos; no celular, também o inspetor |
-| Painel esquerdo (`ui/LeftPanel`) | biblioteca de peças (`ui/Library`), projeto (`ui/Outline`: peças, nós, histórico de desfazer) ou problemas (`ui/Problems`) |
+| Painel esquerdo (`ui/LeftPanel`) | biblioteca de peças (`ui/Library`), prontos (os circuitos de teste, cada um com Protoboard, Esquemático e PCB), projeto (`ui/Outline`: peças, nós, histórico de desfazer) ou problemas (`ui/Problems`) |
 | Palco (`ui/Stage`) | ferramentas (Editar, Seletor, pontas V/A/V·A, desfazer, girar, espelhar, apagar), face da placa na PCB, o nome do sketch com o selo (ou as abas de sketches) e o quadro (`ui/Canvas`) com chip da simulação, barra da seleção múltipla, zoom, legenda de camadas e boas-vindas |
 | Doca (`ui/SimulationPanel`) | o painel único de simulação (§3) |
 | Inspetor (`ui/SidePanel`) | Propriedades (`ui/Inspector`), Roteamento (`ui/RoutingPanel`) e Documento (`ui/ProjectPanel`) |
@@ -220,6 +220,7 @@ paleta (`Ctrl+K` e o nome, em português ou em inglês).
 | Trabalhar em dois sketches | Arquivo › Novo (ou abrir outro): aparece a aba de cada um |
 | Recuperar trabalho depois de fechar sem salvar | o diálogo aparece sozinho ao abrir; depois, Arquivo › Versões salvas automaticamente |
 | Desfazer vários passos | Projeto no trilho e clicar no passo |
+| Abrir um circuito pronto para testar | Prontos no trilho e a vista no cartão |
 | Ver o que está errado | Problemas no trilho (o número aparece no ícone) |
 | Criar a placa e rotear | abre a PCB: "Criar placa e rotear" aparece no próprio quadro quando há peças e não há placa |
 | Verificar a placa (DRC) | abrir a PCB: roda sozinho e marca no desenho |

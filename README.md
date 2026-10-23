@@ -126,8 +126,10 @@ guardado no navegador (`cm-theme`).
   DC. Duração da animação (3 s ou tempo real), valores sobre o circuito, amostragem e início da janela manual e
   opções do SPICE ficam na aba Documento.
 
-  O gráfico tem tensões à esquerda e correntes à direita, leitura sob o cursor e clique para ir ao instante. Simulação
-  › Circuitos de teste (ou a tela inicial) abre LED com resistor, RC, onda quadrada, filtro passa-baixa, RLC com sobressinal, amplificador inversor com
+  O gráfico tem tensões à esquerda e correntes à direita, leitura sob o cursor e clique para ir ao instante. A aba
+  **Prontos** do trilho lista os circuitos de teste com um cartão didático e três botões, Protoboard, Esquemático e
+  PCB: cada um abre o circuito numa aba nova naquela vista, já simulando com as pontas (a PCB abre com a placa criada
+  e roteada). Simulação › Circuitos de teste (ou a tela inicial) abre LED com resistor, RC, onda quadrada, filtro passa-baixa, RLC com sobressinal, amplificador inversor com
   amp-op, emissor comum com transistor e chave temporizada, já ligados no esquemático e na protoboard, com as pontas
   e o sinal certo na fonte. Mudar o circuito durante o transitório
   continua a simulação do instante em que ela estava.

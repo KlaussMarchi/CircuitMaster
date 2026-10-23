@@ -628,6 +628,11 @@ Decisões novas do usuário (substituem a decisão 3 da seção 5 do plano no qu
   sobre o circuito, janela manual e SPICE foram para a aba Documento, que carrega sob demanda: o JS inicial voltou a
   708 KB). O estímulo e a resposta de uma curva viraram métodos da `Simulation` (`getStimulus`, `getResponse`).
 
+- **Aba Prontos** (pedido 7): item no trilho (ícone de frasco, também em Exibir › Painéis da paleta) com um cartão
+  por circuito de teste (título, o que observar) e os botões Protoboard, Esquemático e PCB; cada um abre numa aba
+  nova naquela vista, simulando com as pontas; a PCB abre com a placa criada e roteada (`openBench(id, view)` chama o
+  `makeBoard`). Teste: `e2e/simulation.spec.ts` "Prontos".
+
 ### Bugs achados e corrigidos (2026-10-23)
 
 1. **Fonte de bancada com carga só capacitiva não simulava** (provável "a simulação parou", pedido 1): com corrente
@@ -650,7 +655,6 @@ Decisões novas do usuário (substituem a decisão 3 da seção 5 do plano no qu
   uma aba de sketch. A hipótese mais forte é o servidor de desenvolvimento recarregando a página a cada arquivo que eu
   editava enquanto o usuário testava (a recarga traz "Recuperar trabalho não salvo"), o que também explicaria a
   simulação quebrada no meio das edições. Confirmar com o usuário qual janela era.
-- Pedido 7 (aba "Prontos" no trilho, com esquemático, protoboard e PCB roteada).
 - A janela automática não enxerga a fonte de bancada: o `ilimit` fica aberto para a escala de tempo, e um RC nela cai
   na janela de 10 s.
 

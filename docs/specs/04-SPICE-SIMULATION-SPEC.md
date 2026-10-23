@@ -483,7 +483,8 @@ amplificador inversor (OP27,
 −10 kΩ/1 kΩ, ±9 V, senoide de 0,5 V e 1 kHz) e emissor comum (NPN, divisor 47 kΩ/10 kΩ, 4,7 kΩ/1 kΩ, 9 V, senoide
 de 0,2 V e 1 kHz). As peças são criadas nas três vistas, alinhadas à grade e ligadas pelo caminho ortogonal no esquemático e na
 protoboard (fios de jumper), com as pontas de prova da entrada e da saída; na PCB ficam as linhas de ligação para o
-autorouter ("Criar placa e rotear", doc 03 §8.3.1).
+autorouter ("Criar placa e rotear", doc 03 §8.3.1). A aba **Prontos** do trilho (pedido do usuário, 2026-10-23) abre cada um na vista
+escolhida; na PCB, com a placa criada em volta das peças e roteada.
 
 ### 8.10 Comutação programada de chaves (extensão do CircuitMaster)
 

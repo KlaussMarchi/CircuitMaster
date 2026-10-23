@@ -39,7 +39,7 @@ export type Viewport   = { x: number, y: number, zoom: number }
 export type Tool       = 'select' | 'area' | 'lasso' | 'erase' | 'zoomArea' | 'origin' | ProbeKind
 export type GridKind   = 'parts' | 'wires'
 export type Panel      = 'properties' | 'routing' | 'document'
-export type Left       = 'parts' | 'project' | 'problems'
+export type Left       = 'parts' | 'ready' | 'project' | 'problems'
 export type Theme      = 'dark' | 'light'
 export type Side       = 'both' | 'top' | 'bottom'
 export type UserBin    = { title: string, moduleIds: string[] }
@@ -123,7 +123,7 @@ type State = {
     print: () => Promise<void>
     saveAll: () => Promise<void>
     openSample: (file: string) => Promise<void>
-    openBench: (id: string) => Promise<void>
+    openBench: (id: string, view?: View) => Promise<void>
     recover: (version: Version) => Promise<void>
     dismissRecovery: () => Promise<void>
     showVersions: () => Promise<void>
@@ -664,7 +664,8 @@ export const useStore = create<State>((set, get) => {
         },
 
         // CIRCUITO DE TESTE: SKETCH NOVO NO ESQUEMÁTICO COM O SIMULADOR LIGADO NO TRANSITÓRIO DO MODELO DELE (SPEC 04 §8.9)
-        openBench: async id => {
+        // CIRCUITO DE TESTE NUMA ABA NOVA, SIMULANDO, NA VISTA ESCOLHIDA; NA PCB, COM A PLACA CRIADA EM VOLTA E ROTEADA
+        openBench: async (id, view = 'schematicView') => {
             const bench = BENCHES.find(item => item.id === id)
 
             if (!bench)
@@ -672,9 +673,12 @@ export const useStore = create<State>((set, get) => {
 
             await get().library.load([...BENCH_PARTS, WIRE])
             const doc = buildBench(get().library, bench)
-            place({ name: bench.title, doc, saved: doc, stored: false, file: null, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view: 'schematicView' }, t(bench.summary))
+            place({ name: bench.title, doc, saved: doc, stored: false, file: null, past: [], future: [], selection: [], probe: null, viewports: {}, drc: null, view }, t(bench.summary))
             set({ simulation: { ...IDLE, enabled: true } })
             get().setShow({ chart: true })
+
+            if (view === 'pcbView')
+                await get().makeBoard()
         },
 
         // VERSÃO SALVA SOZINHA ABERTA NUMA ABA COMO DOCUMENTO NÃO SALVO; AQUELE SKETCH DEIXA DE SER OFERECIDO E OS OUTROS DA SESSÃO MORTA SEGUEM NA LISTA

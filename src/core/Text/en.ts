@@ -549,6 +549,8 @@ export const EN: Record<string, string> = {
     'Sem degrau nem senoide para medir resposta nesta curva: escolha Degrau ou Senoide na fonte de tensão.': 'No step or sine to measure a response on this curve: choose Step or Sine on the voltage source.',
     'regime (ponto de operação): nada muda no tempo; clique na fonte de tensão e escolha Degrau, Rampa, Senoide ou Onda quadrada': 'steady state (operating point): nothing changes over time; click the voltage source and choose Step, Ramp, Sine or Square wave',
     'Sinal': 'Signal',
+    'Prontos': 'Ready-made',
+    'Circuitos didáticos que já simulam: escolha a vista para abrir.': 'Teaching circuits that already simulate: choose the view to open.',
     'regime (ponto de operação): nada muda no tempo; escolha o sinal na fonte de tensão ou, na aba Documento, Começa descarregado': 'steady state (operating point): nothing changes over time; choose the signal on the voltage source or, in the Document tab, Starts discharged',
     'Janela manual': 'Manual window',
     'Filtrar': 'Filter',

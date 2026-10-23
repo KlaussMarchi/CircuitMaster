@@ -483,7 +483,7 @@ test('Inglês: a interface inteira troca de língua nas Preferências, fica na r
         await scan(panel)
     }
 
-    for (const panel of ['Project', 'Problems', 'Parts']) {
+    for (const panel of ['Ready-made', 'Project', 'Problems', 'Parts']) {
         await page.getByRole('navigation', { name: 'Panels' }).getByRole('button', { name: panel }).click()
         await scan(panel)
     }

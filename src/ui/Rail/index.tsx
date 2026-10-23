@@ -4,7 +4,7 @@ import { countProblems, getProblems, useProblemState } from '../Problems'
 import { useStore, type Left } from '../Store'
 import { t } from '../../core/Text'
 
-const ITEMS: [Left, IconName, string][] = [['parts', 'parts', 'Peças'], ['project', 'layers', 'Projeto'], ['problems', 'alert', 'Problemas']]
+const ITEMS: [Left, IconName, string][] = [['parts', 'parts', 'Peças'], ['ready', 'flask', 'Prontos'], ['project', 'layers', 'Projeto'], ['problems', 'alert', 'Problemas']]
 const PHONE = 860    // PX: ATÉ AQUI OS PAINÉIS SÃO FOLHAS (style.css) E O TRILHO SÓ AS ABRE E FECHA
 
 // NO CELULAR OS PAINÉIS VIRAM FOLHAS SOBRE O QUADRO (DESIGN.md §2)

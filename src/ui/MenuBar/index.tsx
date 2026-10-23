@@ -244,7 +244,7 @@ export type Command = { path: string[], entry: NonNullable<MenuEntry> }
 // TODO ITEM DOS MENUS COM O CAMINHO ATÉ ELE, MAIS OS PAINÉIS DO TRILHO, PARA A PALETA DE COMANDOS
 export const getCommands = (state: State): Command[] => {
     const walk   = (entries: MenuEntry[], path: string[]): Command[] => entries.flatMap(entry => !entry ? [] : entry.items ? walk(entry.items, [...path, entry.label]) : [{ path, entry }])
-    const panels = ([['parts', 'Peças'], ['project', 'Projeto'], ['problems', 'Problemas']] as const).map(([id, label]): Command => ({ path: ['Painéis'], entry: { label, apply: () => state.setLeft(id) } }))
+    const panels = ([['parts', 'Peças'], ['ready', 'Prontos'], ['project', 'Projeto'], ['problems', 'Problemas']] as const).map(([id, label]): Command => ({ path: ['Painéis'], entry: { label, apply: () => state.setLeft(id) } }))
     return [...MENUS.flatMap(([title, build]) => walk(build(state), [title])), ...panels]
 }
 

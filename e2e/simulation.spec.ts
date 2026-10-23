@@ -193,3 +193,22 @@ test('Painel limpo: abre sozinho ao simular, só as pontas do usuário em pílul
     await page.getByRole('tab', { name: 'Documento' }).click()
     await expect(panel.getByLabel('Opções da simulação')).toContainText('Janela manual')
 })
+
+test('Prontos: cada circuito abre na vista escolhida, já simulando com as pontas; a PCB abre com a placa criada e roteada', async ({ app, page }) => {
+    await page.getByRole('navigation', { name: 'Painéis' }).getByRole('button', { name: 'Prontos' }).click()
+    const ready = page.getByRole('region', { name: 'Prontos' })
+    await expect(ready.getByRole('group')).toHaveCount(BENCHES.length)
+    await app.shoot('prontos')
+
+    await ready.getByRole('group', { name: 'LED com resistor' }).getByRole('button', { name: 'Protoboard' }).click()
+    await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('op')
+    expect(await page.evaluate(() => [cm.store.getState().view, cm.store.getState().doc.probes.length])).toEqual(['breadboardView', 2])
+
+    await ready.getByRole('group', { name: 'Filtro passa-baixa (RC)' }).getByRole('button', { name: 'PCB' }).click()
+    await expect.poll(() => page.evaluate(() => {
+        const { view, routing, netlist, name } = cm.store.getState()
+        return view === 'pcbView' && name === 'Filtro passa-baixa (RC)' && !routing && netlist?.getStatus('pcbView').left
+    }), { timeout: 60000 }).toBe(0)
+    await expect.poll(() => app.simulated(), { timeout: 30000 }).toBe('tran')
+    await app.shoot('prontos-pcb')
+})
