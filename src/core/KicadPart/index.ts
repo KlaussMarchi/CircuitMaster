@@ -1,7 +1,7 @@
 import type { Bundle } from '../Sketch'
 import type { Point } from '../Geometry'
 import { escapeXml, fitsFilters, svgOf } from '../KicadDraw'
-import { parentOf, pinsOf, readSymbol, symbolSvg, type KicadSymbol } from '../KicadSymbol'
+import { parentOf, pinsOf, readSymbol, readSymbols, symbolSvg, type KicadPin, type KicadSymbol } from '../KicadSymbol'
 import { breadboardSvg, fitsBreadboard, footprintSvg, padsOf, readFootprint, type KicadFootprint } from '../KicadFootprint'
 
 export const KICAD_ID         = /^cm:([^:@]+):([^@]+)(?:@(.+))?$/    // cm:Biblioteca:Símbolo, COM @BibliotecaFp:Footprint QUANDO O FOOTPRINT É ESCOLHIDO
@@ -125,4 +125,41 @@ export const readKicadPart = async (moduleId: string, read: Read, equivalent = '
     const field = chosen ?? footprintOf(symbol)
     const file  = footprintPath(field)
     return kicadBundle(moduleId, symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field, equivalent)
+}
+
+const PIN = 2.54    // mm: PASSO E COMPRIMENTO DOS PINOS DO SÍMBOLO GERADO
+
+// SÍMBOLO PARA UM FOOTPRINT SEM SÍMBOLO: UMA CAIXA COM UM PINO POR PAD, METADE À ESQUERDA E METADE À DIREITA, NA ORDEM DOS PADS
+const symbolFromPads = (footprint: KicadFootprint): KicadSymbol => {
+    const pads  = padsOf(footprint)
+    const left  = Math.ceil(pads.length / 2)
+    const rows  = Math.max(left, pads.length - left, 1)
+    const half  = [2 * PIN, (rows + 1) * PIN / 2]
+    const pins  = pads.map((pad, i): KicadPin => {
+        const side = i < left ? -1 : 1
+        const row  = i < left ? i : pads.length - 1 - i
+        return { number: pad.number, name: pad.number, type: 'passive', at: [side * (half[0] + PIN), half[1] - PIN - row * PIN], angle: side < 0 ? 0 : 180, length: PIN, hidden: false, unit: 1 }
+    })
+    const body  = ['rectangle', ['start', String(-half[0]), String(half[1])], ['end', String(half[0]), String(-half[1])], ['stroke', ['width', '0.254']], ['fill', ['type', 'background']]]
+    return { name: footprint.name, properties: { Reference: 'U', Description: footprint.description }, pins, shapes: [[1, [body]]], units: 1, power: false, namesInside: 0.508, hideNames: false, hideNumbers: false }
+}
+
+const merge = (bundles: Bundle[]): Bundle => ({ sketch: null, parts: bundles.flatMap(bundle => bundle.parts), svgs: bundles.flatMap(bundle => bundle.svgs), others: [], bin: null })
+
+// ARQUIVO DO KICAD ABERTO PELO USUÁRIO: CADA SÍMBOLO DE UM .kicad_sym VIRA UMA PEÇA (COM O FOOTPRINT DO CAMPO, SE ESTIVER NAS BIBLIOTECAS); UM .kicad_mod VIRA UMA PEÇA COM SÍMBOLO GERADO; TEXTO QUE NÃO LÊ DÁ A CAUSA (SPEC 08 §4)
+export const importKicad = async (name: string, text: string, read: Read): Promise<Bundle | string> => {
+    const base = name.replace(/^.*[\\/]/, '').replace(/\.kicad_(sym|mod)$/i, '')
+
+    if (/\.kicad_mod$/i.test(name)) {
+        const footprint = readFootprint(text)
+        return footprint && padsOf(footprint).length ? kicadBundle(kicadId(base, footprint.name), symbolFromPads(footprint), footprint, `${base}:${footprint.name}`) : 'footprint do KiCad ilegível ou sem pads'
+    }
+
+    const symbols = readSymbols(text).filter(symbol => pinsOf(symbol).length)
+    const bundles = await Promise.all(symbols.map(async symbol => {
+        const field = footprintOf(symbol)
+        const file  = footprintPath(field)
+        return kicadBundle(kicadId(base, symbol.name), symbol, file ? readFootprint(await read(KICAD_FOOTPRINTS, file) ?? '') : null, field)
+    }))
+    return bundles.length ? merge(bundles) : 'biblioteca de símbolos do KiCad ilegível ou sem símbolos com pinos'
 }

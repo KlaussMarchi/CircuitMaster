@@ -905,6 +905,8 @@ export const EN: Record<string, string> = {
     'Conectores': 'Connectors',
     'Catálogo': 'Catalog',
     'Coleções': 'Collections',
+    'footprint do KiCad ilegível ou sem pads': 'unreadable KiCad footprint or one without pads',
+    'biblioteca de símbolos do KiCad ilegível ou sem símbolos com pinos': 'unreadable KiCad symbol library or one without symbols with pins',
     'Básicos': 'Basics',
     'Mais peças': 'More parts',
     'Sem família': 'No family',

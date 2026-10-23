@@ -719,6 +719,11 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
   número do KiCad. Teste: `tests/kicad.test.ts` (LED aceso com resistor do KiCad; eletrolítico carrega com τ = RC).
 - **Trocar o footprint no inspetor** (KP-146): os footprints que casam com os filtros do símbolo; a troca mantém os
   fios. Teste: `e2e/kicad.spec.ts`.
+- **Abrir `.kicad_sym` e `.kicad_mod`** (KS-205, KP-292): pelo mesmo Arquivo › Abrir do `.fzpz`, sem botão novo; as
+  peças vão para Meus itens. Cada símbolo com pinos de uma biblioteca vira peça (o derivado com o pai do mesmo
+  arquivo); um footprint avulso ganha um símbolo gerado, um pino por pad. Teste: `tests/kicad.test.ts` e
+  `e2e/kicad.spec.ts`, que achou o caso do derivado aberto sozinho (o `NE555P.kicad_sym` de uma `.kicad_symdir` sem o
+  `NE555D`): fica fora, como no KiCad, e o arquivo sem símbolos com pinos dá a causa.
 
 3. **A busca do KiCad pesava na primeira busca depois de abrir** (achado pelo `perf`: 54 a 82 ms contra 50): o
    resumo de 3,4 MB era montado de uma vez no worker. Agora começa 1,5 s depois do acervo pronto, em lotes, a busca
@@ -737,5 +742,4 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
 - Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
   `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
 - Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.
-- SMD na protoboard numa placa adaptadora (seção 12).
 

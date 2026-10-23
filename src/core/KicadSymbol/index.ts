@@ -31,14 +31,8 @@ const readPin = (node: Sexpr[], unit: number): KicadPin => ({
 
 const yes = (node: Sexpr[] | undefined) => node !== undefined && (node.includes('hide') || unquote(childOf(node, 'hide')?.[1]) === 'yes')
 
-// SÍMBOLO DE UM .kicad_sym (O PRIMEIRO DO ARQUIVO; NAS PASTAS .kicad_symdir DO KICAD 10 HÁ UM POR ARQUIVO); O DERIVADO (extends) HERDA DESENHO E PINOS DO PAI
-export const readSymbol = (text: string, parent: KicadSymbol | null = null): KicadSymbol | null => {
-    const [root] = readSexpr(text) ?? []
-    const node   = childOf(root, 'symbol')
-
-    if (!node)
-        return null
-
+// SÍMBOLO DE UM NÓ (symbol …); O DERIVADO (extends) HERDA DESENHO E PINOS DO PAI
+const symbolOf = (node: Sexpr[], parent: KicadSymbol | null): KicadSymbol => {
     const name       = unquote(node[1])
     const properties = Object.fromEntries(childrenOf(node, 'property').map(property => [unquote(property[1]), unquote(property[2])]))
     const children   = childrenOf(node, 'symbol').map(child => [unitOf(unquote(child[1])), child] as const).filter(([[, style]]) => style <= 1)    // ESTILO 0 VALE PARA TODOS; O 2 É O DE MORGAN
@@ -48,6 +42,23 @@ export const readSymbol = (text: string, parent: KicadSymbol | null = null): Kic
     const own        = { name, properties, pins, shapes, units: Math.max(1, ...pins.map(pin => pin.unit), ...shapes.map(([unit]) => unit)), power: childOf(node, 'power') !== undefined, namesInside: names ? num(childOf(names, 'offset')?.[1]) || 0 : NAME_INSET, hideNames: yes(names), hideNumbers: yes(childOf(node, 'pin_numbers')) }
 
     return childOf(node, 'extends') && parent ? { ...parent, name, properties: { ...parent.properties, ...properties } } : own
+}
+
+// SÍMBOLO DE UM .kicad_sym: O PRIMEIRO DO ARQUIVO (NAS PASTAS .kicad_symdir DO KICAD 10 HÁ UM POR ARQUIVO)
+export const readSymbol = (text: string, parent: KicadSymbol | null = null) => {
+    const node = childOf(readSexpr(text)?.[0], 'symbol')
+    return node ? symbolOf(node, parent) : null
+}
+
+// TODOS OS SÍMBOLOS DE UMA BIBLIOTECA .kicad_sym, OS DERIVADOS COM O PAI DO MESMO ARQUIVO
+export const readSymbols = (text: string) => {
+    const nodes = childrenOf(readSexpr(text)?.[0], 'symbol')
+    const named = new Map(nodes.map(node => [unquote(node[1]), node]))
+    const read  = (node: Sexpr[]): KicadSymbol => {
+        const parent = named.get(unquote(childOf(node, 'extends')?.[1]))
+        return symbolOf(node, parent && parent !== node ? read(parent) : null)
+    }
+    return nodes.map(read)
 }
 
 export const parentOf = (text: string) => unquote(childOf(childOf(readSexpr(text)?.[0], 'symbol'), 'extends')?.[1])

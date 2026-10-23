@@ -86,7 +86,7 @@ export const App = () => {
                 <button className="sheet-scrim" aria-label={t('Fechar painel')} onClick={() => toggleSheet(null)} />
             </div>
             <Boundary name="Barra de status" className="status"><StatusBar /></Boundary>
-            <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb" hidden onChange={onFile} />
+            <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb,.kicad_sym,.kicad_mod" hidden onChange={onFile} />
             <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><DialogSlot /></Boundary>
             <Boundary name="Editor de peças" className="modal" close={() => useStore.getState().editPart(null)}><EditorSlot /></Boundary>
             <Boundary name="Paleta de comandos" className="modal" close={() => useStore.setState({ dialog: null })}><Palette /></Boundary>

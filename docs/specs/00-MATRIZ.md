@@ -12,8 +12,8 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
 | Fritzing | 251 | 208 | 17 | 26 |
-| KiCad esquemático, comuns e projeto | 404 | 122 | 269 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 31 | 388 | 2 |
+| KiCad esquemático, comuns e projeto | 404 | 123 | 268 | 13 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 32 | 387 | 2 |
 
 ## Fritzing
 
@@ -669,7 +669,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KS-202 | Exportar símbolo como SVG (Export Symbol as SVG…) | KiCad › Schematic Editor | falta | 5 | — | — |
 | KS-203 | Exportar vista do editor de símbolos como PNG (Export View as PNG…) | KiCad › Schematic Editor | falta | 5 | — | — |
 | KS-204 | Achatar símbolo (remover herança) (Flatten Symbol) | KiCad › Schematic Editor | falta | 5 | — | P1 |
-| KS-205 | Importar símbolo (Import Symbol...) | KiCad › Schematic Editor | falta | 5 | — | parcial: abrir .fzpz instala a peça |
+| KS-205 | Importar símbolo (Import Symbol...) | KiCad › Schematic Editor | feita | 5 | tests/kicad.test.ts · e2e/kicad.spec.ts | Arquivo › Abrir com um .kicad_sym: cada símbolo com pinos vira peça de três vistas em Meus itens (spec 08 §4); também abre .fzpz |
 | KS-206 | Novo símbolo (New Symbol...) | KiCad › Schematic Editor | falta | 5 | — | P1 |
 | KS-207 | Mostrar o próximo símbolo (Display next symbol) | KiCad › Schematic Editor | falta | 5 | — | — |
 | KS-208 | Colar símbolo na biblioteca (Paste Symbol) | KiCad › Schematic Editor | falta | 5 | — | — |
@@ -697,7 +697,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-004 | Excluir violação marcada (Exclude Marker) | KiCad › Common | falta | 8 | — | P1; exclusões do ERC (as do DRC na fase 10) |
 | KC-005 | Próximo marcador (Next Marker) | KiCad › Common | falta | 8 | — | P1; parcial: Problemas leva até cada item do DRC |
 | KC-006 | Marcador anterior (Previous Marker) | KiCad › Common | falta | 8 | — | P1; parcial: Problemas leva até cada item do DRC |
-| KC-007 | Adicionar biblioteca existente (Add Library…) | KiCad › Common | falta | 5 | — | P1; parcial: abrir .fzbz importa um bin |
+| KC-007 | Adicionar biblioteca existente (Add Library…) | KiCad › Common | falta | 5 | — | P1; parcial: abrir .fzbz importa um bin e abrir .kicad_sym põe os símbolos em Meus itens |
 | KC-008 | Centralizar texto (Center Justify) | KiCad › Common | falta | 8 | — | — |
 | KC-009 | Centralizar a vista na seleção (Pan to Center Selected Objects) | KiCad › Common | feita | 2 | e2e/navigation.spec.ts | Exibir › Centralizar na seleção |
 | KC-010 | Recolher tudo (Collapse All) | KiCad › Common | falta | 5 | — | parcial: as seções do acervo abrem e fecham uma a uma |
@@ -1055,10 +1055,10 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de esquemático (KS) | 221 | 33 | 186 | 2 |
-| Ações comuns (KC) | 161 | 84 | 68 | 9 |
+| Editor de esquemático (KS) | 221 | 34 | 185 | 2 |
+| Ações comuns (KC) | 161 | 85 | 67 | 9 |
 | Gerenciador de projeto (KM) | 22 | 4 | 16 | 2 |
-| Total | 404 | 121 | 270 | 13 |
+| Total | 404 | 123 | 268 | 13 |
 
 | Fase | Linhas de ações |
 |---|---|
@@ -1393,7 +1393,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-289 | Editar o footprint escolhido na árvore (Edit Footprint) | KiCad › PCB Editor | falta | 5 | — | P1 |
 | KP-290 | Exportar o footprint atual (Export Current Footprint...) | KiCad › PCB Editor | falta | 5 | — | parcial: o editor de peças baixa a peça como .fzpz |
 | KP-291 | Propriedades do footprint (Footprint Properties...) | KiCad › PCB Editor | falta | 5 | — | P1; parcial: metadados da peça no editor de peças |
-| KP-292 | Importar footprint de arquivo (Import Footprint...) | KiCad › PCB Editor | falta | 5 | — | parcial: importar peça .fzpz |
+| KP-292 | Importar footprint de arquivo (Import Footprint...) | KiCad › PCB Editor | feita | 5 | tests/kicad.test.ts · e2e/kicad.spec.ts | Arquivo › Abrir com um .kicad_mod: vira peça em Meus itens com um símbolo gerado, um pino por pad (spec 08 §4) |
 | KP-293 | Carregar o footprint da placa (Load footprint from current PCB) | KiCad › PCB Editor | falta | 5 | — | parcial: Editar (editor de peças) na peça do sketch |
 | KP-294 | Novo footprint (New Footprint) | KiCad › PCB Editor | falta | 5 | — | P1; parcial: o editor de peças grava uma peça nova a partir de outra |
 | KP-295 | Tabela de pads (Pad Table...) | KiCad › PCB Editor | falta | 5 | — | P1 |
@@ -1670,12 +1670,12 @@ Fase = fase do que falta na seção (0 quando todas as linhas estão feitas). "C
 
 | Tabela | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Editor de PCB | 335 | 30 | 303 | 2 |
+| Editor de PCB | 335 | 32 | 301 | 2 |
 | Visualizador 3D | 40 | 0 | 40 | 0 |
 | Comuns só da PCB | 0 | 0 | 0 | 0 |
 | GerbView | 37 | 0 | 37 | 0 |
 | Calculadora | 9 | 0 | 9 | 0 |
-| **Total** | **421** | **30** | **389** | **2** |
+| **Total** | **421** | **32** | **387** | **2** |
 
 | Fase | 0 | 1 | 2 | 3 | 5 | 6 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | — | Total |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|

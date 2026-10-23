@@ -10,7 +10,7 @@ import type { Box, Point } from '../src/core/Geometry'
 import { emptyDoc, keyOf } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
 import { Netlist } from '../src/core/Netlist'
-import { footprintOf, footprintPath, kicadBundle, kicadId } from '../src/core/KicadPart'
+import { footprintOf, footprintPath, importKicad, kicadBundle, kicadId } from '../src/core/KicadPart'
 import { listFiles } from '../tools/Fritzing'
 import { createInstance, createWire, setProperty } from '../src/engine/Edit'
 import { SIGNAL_KEY, buildCircuit } from '../src/core/Spice'
@@ -310,5 +310,39 @@ describe.skipIf(!HAS_KICAD)('toda peça das bibliotecas entra na protoboard (spe
         writeReport('kicad-breadboard-report.txt', `footprint passante: ${counts.footprint}\nplaca adaptadora: ${counts.adapter}\nsó esquemático (alimentação ou sem pinos): ${counts.schematic}\n${failures.join('\n')}\n`)
         expect(failures.slice(0, 20)).toEqual([])
         expect(counts.footprint + counts.adapter).toBeGreaterThan(20000)
+    })
+})
+
+const fromDisk = async (root: string, file: string) => {
+    const base = root === 'kicad-symbols' ? ROOTS.symbols : ROOTS.footprints
+    return fs.existsSync(path.join(base, file)) ? fs.readFileSync(path.join(base, file), 'utf8') : null
+}
+
+describe.skipIf(!HAS_KICAD)('abrir símbolo e footprint do KiCad: viram peças em Meus itens (spec 08 §4)', () => {
+    it('cada símbolo de uma biblioteca vira peça, o derivado com o desenho do pai do mesmo arquivo; o footprint do campo vem das bibliotecas', async () => {
+        const timer  = fs.readFileSync(path.join(ROOTS.symbols, 'Timer.kicad_symdir', 'NE555D.kicad_sym'), 'utf8')
+        const child  = fs.readFileSync(path.join(ROOTS.symbols, 'Timer.kicad_symdir', 'NE555P.kicad_sym'), 'utf8')
+        const nodeOf = (text: string) => text.slice(text.indexOf('(symbol '), text.lastIndexOf(')'))
+        const text   = `(kicad_symbol_lib (version 20241209) (generator "teste")\n${nodeOf(timer)}\n${nodeOf(child)}\n)`
+        const bundle = await importKicad('meus_timers.kicad_sym', text, fromDisk)
+
+        expect(typeof bundle).not.toBe('string')
+        const parts = typeof bundle === 'string' ? [] : bundle.parts
+        expect(parts.map(file => file.name)).toEqual(['part.cm_meus_timers_NE555D.fzp', 'part.cm_meus_timers_NE555P.fzp'])
+        expect(parts[1].text).toContain('moduleId="cm:meus_timers:NE555P"')
+        expect([...parts[1].text.matchAll(/<connector id=/g)]).toHaveLength(8)
+        expect(parts[1].text).toContain('<pcbView>')
+    })
+
+    it('um footprint avulso vira peça com um símbolo gerado: um pino por pad, protoboard e PCB', async () => {
+        const text   = fs.readFileSync(path.join(ROOTS.footprints, 'Package_DIP.pretty', 'DIP-8_W7.62mm.kicad_mod'), 'utf8')
+        const bundle = await importKicad('DIP-8_W7.62mm.kicad_mod', text, fromDisk)
+        const fzp    = typeof bundle === 'string' ? '' : bundle.parts[0].text
+
+        expect([...fzp.matchAll(/<connector id=/g)]).toHaveLength(8)
+        expect(fzp).toContain('<breadboardView>')
+        expect(typeof bundle === 'string' ? [] : bundle.svgs.map(file => file.name.split('.')[1])).toEqual(['schematic', 'breadboard', 'pcb'])
+        expect(await importKicad('vazio.kicad_mod', '(footprint "x")', fromDisk)).toMatch(/sem pads/)
+        expect(await importKicad('lixo.kicad_sym', 'não é s-expression', fromDisk)).toMatch(/ilegível/)
     })
 })

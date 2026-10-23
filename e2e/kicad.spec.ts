@@ -97,3 +97,35 @@ test('Catálogo: todas as peças em categorias e famílias próprias; o 555 do a
     await page.mouse.click(center[0], center[1])
     await expect.poll(() => app.count()).toBeGreaterThan(before)
 })
+
+// ABRIR UM .kicad_sym OU UM .kicad_mod: AS PEÇAS ENTRAM EM MEUS ITENS, COMO O .fzpz (KS-205, KP-292, SPEC 08 §4)
+test('Abrir símbolo e footprint do KiCad: as peças entram em Meus itens e vão para o quadro com as três vistas', async ({ app, page }) => {
+    const parts = page.getByRole('region', { name: 'Peças' })
+    const files = [['Timer.kicad_sym', '/kicad/symbols/Timer.kicad_symdir/NE555D.kicad_sym'], ['DIP-8_W7.62mm.kicad_mod', '/kicad/footprints/Package_DIP.pretty/DIP-8_W7.62mm.kicad_mod']]
+
+    for (const [name, url] of files) {
+        const buffer = await (await page.request.get(url)).body()
+        await page.locator('#open-file').setInputFiles({ name, mimeType: 'text/plain', buffer })
+        await expect.poll(() => app.message()).toBe(`1 peças de ${name} em Meus itens`)
+    }
+
+    await parts.getByRole('tab', { name: 'Meus itens' }).click()
+    await expect(parts.getByRole('button', { name: /^NE555D/ })).toHaveCount(1)
+    const footprint = parts.getByRole('button', { name: /^DIP-8_W7\.62mm/ })
+    await expect(footprint).toHaveCount(1)
+
+    const before = await app.count()
+    const center = await app.canvasCenter()
+    await footprint.click()
+    await page.mouse.click(center[0], center[1])
+    await expect.poll(() => app.count()).toBeGreaterThan(before)
+    const pins = await page.evaluate(() => {
+        const { doc, selection, library } = cm.store.getState()
+        const moduleId = doc.instances[selection[0]]?.moduleIdRef ?? ''
+        return (['breadboardView', 'schematicView', 'pcbView'] as const).map(view => library.getPins(moduleId, view, view === 'pcbView' ? 'copper0' : view === 'schematicView' ? 'schematic' : 'breadboard').size)
+    })
+    expect(pins).toEqual([8, 8, 8])
+
+    await page.locator('#open-file').setInputFiles({ name: 'vazio.kicad_mod', mimeType: 'text/plain', buffer: Buffer.from('(footprint "x")') })
+    await expect.poll(() => app.message()).toMatch(/^vazio\.kicad_mod: footprint do KiCad ilegível ou sem pads$/)
+})

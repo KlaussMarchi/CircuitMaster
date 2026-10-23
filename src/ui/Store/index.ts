@@ -521,10 +521,11 @@ export const useStore = create<State>((set, get) => {
 
         open: async (name, bytes) => {
             const { library } = get()
-            const bundle      = readFile(name, bytes)
+            const kicad       = /\.kicad_(sym|mod)$/i.test(name)    // SÍMBOLOS E FOOTPRINTS DO KICAD VIRAM PEÇAS EM MEUS ITENS, COMO O .fzpz (SPEC 08 §4)
+            const bundle      = kicad ? await import('../../core/KicadPart').then(module => module.importKicad(name, new TextDecoder().decode(bytes), (root, path) => library.source.read(root, path))) : readFile(name, bytes)
 
             if (typeof bundle === 'string')
-                return set({ message: `${name}: ${bundle}` })
+                return set({ message: `${name}: ${kicad ? t(bundle) : bundle}` })
 
             if (bundle && !bundle.sketch && (bundle.parts.length || bundle.bin)) {
                 const added  = library.addBundle(bundle)

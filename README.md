@@ -102,7 +102,8 @@ guardado no navegador (`cm-theme`).
   trocar a peça do sketch e ser baixada como `.fzpz`; uma peça sua é regravada no lugar. O editor desfaz e refaz
   (`Ctrl+Z`, `Ctrl+Y`), define todos os conectores como macho, fêmea ou pad, passa de passante a SMD, liga conectores
   por dentro (conexões internas), aceita PNG e JPG, tem zoom, grade e camadas e baixa o SVG de cada vista. Os bins do
-  usuário e as peças importadas ou criadas ficam guardados no navegador.
+  usuário e as peças importadas ou criadas ficam guardados no navegador. Abrir um `.kicad_sym` ou um `.kicad_mod` põe
+  os símbolos e o footprint em Meus itens como peças de três vistas.
 - **Painel de peças**: três abas — Básicos (as peças sugeridas, com o resto das comuns recolhido em "Mais peças"),
   Catálogo (tudo, em categorias e famílias, e as coleções de fabricante como Arduino, SparkFun, Adafruit e a do
   simulador) e Meus itens —, em ícones ou em lista; o clique direito numa peça edita, exporta, remove do bin ou

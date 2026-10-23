@@ -75,6 +75,12 @@ inicial.
   pela peça `…@Biblioteca:Nome`, que mantém os fios (os conectores são os mesmos pinos). Nome que não existe nas
   bibliotecas dá mensagem e não troca. A peça sem footprint mostra o campo vazio: escolher um dá a protoboard e a
   PCB.
+- **Abrir um arquivo do KiCad** (KS-205, KP-292): Arquivo › Abrir aceita `.kicad_sym` e `.kicad_mod`, e as peças
+  entram em Meus itens como as de um `.fzpz`. Cada símbolo com pinos de uma biblioteca vira peça
+  `cm:<arquivo>:<Símbolo>`, o derivado com o pai do mesmo arquivo (derivado sem o pai fica fora, como no KiCad) e o
+  footprint do campo `Footprint` lido das bibliotecas. Um footprint avulso vira peça com um símbolo gerado: uma caixa
+  com um pino por pad, metade de cada lado, na ordem dos pads. Arquivo ilegível, sem pads ou sem símbolos com pinos
+  dá a causa na barra de status.
 
 ## 5. UM CATÁLOGO SÓ
 
@@ -130,3 +136,4 @@ KiCad só aparecem onde o assunto é compatibilidade de arquivos e nos créditos
 | Catálogo: 25 mil peças em categorias e famílias, o 555 do acervo e o NE555P na mesma família, pôr no quadro | `e2e/kicad.spec.ts` |
 | Resistor e LED do KiCad acendem o LED com a fonte DC; eletrolítico do KiCad carrega com τ = RC | `tests/kicad.test.ts` |
 | Footprint no inspetor: as opções do filtro, a troca mantém os fios, nome inexistente avisa | `e2e/kicad.spec.ts` |
+| Abrir `.kicad_sym` (vários símbolos, derivado) e `.kicad_mod` (símbolo gerado): peças em Meus itens com as três vistas; arquivo ruim dá a causa | `tests/kicad.test.ts` · `e2e/kicad.spec.ts` |
