@@ -528,3 +528,38 @@ livre; largura da trilha no inspetor).
 Matriz: Fritzing 209 feitas de 251 (17 "falta", todas de outras fases: 15 da aba Código na 14, subpartes na 8 e o PDF
 vetorial na 13; 25 "não se aplica"); KiCad esquemático, comuns e projeto 121 de 404; PCB 30 de 421. Nenhuma linha da
 fase 3 em "falta".
+
+## Fase 4 — base KiCad
+
+### Feito (2026-10-22)
+
+- **Acervo em `/kicad`** (`tools/KiCad`, `KICAD_ROOT`): símbolos, footprints, modelos 3D, modelos de projeto e demos,
+  com as listagens JSON, no `dev` e no `preview`. O plugin do Vite virou um só (`dataServer`) para o Fritzing e o
+  KiCad.
+- **`core/Sexpr`**: leitor sem recursão (átomos crus, texto mal formado volta nulo) e gravador com o `Prettify`
+  portado do KiCad. Os 22.905 símbolos, os 15.464 footprints e os 164 arquivos dos demos voltam com a mesma árvore;
+  tudo o que o KiCad 10 gravou volta igual byte a byte (os outros são de geradores antigos e voltam no formato do
+  KiCad 10, como o próprio KiCad faria).
+- **Oráculo `kicad-cli`**: o SVG de três bibliotecas de footprints e de um símbolo regravados é o mesmo do original;
+  o DRC e o ERC do demo `royalblue54L_feather` regravado acham as mesmas violações.
+- Spec `docs/specs/07-KICAD-FILES-SPEC.md`. Testes: `tests/sexpr.test.ts`, `e2e/kicad.spec.ts`.
+
+### Bugs achados e corrigidos
+
+1. **O formatador esgotava a memória na placa de 85 MB**: concatenar caractere a caractere cria dezenas de milhões
+   de nós de string; agora copia cada átomo inteiro e junta as partes no fim.
+2. **Escrita em linha recursiva** estourava a pilha com aninhamento fundo; virou iterativa.
+
+
+### Retomada (2026-10-22, 23h30, o PC desligou com a bateria abaixo de 25%, a pedido do usuário)
+
+- Fase 3: commit `515e8a3`, com `npm run verify` verde na pasta e no clone limpo (`build/clean`: Vitest 153 + 2
+  pulados, E2E 218, desempenho com JS inicial de 710 KB de 710).
+- **O `npm run soak` reprovou (resolvido em 2026-10-23)**: o crescimento era linear porque cada volta abre um sketch novo, um circuito de teste e um exemplo, e desde as abas da fase 2 cada um fica numa aba que o teste nunca fechava; em 563 voltas sobravam centenas de abas abertas. A volta passou a fechar as abas da anterior, que é o uso real e o que o teste quer medir (se a memória das abas fechadas volta). Antes: — a memória cresceu 97 MB em 563 voltas (limite 30 MB;
+  `build/soak-report.txt`). A primeira rodada caiu porque o `vite.config.ts` foi editado no meio; esta foi limpa, mas
+  rodou na bateria. Próximo passo: rodar de novo na tomada e, se crescer, achar o vazamento (candidatos novos desta
+  fase: o `early`/`waiting` do indexador, as variantes de stripboard e logo no `Library.variants`, que nunca são
+  apagadas, e os instantâneos do editor de peças).
+- Fase 4 escrita e sem commit: `core/Sexpr`, `tools/KiCad`, `dataServer` no `vite.config.ts`, `tests/sexpr.test.ts`
+  (verde, ~80 s), `e2e/kicad.spec.ts` (ainda não rodado), spec 07, README, `CLAUDE.md`, `THIRD_PARTY.md`. Falta: rodar o
+  `npm run verify` na tomada, o clone limpo e o commit da fase 4; depois seguir para a fase 5.

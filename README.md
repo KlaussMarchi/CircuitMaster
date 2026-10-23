@@ -12,6 +12,8 @@ BOM, IPC-D-356A, netlist XML, PDF e SVG.
   roteador.
 - Acervo do Fritzing ao lado do projeto, em `../Fritzing/fritzing-parts` e `../Fritzing/fritzing-app`. Outra
   pasta pode ser indicada em `FRITZING_ROOT`.
+- As bibliotecas e os demos do KiCad 10 em `../KiCad` (ou `KICAD_ROOT`), servidos em `/kicad`; o `kicad-cli` no `PATH`
+  (opcional) é o oráculo dos testes dos arquivos do KiCad.
 - Só para recompilar os módulos C/C++ já incluídos: emsdk (`emcc`), cmake ≥ 3.20 e bison ≥ 3.0 (flex também, para o
   ngspice com XSPICE).
 

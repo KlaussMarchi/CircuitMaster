@@ -16,10 +16,16 @@ const heap = async (app: App) => {
     return (metrics.find(metric => metric.name === 'JSHeapUsedSize')?.value ?? 0) / MB
 }
 
-// UMA VOLTA DE TRABALHO DE VERDADE: COLOCAR, LIGAR, GIRAR, MOVER, DESFAZER, TROCAR DE VISTA, SIMULAR E ABRIR UM EXEMPLO
+// UMA VOLTA DE TRABALHO DE VERDADE: FECHAR AS ABAS DA VOLTA ANTERIOR, COLOCAR, LIGAR, GIRAR, MOVER, DESFAZER, TROCAR DE VISTA, SIMULAR E ABRIR UM EXEMPLO
 const round = async (app: App) => {
     const page = app.page
-    app.answers.push(true)
+    await page.evaluate(() => {
+        const confirm  = window.confirm
+        window.confirm = () => true    // AS ABAS DA VOLTA ANTERIOR FECHAM SEM PERGUNTAR: O QUE SE MEDE É SE A MEMÓRIA DELAS VOLTA
+        const { sheets, sheet } = cm.store.getState()
+        sheets.filter(item => item.id !== sheet).forEach(item => cm.store.getState().closeSheet(item.id))
+        window.confirm = confirm
+    })
     await page.evaluate(() => cm.store.getState().newSketch())
     await page.getByRole('tab', { name: 'Esquemático' }).click()
     const source = await app.place('Fonte DC', [-450, 0])
@@ -37,7 +43,6 @@ const round = async (app: App) => {
     for (const tab of ['Protoboard', 'PCB', 'Esquemático'])
         await page.getByRole('tab', { name: tab }).click()
 
-    app.answers.push(true)
     await page.evaluate(() => cm.store.getState().openBench('rc'))
     await expect.poll(() => app.simulated()).toBe('tran')
     await page.evaluate(() => cm.store.getState().setSimulation({ enabled: false, result: null, error: null, playing: false, step: 0 }))

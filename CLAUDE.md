@@ -33,9 +33,18 @@ npx playwright test --project=chromium e2e/edit.spec.ts -g 'nome'   # um E2E pel
 ## Acervo do Fritzing
 
 App e testes leem o acervo em `../Fritzing` (ou `FRITZING_ROOT`): raízes `parts`, `app`, `sketches` e `fonts`
-definidas em `tools/Fritzing/index.ts`. Não há backend: o plugin `fritzingParts` do `vite.config.ts` serve
+definidas em `tools/Fritzing/index.ts`. Não há backend: o plugin `dataServer` do `vite.config.ts` serve
 `/fritzing/<raiz>/<caminho>` e as listagens `fzp.json`, `svg.json` e `sketches.json`, no `dev` e no
 `npx vite preview`. O `dist/` servido por outro servidor fica sem peças.
+
+## Acervo do KiCad
+
+As bibliotecas e os demos do KiCad 10 ficam em `../KiCad` (ou `KICAD_ROOT`), com as pastas `symbols`, `footprints`,
+`models`, `templates` e `demos` de `tools/KiCad/index.ts`, servidas pelo mesmo `dataServer` em `/kicad` com as
+listagens `symbols.json`, `footprints.json`, `models.json`, `templates.json` e `demos.json`. `core/Sexpr` lê e grava
+os arquivos S-expression (`.kicad_sch`, `.kicad_pcb`, `.kicad_sym`, `.kicad_mod`, `.kicad_wks`) sem perda: átomos
+crus e o `Prettify` portado do KiCad (spec 07). Os testes do oráculo usam o `kicad-cli` do `PATH` (ou `KICAD_CLI`),
+gravando em `build/kicad/`, e são pulados sem ele.
 
 ## Testes
 
