@@ -86,6 +86,9 @@ inicial.
   `operational amplifier`) e pelos pinos `+`, `-` e saída de cada unidade, com `V+`/`V-`; uma linha por unidade com o
   macro-modelo do simulador: LM358/LM2904/LM324/LM2902 pelo do LM358, TL07x/TL08x pelo do TL082 e os outros pelo
   genérico `CM_OPAMP` (µA741 da folha de dados).
+- **A equivalente vale também pelo pai** (`KicadSymbol.parent`): os 21 derivados do `NE555D` simulam como o 555 do
+  acervo, pelo `UA555`. Os modelos de toda equivalente (LED, 1N4001, UA555) vêm da própria peça do acervo, que a
+  `Library` carrega antes; nada de modelo copiado no código.
 - Mais equivalentes: as variantes de LED e de diodo da `Device`, os potenciômetros da `Device` e da
   `Simulation_SPICE` (o botão e a resistência no inspetor, como o trimpot do acervo) e a bateria, a pilha e a `VDC` (a tensão editável e o sinal da fonte, como a
   fonte DC do acervo).
@@ -156,5 +159,5 @@ KiCad só aparecem onde o assunto é compatibilidade de arquivos e nos créditos
 | Resistor e LED do KiCad acendem o LED com a fonte DC; eletrolítico do KiCad carrega com τ = RC | `tests/kicad.test.ts` |
 | Footprint no inspetor: as opções do filtro, a troca mantém os fios, nome inexistente avisa | `e2e/kicad.spec.ts` |
 | Campos `Sim.*`: transistor herdado, fontes, chave, diodo, subcircuito com dependências; inferência pelo `Value`; notação | `tests/kicad.test.ts` |
-| Simulação: BC547 como chave acende o LED, amp-op seguidor, bateria e potenciômetro dividem pelo botão, fonte senoidal roda | `tests/kicad.test.ts` |
+| Simulação: astável com o NE555P oscila em 0,693·(R1+2R2)·C; TL072 seguidor; BC547 como chave acende o LED, amp-op seguidor, bateria e potenciômetro dividem pelo botão, fonte senoidal roda | `tests/kicad.test.ts` |
 | Abrir `.kicad_sym` (vários símbolos, derivado) e `.kicad_mod` (símbolo gerado): peças em Meus itens com as três vistas; arquivo ruim dá a causa | `tests/kicad.test.ts` · `e2e/kicad.spec.ts` |

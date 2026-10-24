@@ -78,7 +78,8 @@ export const KICAD_EQUIVALENTS: Record<string, string> = {
     ...Object.fromEntries(['LED', 'LED_Small', 'LED_Filled', 'LED_Small_Filled', 'LED_45deg', 'LED_45deg_Filled'].map(name => [`Device:${name}`, '5mmColorLEDModuleID'])),
     ...Object.fromEntries(['D', 'D_Small', 'D_Filled', 'D_Small_Filled', 'D_45deg', 'D_45deg_Filled'].map(name => [`Device:${name}`, '3254CBFC44diode'])),
     ...Object.fromEntries(['R_Potentiometer', 'R_Potentiometer_US', 'R_Potentiometer_Small', 'R_Potentiometer_Trim', 'R_Potentiometer_Trim_US', 'R_Potentiometer_MountingPin'].map(name => [`Device:${name}`, 'potentiometer_trimmer_6mm_5_PotentiometerModuleID'])), 'Simulation_SPICE:Potentiometer': 'potentiometer_trimmer_6mm_5_PotentiometerModuleID',
-    'Device:Battery': '5_DCPowerSupplyModuleID', 'Device:Battery_Cell': '5_DCPowerSupplyModuleID', 'Simulation_SPICE:VDC': '5_DCPowerSupplyModuleID'
+    'Device:Battery': '5_DCPowerSupplyModuleID', 'Device:Battery_Cell': '5_DCPowerSupplyModuleID', 'Simulation_SPICE:VDC': '5_DCPowerSupplyModuleID',
+    'Timer:NE555D': '1001AAAB555Timer'
 }
 
 export const equivalentOf = (moduleId: string) => KICAD_EQUIVALENTS[moduleId.replace(/^cm:/, '').replace(/@.*$/, '')] ?? moduleId

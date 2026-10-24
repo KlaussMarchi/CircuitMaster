@@ -3,7 +3,7 @@ import type { Box, Point } from '../Geometry'
 import { MIL, arcPath, at, boxOf, corners, escapeXml, num, svgOf } from '../KicadDraw'
 
 export type KicadPin    = { number: string, name: string, type: string, at: Point, angle: number, length: number, hidden: boolean, unit: number }
-export type KicadSymbol = { name: string, properties: Record<string, string>, pins: KicadPin[], shapes: [number, Sexpr[][]][], units: number, power: boolean, namesInside: number, hideNames: boolean, hideNumbers: boolean }
+export type KicadSymbol = { name: string, parent: string, properties: Record<string, string>, pins: KicadPin[], shapes: [number, Sexpr[][]][], units: number, power: boolean, namesInside: number, hideNames: boolean, hideNumbers: boolean }
 
 const LINE        = 6              // MIL, LARGURA PADRÃO DO TRAÇO (0,1524 mm, A DO EESCHEMA)
 const UNIT_GAP    = 200            // MIL ENTRE AS UNIDADES DESENHADAS LADO A LADO
@@ -39,9 +39,9 @@ const symbolOf = (node: Sexpr[], parent: KicadSymbol | null): KicadSymbol => {
     const shapes     = children.map(([[unit], child]): [number, Sexpr[][]] => [unit, child.filter((item): item is Sexpr[] => isList(item) && headOf(item) !== 'pin')])
     const pins       = children.flatMap(([[unit], child]) => childrenOf(child, 'pin').map(pin => readPin(pin, unit)))
     const names      = childOf(node, 'pin_names')
-    const own        = { name, properties, pins, shapes, units: Math.max(1, ...pins.map(pin => pin.unit), ...shapes.map(([unit]) => unit)), power: childOf(node, 'power') !== undefined, namesInside: names ? num(childOf(names, 'offset')?.[1]) || 0 : NAME_INSET, hideNames: yes(names), hideNumbers: yes(childOf(node, 'pin_numbers')) }
+    const own        = { name, parent: '', properties, pins, shapes, units: Math.max(1, ...pins.map(pin => pin.unit), ...shapes.map(([unit]) => unit)), power: childOf(node, 'power') !== undefined, namesInside: names ? num(childOf(names, 'offset')?.[1]) || 0 : NAME_INSET, hideNames: yes(names), hideNumbers: yes(childOf(node, 'pin_numbers')) }
 
-    return childOf(node, 'extends') && parent ? { ...parent, name, properties: { ...parent.properties, ...properties } } : own
+    return childOf(node, 'extends') && parent ? { ...parent, name, parent: parent.name, properties: { ...parent.properties, ...properties } } : own
 }
 
 // SÍMBOLO DE UM .kicad_sym: O PRIMEIRO DO ARQUIVO (NAS PASTAS .kicad_symdir DO KICAD 10 HÁ UM POR ARQUIVO)

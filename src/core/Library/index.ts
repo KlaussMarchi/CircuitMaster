@@ -82,7 +82,7 @@ export class Library {
     async load(moduleIds: string[]) {
         const missing  = [...new Set(moduleIds)].filter(id => !this.parts.has(id))
         const kicad    = missing.filter(isKicad)
-        const bundles  = kicad.some(id => !this.bundled.has(id)) ? await import('../KicadPart').then(module => Promise.all(kicad.filter(id => !this.bundled.has(id)).map(id => module.readKicadPart(id, (root, path) => this.source.read(root, path), equivalentOf(id))))) : []
+        const bundles  = kicad.some(id => !this.bundled.has(id)) ? await import('../KicadPart').then(module => Promise.all(kicad.filter(id => !this.bundled.has(id)).map(id => module.readKicadPart(id, (root, path) => this.source.read(root, path), equivalentOf, async equivalent => { await this.load([equivalent]); return this.parts.get(equivalent)?.spice.models.join('\n') ?? '' })))) : []
         bundles.forEach(bundle => bundle && this.addBundle(bundle))
         const located  = missing.length > kicad.length ? await this.source.locate(missing.filter(id => !kicad.includes(id))) : {}
         const loaded   = await Promise.all(missing.map(id => this.loadOne(id, located[id])))

@@ -347,6 +347,21 @@ describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (
         expect(simulate(load('Timer', 'NE555P') as KicadSymbol, 'M1')).toBeNull()
     })
 
+    it('555 derivado (NE555P) pelo UA555 do acervo: o astável com R1 1 kΩ, R2 10 kΩ e 10 µF oscila no período de 0,693·(R1+2R2)·C', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'R'), kicadId('Device', 'C_Polarized'), kicadId('Timer', 'NE555P'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const pin   = (n: string) => `5/connector${pinsOf(load('Timer', 'NE555P') as KicadSymbol).findIndex(item => item.number === n)}`
+        const wires: [string, string][] = [['1/connector1', pin('8')], ['1/connector1', pin('4')], ['1/connector0', '6/connector0'], [pin('1'), '6/connector0'], ['1/connector1', '2/connector0'], ['2/connector1', pin('7')], [pin('7'), '3/connector0'], ['3/connector1', pin('6')], [pin('6'), pin('2')], [pin('2'), '4/connector0'], ['4/connector1', '6/connector0']]
+        const { circuit, sim } = await series(library, parts, wires, doc => setProperty(setProperty(setProperty(doc, '2', 'resistance', '1kΩ'), '3', 'resistance', '10kΩ'), '4', 'capacitance', '10µF'))
+        const out   = Array.from({ length: sim.steps }, (_, i) => sim.getVoltage(pin('3'), i))
+        const rises = out.flatMap((value, i) => i && out[i - 1] < 2.5 && value >= 2.5 ? [sim.vectors.time[i]] : [])
+        expect(circuit.deck).toMatch(/^X\S+ .* UA555$/m)
+        expect(rises.length).toBeGreaterThanOrEqual(2)
+        expect((rises[rises.length - 1] - rises[0]) / (rises.length - 1)).toBeCloseTo(0.693 * 21e3 * 10e-6, 1)
+    })
+
     it('bateria e potenciômetro: o cursor divide a tensão da bateria pelo botão, ambos editáveis no inspetor', async () => {
         const library = makeLibrary()
         const parts   = [kicadId('Device', 'Battery'), kicadId('Device', 'R_Potentiometer'), 'GroundModuleID']
