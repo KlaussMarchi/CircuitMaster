@@ -86,6 +86,8 @@ inicial.
   `operational amplifier`) e pelos pinos `+`, `-` e saída de cada unidade, com `V+`/`V-`; uma linha por unidade com o
   macro-modelo do simulador: LM358/LM2904/LM324/LM2902 pelo do LM358, TL07x/TL08x pelo do TL082 e os outros pelo
   genérico `CM_OPAMP` (µA741 da folha de dados).
+- **MOSFETs sem `Sim.*`**: canal N ou P pela descrição e pinos `G`, `D`, `S`; o corpo ligado à fonte e o modelo
+  nível 1 do MOSFET genérico do acervo (`VTO` ±3,6 V).
 - **A equivalente vale também pelo pai** (`KicadSymbol.parent`): os 21 derivados do `NE555D` simulam como o 555 do
   acervo, pelo `UA555`. Os modelos de toda equivalente (LED, 1N4001, UA555) vêm da própria peça do acervo, que a
   `Library` carrega antes; nada de modelo copiado no código.

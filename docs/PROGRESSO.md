@@ -734,6 +734,8 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
   simulador (LM358, TL082 ou o genérico µA741); a equivalente vale pelo pai, então os 22 símbolos da família NE555
   simulam pelo `UA555` do 555 do acervo, e os modelos das equivalentes vêm das peças do acervo. Teste:
   `tests/kicad.test.ts` (astável com o NE555P no período de 0,693·(R1+2R2)·C; TL072 seguidor).
+- **MOSFETs das bibliotecas simulam** (sem `Sim.*`, pela descrição e pelos pinos G/D/S, com o modelo do MOSFET do
+  acervo). Teste: `tests/kicad.test.ts` (2N7000 como chave acende o LED).
 
 3. **A busca do KiCad pesava na primeira busca depois de abrir** (achado pelo `perf`: 54 a 82 ms contra 50): o
    resumo de 3,4 MB era montado de uma vez no worker. Agora começa 1,5 s depois do acervo pronto, em lotes, a busca
@@ -748,7 +750,6 @@ aparecia cortada) para três abas: Básicos (as sugeridas e as comuns em "Mais p
 
 ### Próximo
 
-- MOSFETs de `Transistor_FET`, que não trazem os campos `Sim.*` (pelo `N_MOSFET_GENERIC`/`P_MOSFET_GENERIC` do acervo).
 - Navegadores de bibliotecas de símbolos e de footprints (KC-072, KC-077) com prévia; editor de peças lendo e gravando
   `.kicad_sym` e `.kicad_mod`; verificadores de símbolo e de footprint.
 - Pads `trapezoid` e `custom`, furo oblongo no CAM, SMD na face de baixo, pads repetidos do mesmo número.

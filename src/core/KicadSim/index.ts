@@ -36,6 +36,7 @@ const SOURCES: Record<string, string[]> = {
 const PASSIVES = ['R', 'C', 'L']
 const OPAMPS: [RegExp, string][] = [[/^(LM358|LM2904|LM324|LM2902)/, 'CM_LM358'], [/^TL0[78]/, 'ADTL082']]    // MACRO-MODELOS DO SIMULADOR (core/Spice) PELO NOME; OS OUTROS AMP-OPS PELO GENÉRICO
 const OPAMP    = 'CM_OPAMP'
+const MOSFET   = 'level=1 W=50u L=5u VTO=3.6 PHI=0.8 JS=0 KP=10.1'    // O DO MOSFET GENÉRICO DO ACERVO (VTO NEGATIVO NO CANAL P)
 const NUMBER   = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)(Meg|MEG|meg|[afpnuµμmkKMGT])?[A-Za-zΩ]*$/
 
 // VALOR DO KICAD (PREFIXO SI: M É MEGA) NA NOTAÇÃO DO SPICE (M É MILI): M → Meg, µ → u, SEM A UNIDADE; O QUE NÃO É NÚMERO PASSA COMO ESTÁ
@@ -118,6 +119,19 @@ const opampOf = (symbol: KicadSymbol, ids: Map<string, number>) => {
     return { lines: halves.map(([inp, inn, out], i) => `X{instanceTitle}${units.length > 1 ? 'ABCD'[i] : ''} ${[inp, inn, ...supply, out].map(net).join(' ')} ${model}`), models: [] }
 }
 
+// MOSFET SEM CAMPOS Sim.*, RECONHECIDO PELA DESCRIÇÃO (CANAL N OU P) E PELOS PINOS G, D E S: O CORPO LIGADO À FONTE, COMO O DO ACERVO
+const mosfetOf = (symbol: KicadSymbol, ids: Map<string, number>, name: string) => {
+    const text  = `${symbol.properties.ki_keywords ?? ''} ${symbol.properties.Description ?? ''}`
+    const pins  = ['D', 'G', 'S'].map(letter => pinsOf(symbol).filter(pin => pin.name === letter))
+    const kind  = /\bP-?(MOS|Channel)/i.test(text) ? 'PMOS' : /\bN-?(MOS|Channel)/i.test(text) ? 'NMOS' : ''
+    const [d, g, s] = pins.map(list => `{net connector${ids.get(list[0]?.number ?? '')}}`)
+
+    if (!kind || !/MOS/.test(text) || pins[0].length !== 1 || pins[1].length !== 1 || !pins[2].length)
+        return null
+
+    return { lines: [`M{instanceTitle} ${d} ${g} ${s} ${s} ${name}`], models: [`.model ${name} ${kind} ${kind === 'PMOS' ? MOSFET.replace('VTO=', 'VTO=-') : MOSFET}`] }
+}
+
 // LINHAS E MODELOS SPICE DA PEÇA PELOS CAMPOS Sim.*, COM OS PINOS DO SÍMBOLO PELO connectorN; NULO PARA O QUE NÃO SIMULA AQUI (XSPICE, IBIS, LINHA DE TRANSMISSÃO, COMPORTAMENTAL, BIBLIOTECA DE FORA, VALOR QUE NÃO É NÚMERO, PINO OBRIGATÓRIO SEM LIGAÇÃO)
 export const simulate = (symbol: KicadSymbol, name: string, library = '') => {
     const { device, type, params, pins } = fieldsOf(symbol)
@@ -155,7 +169,7 @@ export const simulate = (symbol: KicadSymbol, name: string, library = '') => {
     }
 
     if (!device)
-        return opampOf(symbol, ids)
+        return opampOf(symbol, ids) ?? mosfetOf(symbol, ids, name)
 
     const model = DEVICES[device]?.types[type]
     const ends  = model && nets(model.pins)

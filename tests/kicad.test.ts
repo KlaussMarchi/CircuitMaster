@@ -286,7 +286,6 @@ describe.skipIf(!HAS_KICAD)('campos Sim.* das bibliotecas: o SPICE que o KiCad g
         expect(dual?.lines).toEqual(['X{instanceTitle} {net connector0} {net connector1} {net connector2} {net connector6} {net connector3} {net connector4} {net connector5} {net connector7} kicad_builtin_opamp_dual'])
         expect(dual?.models.map(model => model.split(' ')[1])).toEqual(['kicad_builtin_opamp', 'kicad_builtin_opamp_dual'])
         expect(spiceOf('Device', 'R_Potentiometer_Dual')).toBeNull()
-        expect(spiceOf('Transistor_FET', '2N7000')).toBeNull()
     })
 
     it('sem os campos, o resistor, o capacitor e a fonte de 2 pinos saem da referência e do Value; o valor do KiCad na notação do SPICE', () => {
@@ -321,6 +320,18 @@ describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (
         expect(sim.getEffect('5', last).light).toBeGreaterThan(0)
     })
 
+    it('MOSFET das bibliotecas sem campos Sim.* como chave: o gate em 5 V acende o LED do dreno', async () => {
+        const library = makeLibrary()
+        const parts   = ['5_DCPowerSupplyModuleID', kicadId('Transistor_FET', '2N7000'), kicadId('Device', 'R'), kicadId('Device', 'LED'), 'GroundModuleID']
+        await library.load([...parts, 'WireModuleID'])
+
+        const pin   = (name: string) => `2/connector${pinsOf(load('Transistor_FET', '2N7000') as KicadSymbol).findIndex(item => item.name === name)}`
+        const wires: [string, string][] = [['1/connector1', pin('G')], [pin('S'), '5/connector0'], ['1/connector0', '5/connector0'], ['1/connector1', '3/connector0'], ['3/connector1', '4/connector1'], ['4/connector0', pin('D')]]
+        const { sim } = await series(library, parts, wires, doc => setProperty(doc, '3', 'resistance', '220Ω'))
+        expect(sim.getCurrent('4', sim.steps - 1)).toBeGreaterThan(0.005)
+        expect(sim.getEffect('4', sim.steps - 1).light).toBeGreaterThan(0)
+    })
+
     it('amp-op da biblioteca SPICE como seguidor: a saída copia o meio do divisor', async () => {
         const library = makeLibrary()
         const parts   = ['5_DCPowerSupplyModuleID', kicadId('Device', 'R'), kicadId('Device', 'R'), kicadId('Simulation_SPICE', 'OPAMP'), 'GroundModuleID']
@@ -345,6 +356,8 @@ describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (
         expect(simulate(load('Amplifier_Operational', 'LM358') as KicadSymbol, 'M1')?.lines.map(line => line.split(' ').pop())).toEqual(['CM_LM358', 'CM_LM358'])
         expect(simulate(load('Amplifier_Operational', 'LM324') as KicadSymbol, 'M1')?.lines).toHaveLength(4)
         expect(simulate(load('Timer', 'NE555P') as KicadSymbol, 'M1')).toBeNull()
+        expect(simulate(load('Transistor_FET', '2N7000') as KicadSymbol, 'M1')).toEqual({ lines: [expect.stringMatching(/^M\{instanceTitle\} (\{net connector\d\} ){4}M1$/)], models: ['.model M1 NMOS level=1 W=50u L=5u VTO=3.6 PHI=0.8 JS=0 KP=10.1'] })
+        expect(simulate(load('Transistor_FET', 'TP0610T') as KicadSymbol, 'M1')?.models[0]).toMatch(/PMOS .*VTO=-3\.6/)
     })
 
     it('555 derivado (NE555P) pelo UA555 do acervo: o astável com R1 1 kΩ, R2 10 kΩ e 10 µF oscila no período de 0,693·(R1+2R2)·C', async () => {
