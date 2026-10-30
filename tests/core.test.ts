@@ -7,6 +7,18 @@ import { readPart } from '../src/core/Part'
 import { readBin, readSketch } from '../src/core/Sketch'
 import { PartDraft } from '../src/core/PartDraft'
 import { loadWasm } from './Fixtures'
+import { parseValue } from '../src/core/Properties'
+
+describe('período em frequência', () => {
+    it('aceita Hz no período e grava em segundos', () => {
+        expect(parseValue('period', '100Hz', 's')).toBeCloseTo(0.01)
+        expect(parseValue('period', '1 kHz', 's')).toBeCloseTo(0.001)
+        expect(parseValue('period', '60hz', 's')).toBeCloseTo(1 / 60)
+        expect(parseValue('period', '10ms', 's')).toBeCloseTo(0.01)
+        expect(parseValue('period', '0Hz', 's')).toBeNull()
+        expect(parseValue('pulse width', '100Hz', 's')).toBeNull()
+    })
+})
 
 describe('unidades', () => {
     it('converte comprimentos para polegadas', () => {

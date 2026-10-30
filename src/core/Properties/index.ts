@@ -98,6 +98,13 @@ export const parseSi = (text: string, symbol = '') => {
     return Number.isFinite(value) ? value * (prefix?.[1] ?? 1) : null
 }
 
+// VALOR DIGITADO DE UMA PROPRIEDADE: O PERÍODO ACEITA TAMBÉM FREQUÊNCIA ("100Hz" VIRA 10ms)
+export const parseValue = (name: string, text: string, symbol: string) => {
+    const hertz = name === 'period' ? text.trim().match(/^(.*?)\s*hz$/i) : null
+    const f     = hertz ? parseSi(hertz[1]) : null
+    return hertz ? f ? 1 / f : null : parseSi(text, symbol)
+}
+
 export const formatSi = (value: number, symbol = '', decimals = 3) => {
     const [prefix, scale] = value === 0 ? ['', 1] : SHOWN.find(([, factor]) => Math.abs(value) < 1000 * factor) ?? SHOWN[SHOWN.length - 1]
     return `${+(value / scale).toFixed(decimals)}${prefix}${symbol}`

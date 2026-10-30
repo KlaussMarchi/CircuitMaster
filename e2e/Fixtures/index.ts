@@ -20,6 +20,7 @@ export const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTIC
 type Answer = boolean | string
 
 const ABORTED   = ['net::ERR_ABORTED', 'NS_BINDING_ABORTED']    // REQUISIÇÕES DA PÁGINA ANTERIOR CANCELADAS PELA NAVEGAÇÃO
+const ABORTED_MODULE = /^\[JavaScript Warning: "Loading failed for the module/    // O FIREFOX AVISA DO MÓDULO QUE A NAVEGAÇÃO INTERROMPEU (A PRÉ-CARGA DE ui/Output DEPOIS DO setup)
 const SETTLE_MS = 300                                           // O QUE A PÁGINA AINDA LOGA DEPOIS DA ÚLTIMA AÇÃO DO TESTE TAMBÉM CONTA
 
 // O AVISO DO REACT DE setState DURANTE O RENDER NÃO DIZ QUEM CHAMOU: A MENSAGEM PASSA A LEVAR A PILHA
@@ -56,7 +57,7 @@ export class App {
     }
 
     watch() {
-        this.page.on('console', message => ['error', 'warning'].includes(message.type()) && this.issues.push(`console.${message.type()}: ${message.text()}`))
+        this.page.on('console', message => ['error', 'warning'].includes(message.type()) && !(this.navigating && ABORTED_MODULE.test(message.text())) && this.issues.push(`console.${message.type()}: ${message.text()}`))
         this.page.on('pageerror', error => this.issues.push(`pageerror: ${error.message}`))
         this.page.on('requestfailed', request => !this.downloads.has(request.url()) && !(this.navigating && ABORTED.includes(request.failure()?.errorText ?? '')) && this.issues.push(`requestfailed: ${request.url()} ${request.failure()?.errorText}`))
         this.page.on('response', response => response.status() >= 400 && this.issues.push(`http ${response.status()}: ${response.url()}`))

@@ -235,8 +235,56 @@ test('Camadas da PCB na legenda: um clique liga ou desliga; Exibir › Camadas m
     await expect.poll(drawn).toBe(before)
 
     await app.menu('Exibir', 'Camadas', 'Ocultar todas as camadas')
-    await expect.poll(() => page.evaluate(() => cm.store.getState().hiddenLayers.pcbView?.length)).toBe(9)
+    await expect.poll(() => page.evaluate(() => cm.store.getState().hiddenLayers.pcbView?.length)).toBe(11)    // OS 9 GRUPOS DO FRITZING MAIS MONTAGEM E ÁREA DA PEÇA (SPEC 09)
     await expect.poll(drawn).toBe(0)
     await app.menu('Exibir', 'Camadas', 'Mostrar todas as camadas')
     await expect.poll(drawn).toBe(before)
+})
+
+test('Edição da PCB e intercâmbio: face de baixo, realce de net, régua, empurrar, exportar e reabrir .kicad_pcb e Gerber (spec 09)', async ({ app, page }) => {
+    const [first] = await build(app)
+    const bottom  = () => page.evaluate(modelIndex => cm.store.getState().doc.instances[modelIndex]?.views.pcbView?.bottom, first)
+
+    await page.getByRole('complementary', { name: 'Inspetor' }).getByRole('tab', { name: 'Roteamento' }).click()
+    await page.getByRole('button', { name: 'Criar placa e rotear' }).click()
+    await expect.poll(async () => (await census(app)).left, { timeout: 60000 }).toBe(0)
+
+    await page.mouse.click(...await app.center(first))
+    await expect.poll(() => app.selection()).toEqual([first])
+    await page.keyboard.press('f')
+    await expect.poll(bottom).toBe(true)
+    await page.keyboard.press('f')
+    await expect.poll(bottom).toBe(false)
+
+    await app.context(await app.terminal((await app.pins(first))['Pin 0']), 'Realçar a net deste terminal')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().highlight)).not.toBeNull()
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().highlight)).toBeNull()
+
+    const center = await app.canvasCenter()
+    await page.keyboard.press('Control+m')
+    await page.mouse.click(center[0] - 60, center[1])
+    await page.mouse.click(center[0] + 60, center[1])
+    await expect.poll(() => page.evaluate(() => cm.store.getState().ruler.length)).toBe(2)
+    await expect(page.locator('#canvas text').filter({ hasText: /Δx/ })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().tool)).toBe('select')
+
+    await app.menu('Roteamento', 'Empurrar trilhas')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().push)).toBe(true)
+    await page.keyboard.press('Shift+R')
+    await expect.poll(() => page.evaluate(() => cm.store.getState().push)).toBe(false)
+
+    const kicad = await app.download(() => app.menu('Arquivo', 'Exportar', 'Para outro programa de PCB', 'KiCad (.kicad_pcb)…'))
+    expect(kicad.bytes.toString('utf8')).toMatch(/^\(kicad_pcb\n\t\(version 20240108\)/)
+    await app.upload(kicad.path)
+    await expect.poll(() => app.message()).toMatch(/importado do KiCad: \d+ itens/)
+    expect(await page.evaluate(() => [cm.store.getState().sheets.length, cm.store.getState().view])).toEqual([2, 'pcbView'])
+
+    const gerber = await app.download(() => app.menu('Arquivo', 'Exportar', 'Para produção', 'Gerber estendido (RS-274X)…'))
+    await app.upload(gerber.path)
+    await expect(page.getByRole('dialog', { name: /^Gerber: / })).toBeVisible()
+    await app.shoot('gerber')
+    await page.getByRole('dialog', { name: /^Gerber: / }).getByRole('button', { name: 'Fechar' }).click()
+    await expect.poll(() => page.evaluate(() => cm.store.getState().gerber)).toBeNull()
 })

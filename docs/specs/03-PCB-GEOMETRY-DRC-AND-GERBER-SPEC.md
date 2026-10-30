@@ -374,6 +374,16 @@ compatível no `.fz`.
 Itens `…BlockerModuleID` (retângulos de exclusão) entram em $C'$ como obstáculo: o fill não ocupa a área e o
 autorouter evita.
 
+### 6.3.1 Área de cobre desenhada (extensão do CircuitMaster)
+
+Ferramenta Área de cobre: os vértices são clicados na grade, e o duplo clique ou o clique no primeiro vértice fecha a
+área. A área fica na face ativa (de cima com "Ambas"; de baixo em placa de uma face) e se liga à net pelo nome de um
+terminal (vazio = sem net). Cobre = o preenchimento do §6.2 com $P \cap$ contorno: com net, no modo terra (alívio
+térmico nos pads da net, trilhas da net dentro); sem net, simples. Cada fragmento guarda o contorno, a face e a net na
+propriedade `zone` (JSON). "Preencher áreas desenhadas" refaz todas pelo contorno gravado, uma depois da outra, e cada
+uma respeita a folga das que já foram. "Preencher" e "Remover" não apagam as áreas desenhadas; apagar o fragmento
+selecionado apaga só ele.
+
 ### 6.4 Conferência com o Fritzing
 
 Refazendo os dois planos gravados no exemplo Knock (folga 10 mil): a face de baixo dá 5,014 in² contra 5,015 in²
@@ -431,10 +441,42 @@ reais: curto de cobre (Arduino-no-FTDI, Workshop_03_FlipFlop-w-Button, trilha so
 (measure_dc_current, simple_button). O color-fader tem duas placas e cada uma passa; verificar uma delas com as
 trilhas da outra acusaria, falsamente, trilhas fora da placa.
 
-Regras extras opcionais (não existem na referência, desligadas por padrão): largura mínima de trilha, anel
-mínimo, furo–cobre, serigrafia sobre pad, ratsnest pendente.
+### 7.4 Regras extras do CircuitMaster (não existem na referência)
+
+Gravadas nos atributos da vista PCB do `.fz`, editáveis na aba Roteamento:
+
+| Atributo | Regra | Padrão |
+|---|---|---|
+| `DRC_MinTrace` | trilha mais fina que o mínimo (`width`) | 0,127 mm |
+| `DRC_MinRing` | anel menor que o mínimo (`ring`): o disco furo + anel tem de caber no cobre dos pads da face em volta do furo metalizado de conector | 0,13 mm |
+| `DRC_MinDrill` | furo menor que o mínimo (`drill`), metalizado ou não | 0,3 mm |
+| `DRC_NetClasses` | classes de net (JSON `[{name, nets, width, clearance}]`, mil; 0 = regra geral) | nenhuma |
+
+Os padrões são os mínimos de fabricantes comuns de protótipo; nos 98 exemplos do Fritzing nenhum acusa. A net entra na
+classe se algum terminal dela tem um dos nomes (`GND`) ou `peça.terminal` (`U1.7`), sem diferença de caixa; vale a
+primeira classe. Folga entre dois grupos = a maior entre $k$ e as folgas das classes deles (os dilatados saem uma vez por
+folga usada); trilha mínima = a maior entre a geral e a da classe. Cada violação traz o valor medido e o limite.
+
+### 7.5 Empurrar trilhas (push-and-shove, extensão do CircuitMaster)
+
+Com Empurrar ligado (Shift+R), os trechos que o desenho ou o arraste mudou empurram as trilhas de outras nets lógicas
+na mesma face que ficariam a menos de $r = (w_a + w_v)/2 + k$: o trecho reto AB da vítima vira A → P1 → P2 → P3 → P4 → B,
+com o trecho paralelo afastado para o lado oposto ao agressor pelo que falta para $r$, sobre o intervalo do agressor
+projetado em AB mais $r$ de cada lado, e entrada e saída a 45°; as pontas não saem do lugar. Não há desvio se um agressor
+cruza o trecho, se há agressores dos dois lados ou se o desvio chegaria a menos da folga de um pad ou de uma trilha de
+outra net. Nesses casos a trilha fica como está e o DRC acusa. É uma passada só: a trilha empurrada não empurra as
+vizinhas; trechos curvos e vias não entram.
 
 ---
+
+### 7.6 Peça na face de baixo
+
+A peça (`kind` part) vai para a face de baixo pelo atributo `bottom="true"` da vista PCB, como no Fritzing: o SVG da
+instância é espelhado na horizontal em torno do centro do `viewBox` (a caixa da peça não muda; variante da biblioteca),
+cobre e serigrafia passam para a camada da outra face (copper0 ↔ copper1, silkscreen ↔ silkscreen0) no desenho, no z e
+na arte (CAM, DRC, roteador, Gerber), e a camada da instância vai para a da outra face. Atalho F; menu da peça "Colocar
+na face de baixo/de cima". O footprint importado na face de baixo grava o SVG da vista de cima (já desespelhado), e a
+face de baixo da instância espelha de volta.
 
 ## 8. AUTOROUTER
 
@@ -472,7 +514,9 @@ mínimo, furo–cobre, serigrafia sobre pad, ratsnest pendente.
 - Rust/WASM em Web Worker, grade de bits por camada (obstáculos rasterizados a partir dos polígonos do DRC, com
   dilatação exata pelo Clipper2), A* bidirecional com os mesmos custos e mesma política de reordenação
   (garante resultados comparáveis).
-- Pós-processamento: fusão de segmentos colineares e opção de suavização a 45°.
+- Na PCB, direções regulares (0°, 45°, 90°) com custo de curva, *gloss* de cada caminho e rip-up dirigido
+  dentro de cada ciclo (§8.4); a reordenação entre ciclos continua valendo.
+- Pós-processamento: fusão de segmentos colineares.
 - Validação obrigatória do resultado pelo DRC vetorial antes de aplicar a transação.
 - Cancelável, com progresso por ciclo e melhor resultado parcial disponível.
 
@@ -492,16 +536,32 @@ mínimo, furo–cobre, serigrafia sobre pad, ratsnest pendente.
   $((x + ½)g,\ (y + ½)g)$ no referencial da placa.
 - Cada célula guarda um **dono**: livre, bloqueada ou a net $n$ (a célula está a menos de $k + w/2$ do cobre de $n$
   e só $n$ pode passar). Célula na zona de duas nets, fora de $P \ominus (k + w/2)$, ou em cobre sem conector, é
-  bloqueada. Uma segunda tabela marca as células de **pad** de cada net (centro dentro do cobre do conector; pad
-  menor que a célula ganha a célula do seu centro): o pad continua acessível à sua net mesmo bloqueado.
+  bloqueada. A zona é vista dos centros com raio $\sqrt{(k + w/2)^2 + g^2/2}$, o que garante a folga em todo o
+  trecho entre dois centros vizinhos, inclusive na diagonal ($g\sqrt2$). Uma segunda tabela marca as células de
+  **pad** de cada net (centro dentro do cobre do conector e fora da zona de outra net; pad menor que a célula
+  ganha a célula do seu centro): o pad continua acessível à sua net mesmo bloqueado. Sem a restrição da zona,
+  trilha mais larga que o pad entrava pela borda virada para o vizinho e invadia a folga dele; se nenhuma célula do
+  pad sobra, ficam todas (o DRC aponta).
 - Nets a rotear: as do ratsnest da PCB (conectividade completa vista na PCB); os grupos já ligados pela relação
   roteada (trilhas, barramentos) são as subnets; trilhas existentes são cobre da net (não são alvo).
 - Por net (ordem crescente de pinos alheios dentro da caixa da net): árvore = primeira subnet; repete ligando a
-  subnet mais próxima da árvore por A* multi-origem (custo 1 por passo em 4 direções, +7 em célula "evitar", via
-  +2000 só se o disco de raio $(d/2 + a - w/2)/g$ estiver acessível nas duas camadas; heurística = distância de
-  Manhattan à caixa do alvo). O caminho entra na árvore (permite junção em T).
-- Ao aceitar um caminho, o disco de raio $(w + k)/g$ em volta de cada célula (e $(d/2 + a + k + w/2)/g$ em volta
-  de cada via, nas duas camadas) passa a ser da net, ou bloqueado se era de outra; o anel seguinte vira "evitar".
+  subnet mais próxima da árvore por A* multi-origem. Custos em décimos de passo: 10 por passo ortogonal, 14 por
+  passo a 45° (só na PCB; a diagonal exige as duas células ortogonais da quina acessíveis), curva de 45° +3, de
+  90° +6, de 135° +40, +70 em célula "evitar", via +20000 só se o disco de raio $(d/2 + a - w/2)/g$ estiver
+  acessível nas duas camadas; heurística = distância octogonal (Manhattan sem diagonais) à caixa do alvo. O
+  caminho entra na árvore (permite junção em T).
+- **Gloss** (antes de aceitar o caminho): em cada trecho de uma camada, cada quina é ligada à quina mais adiante
+  que ela alcança com uma ligação regular livre — um segmento a 0°/45°/90° ou dois (um diagonal e um ortogonal;
+  sem diagonais, um em L), sem curva aguda na saída; sem atalho, fica o trecho original. É o modelo de trajetória
+  regular do roteador interativo do Altium (dois pontos quaisquer ligados por no máximo duas direções regulares).
+- Ao aceitar um caminho, o disco de raio $\sqrt{(w + k)^2 + g^2/2}/g$ em volta de cada célula (e
+  $\sqrt{(d/2 + a + k + w/2)^2 + g^2/2}/g$ em volta de cada via, nas duas camadas) passa a ser da net, ou bloqueado
+  se era de outra; o anel seguinte vira "evitar".
+- **Rip-up dirigido** (até 40 rodadas por ciclo): a net incompleta é roteada em modo brando, em que células
+  tomadas só por trilha de outra net (não por obstáculo fixo) podem ser atravessadas por +300 mais o histórico da
+  célula; o histórico de cada célula atravessada sobe 10. As nets donas dessas trilhas saem, a grade é refeita com
+  os caminhos restantes, a net incompleta é roteada normalmente e depois as que saíram. Net que nem no modo brando
+  completa e não atravessa ninguém é desistida no ciclo. Fica o melhor estado (mais ligações; empate, menos vias).
 - Conversão: células → polilinha de centros, fundindo colineares; ponta em pad é ligada ao conector (estendida até
   o ponto terminal); ponta no meio de outro caminho da mesma net divide aquele trecho (dobra com três fios); troca
   de camada cria via com o furo/anel configurados.

@@ -28,7 +28,7 @@ const dataServer = (mount: string, roots: Record<string, string>, getListings: (
         }
 
         const slash = url.indexOf('/')
-        const root  = roots[url.slice(0, slash)]
+        const root  = roots[url.slice(0, slash)] && path.resolve(roots[url.slice(0, slash)])    // NORMALIZADA: NO WINDOWS A RAIZ VEM COM / E O resolve DEVOLVE \
         const file  = root ? path.resolve(root, url.slice(slash + 1)) : ''
 
         if (!root || !file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile())
@@ -46,13 +46,14 @@ const dataServer = (mount: string, roots: Record<string, string>, getListings: (
 }
 
 
-// BIBLIOTECAS EM CHUNKS PRÓPRIOS: O CÓDIGO DO APP MUDA MAIS QUE ELAS E O CACHE DO NAVEGADOR AS REAPROVEITA
-const CHUNKS = [{ name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }, { name: 'vendor', test: /node_modules[\\/]/ }]
+// BIBLIOTECAS EM CHUNKS PRÓPRIOS: O CÓDIGO DO APP MUDA MAIS QUE ELAS E O CACHE DO NAVEGADOR AS REAPROVEITA; O XMLDOM FORA DO vendor,
+// QUE É INICIAL: ELE CARREGA NO setup DO STORE (core/Xml)
+const CHUNKS = [{ name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }, { name: 'xmldom', test: /node_modules[\\/]@xmldom[\\/]/ }, { name: 'vendor', test: /node_modules[\\/]/ }]
 
 
 export default defineConfig({
     plugins: [react(), tailwindcss(), dataServer('fritzing', Fritzing.ROOTS, Fritzing.getListings), dataServer('kicad', KiCad.ROOTS, KiCad.getListings)],
     worker: { format: 'es' },
     build: { rolldownOptions: { output: { codeSplitting: { groups: CHUNKS } } } },
-    test: { environment: 'node', include: ['tests/**/*.test.ts'], testTimeout: 600000 }
+    test: { environment: 'node', include: ['tests/**/*.test.ts'], setupFiles: ['src/core/Xml/xmldom.ts'], testTimeout: 600000 }
 })

@@ -19,7 +19,8 @@ const GESTURES: [string, string][] = [
     ['Duplo clique no fio · clique na ponta solta', 'cria dobra, continua o fio'],
     ['Alt+arrastar a peça', 'esticar pernas presas'],
     ['Pontas V · A · V·A (barra) · Shift+clique', 'medir tensão, corrente, ambas; manter a ferramenta'],
-    ['Duplo clique na nota · na chave', 'editar o texto, alternar a chave']
+    ['Duplo clique na nota · na chave', 'editar o texto, alternar a chave'],
+    ['Botão direito → Realçar a net · Esc', 'esmaece o resto e acende a net; Esc tira o realce']
 ]
 
 const MODIFIERS = ['Control', 'Shift', 'Alt', 'Meta']

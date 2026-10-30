@@ -18,7 +18,8 @@ const ADVANCED: Record<string, Level> = {
     'Centralizar no cursor': 2, 'Grade': 2, 'Unidades': 2, 'Selecionar peças travadas': 2, 'Selecionar peças desatualizadas': 2, 'Atualizar peças selecionadas': 2, 'Exportar peça…': 2,
     'Desligar todos os fios': 2, 'Selecionar trilhas "não rotear"': 3, 'Selecionar todos os jumpers': 2, 'Salvar uma cópia…': 2, 'Selecionar trilhas autoroteáveis': 3, 'Não rotear automaticamente': 3, 'Ocultar serigrafia da peça': 3, 'Mostrar serigrafia da peça': 3,
     'Ver de baixo': 2, 'As duas faces de cobre clicáveis': 2, 'Só a face de cima clicável': 2, 'Só a face de baixo clicável': 2, 'Mostrar não roteadas': 2, 'Bin em ícones': 2, 'Bin em lista': 2,
-    'Colorir fios pelo comprimento': 3, 'Tamanho da grade…': 3, 'Restaurar a grade padrão': 3
+    'Colorir fios pelo comprimento': 3, 'Tamanho da grade…': 3, 'Restaurar a grade padrão': 3,
+    'Para outro programa de PCB': 2, 'Empurrar trilhas': 2, 'Desenhar área de cobre': 2, 'Preencher áreas desenhadas': 2, 'Colocar na face de baixo': 2, 'Colocar na face de cima': 2
 }
 
 export const levelOf = (label: string): Level => ADVANCED[label] ?? 1

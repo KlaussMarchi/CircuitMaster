@@ -3,7 +3,8 @@
 Editor de circuitos no navegador compatível com os arquivos do Fritzing 1.0.8 (`.fzz`, `.fz`, `.fzp`, `.fzpz`,
 `.fzb`, `.fzbz`). Tem as três vistas sincronizadas (protoboard, esquemático e PCB), simulação SPICE com
 instrumentos, autorroteador, DRC, preenchimento de cobre e as saídas de fabricação: Gerber RS-274X, Excellon,
-BOM, IPC-D-356A, netlist XML, PDF e SVG.
+BOM, IPC-D-356A, netlist XML, PDF e SVG. Importa e exporta placas do Altium Designer (`.PcbDoc`), KiCad
+(`.kicad_pcb`) e EAGLE (`.brd`) e abre Gerbers num visualizador de camadas (spec 09).
 
 ## Requisitos
 
@@ -146,7 +147,15 @@ guardado no navegador (`cm-theme`).
   continua a simulação do instante em que ela estava.
 - **PCB**: desenhada com as cores do Altium (cobre de cima vermelho, de baixo azul, pads passantes prateados,
   serigrafia amarela, placa preta). Ambas/Topo/Base no cabeçalho esmaecem a outra face (e escolhem a face das
-  trilhas novas). Sem placa, "Criar placa e rotear" (aba Roteamento) cria uma em volta das peças e traça as trilhas.
+  trilhas novas). A legenda de camadas no canto do quadro também liga e desliga a montagem e a área da peça
+  (courtyard) dos footprints importados. Sem placa, "Criar placa e rotear" (aba Roteamento) cria uma em volta das peças e traça as trilhas.
+- **Edição da PCB**: F leva a peça para a face de baixo (espelhada, com cobre e serigrafia na outra face) e de volta.
+  Botão direito › Realçar a net acende a net de um terminal ou trilha e esmaece o resto (Esc tira). A régua (Ctrl+M,
+  ou Roteamento › Régua) mede distância, Δx e Δy na unidade escolhida (Ctrl+U ou Q troca). A ferramenta Área de cobre
+  (barra do quadro ou Roteamento › Preenchimento de cobre) desenha um polígono ligado a uma net, com folga e alívio
+  térmico. Com Roteamento › Empurrar trilhas (Shift+R), a trilha desenhada ou arrastada desvia as de outras nets.
+- **DRC**: além da folga, da borda e dos furos fora da placa, acusa trilha fina, anel e furo abaixo do mínimo e aplica
+  classes de net (folga e trilha mínima por net; a partir do modo Maker); tudo fica na aba Roteamento.
 - **PCB com várias placas**: DRC, autorroteador, preenchimento e exportação para fabricação trabalham com a placa
   selecionada (com uma placa só, com ela).
 - **Nada se perde**: o sketch é salvo sozinho no navegador (IndexedDB) 1,5 s depois de cada mudança e ao esconder a
@@ -159,6 +168,14 @@ guardado no navegador (`cm-theme`).
   e o circuito seguem; se o simulador, o roteador ou o indexador param, a ação explica a causa e a próxima os
   recria. Arquivos abertos têm limite de tamanho e de número de arquivos (zip-bomba é recusada); sem rede, o que
   já está carregado continua funcionando e as fontes da interface vêm do próprio app.
+- **Outros programas de PCB**: Abrir aceita `.PcbDoc` (Altium, binário), `.kicad_pcb` (KiCad 4+) e `.brd` (EAGLE 6+):
+  a placa vira um sketch novo, numa aba própria, na PCB, com uma peça gerada por footprint, as nets como ligações (ratsnest no
+  esquemático e na PCB), as trilhas e vias, as áreas de cobre (como preenchimentos; as do EAGLE são despejadas na
+  abertura) e o courtyard e o desenho de montagem dos footprints. As camadas internas de cobre e as vias cegas e
+  enterradas ficam guardadas na placa (salvas no `.fzz`, fora da tela e do DRC) e voltam na exportação; a aba
+  Documento mostra quantas camadas a placa tem. Arquivo › Exportar › Para outro programa de PCB grava os três
+  formatos, com as camadas internas, as áreas de cobre (o KiCad e o EAGLE preenchem pelo contorno; o Altium recebe o
+  cobre pronto) e o courtyard e o desenho de montagem; Gerber e corrosão saem só com as duas faces, com aviso. Abrir um `.zip` de fabricação ou um Gerber/Excellon solto mostra as camadas sobrepostas, com régua.
 
 ## Estrutura
 

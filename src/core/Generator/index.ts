@@ -587,6 +587,20 @@ export const sizeSvg = (text: string, width: number, height: number) => {
     return serializeXml(root)
 }
 
+// PEÇA NA FACE DE BAIXO: O DESENHO TODO ESPELHADO NA HORIZONTAL EM TORNO DO CENTRO DO viewBox, COMO O flipSMDSvg DO FRITZING (A CAIXA DA PEÇA NÃO MUDA)
+export const mirrorSvg = (text: string, [x, , w]: number[]) => {
+    const root = parseXml(text)
+
+    if (!root?.ownerDocument)
+        return text
+
+    const group = root.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g')
+    group.setAttribute('transform', `matrix(-1 0 0 1 ${2 * x + w} 0)`)
+    childrenOf(root).filter(child => !['defs', 'style'].includes(tagOf(child))).forEach(child => group.appendChild(child))
+    root.appendChild(group)
+    return serializeXml(root)
+}
+
 const RESIZABLE_BOARDS = new Set(['RectanglePCBModuleID', 'TwoLayerRectanglePCBModuleID', 'EllipsePCBModuleID', 'TwoLayerEllipsePCBModuleID', 'RoundRectPCBModuleID', 'TwoLayerRoundRectPCBModuleID'])
 
 export const isResizableBoard = (moduleId: string) => RESIZABLE_BOARDS.has(moduleId)

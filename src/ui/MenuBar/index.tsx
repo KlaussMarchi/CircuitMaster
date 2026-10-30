@@ -27,6 +27,7 @@ const FACES: [Parameters<State['setSide']>[0], string, string][] = [['both', 'As
 const ALIGNS: [string, Parameters<State['align']>[0]][] = [['Esquerda', 'left'], ['Centro horizontal', 'hcenter'], ['Direita', 'right'], ['Topo', 'top'], ['Centro vertical', 'vcenter'], ['Base', 'bottom']]
 const IMAGES: [string, ExportKind][] = [['PNG…', 'png'], ['JPG…', 'jpg'], ['SVG…', 'svg'], ['PDF…', 'pdf']]
 const PRODUCTION: [string, ExportKind][] = [['Gravável (PDF)…', 'etchablePdf'], ['Gravável (SVG)…', 'etchableSvg'], ['Gerber estendido (RS-274X)…', 'gerber'], ['Pick-and-place…', 'pnp']]
+const BOARDS_OUT: [string, ExportKind][] = [['Altium Designer (.PcbDoc)…', 'altium'], ['KiCad (.kicad_pcb)…', 'kicad'], ['EAGLE (.brd)…', 'eagle']]
 const LISTS: [string, ExportKind][] = [['Lista de materiais (HTML)…', 'bomHtml'], ['Lista de materiais (CSV)…', 'bomCsv'], ['Lista de materiais (PDF)…', 'bomPdf'], ['Netlist IPC-D-356A…', 'ipc'], ['Netlist XML…', 'xml'], ['Netlist SPICE…', 'spice']]
 
 // TRILHAS QUE O AUTOROUTER PODE REFAZER, OU AS MARCADAS "NÃO ROTEAR AUTOMATICAMENTE"
@@ -76,7 +77,7 @@ const fileMenu = (state: State): MenuEntry[] => {
         { label: 'Versões salvas automaticamente…', apply: () => void state.showVersions() },
         { label: 'Fechar sketch', apply: () => state.closeSheet(state.sheet) },
         { label: 'Imprimir…', shortcut: shortcutOf(state.keys, 'print'), apply: () => void state.print() },
-        { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: [item(['Tudo para fabricar (zip)…', 'production']), null, ...PRODUCTION.map(item)] }, null, ...LISTS.map(item)] }
+        { label: 'Exportar', items: [{ label: 'Como imagem', items: IMAGES.map(item) }, { label: 'Para produção', items: [item(['Tudo para fabricar (zip)…', 'production']), null, ...PRODUCTION.map(item)] }, { label: 'Para outro programa de PCB', items: BOARDS_OUT.map(item) }, null, ...LISTS.map(item)] }
     ]
 }
 
@@ -195,10 +196,14 @@ const routingMenu = (state: State): MenuEntry[] => {
             { label: 'Remover preenchimento', apply: state.removeFills },
             null,
             { label: 'Escolher sementes…', apply: () => state.setDialog('seeds') },
-            { label: 'Limpar sementes de terra', apply: () => state.edit(clearGroundFillSeeds) }
+            { label: 'Limpar sementes de terra', apply: () => state.edit(clearGroundFillSeeds) },
+            null,
+            { label: 'Desenhar área de cobre', checked: state.tool === 'zone', apply: () => state.setTool(state.tool === 'zone' ? 'select' : 'zone') },
+            { label: 'Preencher áreas desenhadas', apply: () => void state.refillZones() }
         ] },
         null,
         { label: 'Mover trilha para a outra face', disabled: !traces.length, apply: () => state.edit(doc => traces.reduce(setTraceSide, doc)) },
+        { label: 'Empurrar trilhas', shortcut: shortcutOf(state.keys, 'push'), checked: state.push, apply: () => void state.togglePush() },
         { label: 'Não rotear automaticamente', checked: fixed, disabled: !traces.length, apply: () => state.edit(doc => traces.reduce((current, modelIndex) => setAutoroutable(current, state.library, state.view, modelIndex, fixed), doc)) },
         null,
         wires,
@@ -210,6 +215,7 @@ const routingMenu = (state: State): MenuEntry[] => {
         shown,
         null,
         { label: 'Ver de baixo', checked: state.fromBelow, apply: () => state.setFromBelow(!state.fromBelow) },
+        { label: 'Régua', shortcut: shortcutOf(state.keys, 'measure'), checked: state.tool === 'measure', apply: () => state.setTool(state.tool === 'measure' ? 'select' : 'measure') },
         ...FACES.map(([side, label, id]): MenuEntry => ({ label, shortcut: shortcutOf(state.keys, id), checked: state.side === side, apply: () => state.setSide(side) })),
         null,
         { label: 'Apagar trilhas autoroteadas', disabled: busy, apply: state.clearAutorouted }

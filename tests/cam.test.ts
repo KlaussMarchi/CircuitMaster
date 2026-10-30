@@ -6,6 +6,7 @@ import { fromSketch } from '../src/core/Document'
 import { Scene } from '../src/engine/Scene'
 import { Clipper } from '../src/core/Clipper'
 import { getArtwork } from '../src/core/Cam'
+import { setPartSide } from '../src/engine/Edit'
 import { exportEtchablePdf, exportFabrication } from '../src/core/Gerber'
 import { exportBomCsv, exportBomPdf, exportPickAndPlace } from '../src/core/Bom'
 import { exportIpc } from '../src/core/Ipc'
@@ -85,5 +86,37 @@ describe.skipIf(!HAS_FRITZING)('manufatura da PCB (spec 03 §2–§5)', () => {
 
         writeReport('cam-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(20)
+    })
+})
+
+describe.skipIf(!HAS_FRITZING)('peça na face de baixo', () => {
+    it('espelha os terminais em torno do centro da peça e leva o cobre e a serigrafia para a outra face', async () => {
+        const clipper = new Clipper(await createClipper())
+        const library = makeLibrary(true)
+        const bundle  = readBundle(fs.readFileSync(listSketches(true).find(file => path.basename(file) === 'Knock.fzz') ?? ''))
+        library.addBundle(bundle)
+        if (!bundle.sketch)
+            throw new Error('Knock.fzz sem sketch')
+
+        const doc     = fromSketch(bundle.sketch)
+        await library.load(Object.values(doc.instances).map(instance => instance.moduleIdRef))
+
+        const scene0  = new Scene(doc, library, 'pcbView')
+        const target  = Object.values(doc.instances).find(instance => library.getPart(instance.moduleIdRef)?.kind === 'part' && scene0.isShown(instance) && new Set(scene0.getKeys(instance.modelIndex).map(key => Math.round(scene0.getLocalTerminal(instance.modelIndex, key.split('/')[1])?.[0] ?? 0))).size > 1)
+        const index   = target?.modelIndex ?? ''
+        const flipped = setPartSide(doc, library, [index], true)
+        const scene1  = new Scene(flipped, library, 'pcbView')
+        const keys    = scene0.getKeys(index)
+        const local   = (scene: Scene, key: string) => scene.getLocalTerminal(index, key.split('/')[1]) ?? [NaN, NaN]
+        const sums    = keys.map(key => local(scene0, key)[0] + local(scene1, key)[0])
+        const faces   = (artwork: ReturnType<typeof getArtwork>, face: string) => artwork?.conductors.filter(conductor => conductor.owner === index && conductor.face === face).length
+        const [a, b]  = [getArtwork(doc, library, clipper, scene0), getArtwork(flipped, library, clipper, scene1)]
+
+        expect(keys.length).toBeGreaterThan(1)
+        expect(Math.max(...sums) - Math.min(...sums)).toBeLessThan(0.01)
+        expect(keys.every(key => Math.abs(local(scene0, key)[1] - local(scene1, key)[1]) < 0.01)).toBe(true)
+        expect([faces(b, 'top'), faces(b, 'bottom')]).toEqual([faces(a, 'bottom'), faces(a, 'top')])
+        expect(scene1.getBounds(index)).toEqual(scene0.getBounds(index))
+        expect(setPartSide(flipped, library, [index], false).instances[index].views.pcbView).toEqual(doc.instances[index].views.pcbView)
     })
 })

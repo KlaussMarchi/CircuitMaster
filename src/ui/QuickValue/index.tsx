@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type WheelEvent } from 'react'
-import { formatSi, getPropertyDefs, parseSi, type PropertyDef } from '../../core/Properties'
+import { formatSi, getPropertyDefs, parseSi, parseValue, type PropertyDef } from '../../core/Properties'
 import type { Point } from '../../core/Geometry'
 import { setProperty } from '../../engine/Edit'
 import { Icon } from '../Icon'
@@ -11,6 +11,7 @@ const MAIN    = ['resistance', 'capacitance', 'inductance', 'amplitude', 'pulsed
 const PAIRED: Record<string, string> = { amplitude: 'frequency', 'pulsed voltage': 'period' }    // FONTE ALTERNADA E PULSADA MOSTRAM TAMBÉM O TEMPO
 const PREFIX: Record<string, string[]> = { 'Ω': ['', 'k', 'M'], F: ['p', 'n', 'µ', 'm'], H: ['µ', 'm', ''], V: ['m', ''], Hz: ['', 'k', 'M'], s: ['µ', 'm', ''] }
 const FACTOR: Record<string, number> = { p: 1e-12, n: 1e-9, 'µ': 1e-6, m: 1e-3, '': 1, k: 1e3, M: 1e6 }
+const HERTZ: Record<string, number> = { Hz: 1, kHz: 1e3 }    // NO PERÍODO A UNIDADE PODE SER FREQUÊNCIA: O NÚMERO VIRA 1/f
 const E12     = [1, 1.2, 1.5, 1.8, 2.2, 2.7, 3.3, 3.9, 4.7, 5.6, 6.8, 8.2]
 const SERIES: Record<string, number[]> = { 'Ω': E12, F: E12, H: E12, V: [1, 1.2, 1.5, 1.8, 2, 2.5, 3, 3.3, 3.6, 4, 4.5, 5, 6, 7.5, 9], Hz: [1, 2, 5], s: [1, 2, 5] }
 
@@ -29,6 +30,8 @@ const stepOf = (value: number, symbol: string, direction: number) => {
     return direction > 0 ? values.find(item => item > value * (1 + 1e-9)) : values.reverse().find(item => item < value * (1 - 1e-9))
 }
 
+const shown    = (value: number, unit: string) => String(+(HERTZ[unit] ? 1 / (value * HERTZ[unit]) : value / FACTOR[unit]).toPrecision(4))
+
 const prefixOf = (value: number, symbol: string) => [...PREFIX[symbol]].reverse().find(prefix => Math.abs(value) >= FACTOR[prefix] * (1 - 1e-9)) ?? PREFIX[symbol][0]
 
 const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: PropertyDef, value: string, focus: number }) => {
@@ -38,9 +41,9 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
     const [text, setText] = useState('')
 
     useEffect(() => {
-        const prefix = number ? prefixOf(number, def.symbol) : unit
+        const prefix = HERTZ[unit] || !number ? unit : prefixOf(number, def.symbol)
         setUnit(prefix)
-        setText(number === null ? '' : String(+(number / FACTOR[prefix]).toPrecision(4)))
+        setText(number === null ? '' : shown(number, prefix))
     }, [number])
 
     useEffect(() => {
@@ -56,8 +59,18 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
             useStore.getState().edit(doc => setProperty(doc, modelIndex, def.name, formatSi(next, def.symbol)))
     }
 
-    const typed  = (raw: string, prefix: string) => raw.trim() ? parseSi(raw, def.symbol) !== null && /[a-zA-Zµ]/.test(raw) ? parseSi(raw, def.symbol) : Number(raw.replace(',', '.')) * FACTOR[prefix] : null
-    const step   = (direction: number) => commit(stepOf(number || FACTOR[unit], def.symbol, direction))
+    const units  = [...PREFIX[def.symbol].map(prefix => [prefix, `${prefix}${def.symbol}`]), ...(def.name === 'period' ? Object.keys(HERTZ).map(name => [name, name]) : [])]
+    const typed  = (raw: string, prefix: string) => !raw.trim() ? null : parseValue(def.name, raw, def.symbol) !== null && /[a-zA-Zµ]/.test(raw) ? parseValue(def.name, raw, def.symbol) : HERTZ[prefix] ? 1 / (Number(raw.replace(',', '.')) * HERTZ[prefix]) : Number(raw.replace(',', '.')) * FACTOR[prefix]
+    const step   = (direction: number) => commit(stepOf(number || (FACTOR[unit] ?? 1), def.symbol, direction))
+    // ENTRE TEMPO E FREQUÊNCIA SÓ CONVERTE O QUE APARECE; DENTRO DA MESMA GRANDEZA MANTÉM O NÚMERO E GRAVA
+    const onUnit = (next: string) => {
+        setUnit(next)
+
+        if (!HERTZ[next] !== !HERTZ[unit])
+            return number !== null && setText(shown(number, next))
+
+        commit(typed(text, next))
+    }
     const onWheel = (event: WheelEvent<HTMLInputElement>) => step(event.deltaY < 0 ? 1 : -1)
 
     const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -70,7 +83,7 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
         }
 
         if (event.key === 'Escape')
-            setText(number === null ? '' : String(+(number / FACTOR[unit]).toPrecision(4)))
+            setText(number === null ? '' : shown(number, unit))
     }
 
     return (
@@ -80,7 +93,7 @@ const Field = ({ modelIndex, def, value, focus }: { modelIndex: string, def: Pro
                 <button className="icon-btn" aria-label={t('Diminuir {0}', nameOf(def.name).toLowerCase())} title={t('Valor anterior da série (↓ ou roda)')} onClick={() => step(-1)}><Icon name="chevronLeft" /></button>
                 <span className="in time">
                     <input ref={input} inputMode="decimal" value={text} aria-label={nameOf(def.name)} onChange={event => setText(event.target.value)} onBlur={() => text.trim() && commit(typed(text, unit))} onKeyDown={onKey} onWheel={onWheel} />
-                    <select aria-label={t('Unidade')} value={unit} onChange={event => { setUnit(event.target.value); commit(typed(text, event.target.value)) }}>{PREFIX[def.symbol].map(prefix => <option key={prefix} value={prefix}>{prefix}{def.symbol}</option>)}</select>
+                    <select aria-label={t('Unidade')} value={unit} onChange={event => onUnit(event.target.value)}>{units.map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select>
                 </span>
                 <button className="icon-btn" aria-label={t('Aumentar {0}', nameOf(def.name).toLowerCase())} title={t('Próximo valor da série (↑ ou roda)')} onClick={() => step(1)}><Icon name="chevronRight" /></button>
             </span>

@@ -10,7 +10,7 @@ import { t } from '../../core/Text'
 type State   = Pick<ReturnType<typeof useStore.getState>, 'simulation' | 'doc' | 'library' | 'netlist' | 'view' | 'drc'>
 type Problem = { level: 'bad' | 'warn' | 'info' | 'ok', title: string, text: string, select?: string[], show?: () => void }
 
-const RULES: Record<Rule, string> = { overlap: 'cobre perto demais', edge: 'perto demais da borda', hole: 'furo fora da placa' }
+const RULES: Record<Rule, string> = { overlap: 'cobre perto demais', edge: 'perto demais da borda', hole: 'furo fora da placa', width: 'trilha mais fina que o mínimo', ring: 'anel do furo menor que o mínimo', drill: 'furo menor que o mínimo' }
 const FACES: Record<string, string> = { top: 'face de cima', bottom: 'face de baixo' }
 const ZOOM_MIN = 4    // ZOOM MÍNIMO AO IR ATÉ UM PROBLEMA DO DRC
 
@@ -40,7 +40,7 @@ export const getProblems = (state: State): Problem[] => {
         ...skipped.length ? [{ level: 'info' as const, title: t('Fora da simulação'), text: t(skipped.length > 1 ? '{0} não têm modelo SPICE e ficam de fora.' : '{0} não tem modelo SPICE e fica de fora.', skipped.map(instance => instance.title).join(', ')) }] : [],
         ...silent.map((probe): Problem => ({ level: 'warn', title: probe.id, text: t('não mede nada: o ponto não está ligado ao circuito simulado.') })),
         ...status && status.left ? [{ level: 'info' as const, title: t(VIEW_LABELS[view]), text: t(status.left > 1 ? '{0} conexões ainda sem fio (linhas tracejadas).' : '{0} conexão ainda sem fio (linhas tracejadas).', status.left) }] : [],
-        ...drc ? drc.violations.map((violation): Problem => ({ level: 'bad', title: 'DRC', text: `${t(RULES[violation.rule])} · ${t(violation.face ? FACES[violation.face] : 'placa')} · ${violation.owners.map(title).join(' × ') || '—'}`, show: () => showViolation(violation) })) : [],
+        ...drc ? drc.violations.map((violation): Problem => ({ level: 'bad', title: 'DRC', text: `${t(RULES[violation.rule])}${violation.measured !== undefined ? ` (${violation.measured.toFixed(1)} mil < ${violation.limit?.toFixed(1)} mil)` : violation.limit !== undefined && violation.rule !== 'overlap' ? ` (${violation.limit.toFixed(1)} mil)` : ''} · ${t(violation.face ? FACES[violation.face] : 'placa')} · ${violation.owners.map(title).join(' × ') || '—'}`, show: () => showViolation(violation) })) : [],
         ...drc && !drc.violations.length ? [{ level: 'ok' as const, title: 'DRC', text: t('nenhuma violação com folga mínima de {0} mil.', drc.keepout.toFixed(1)) }] : []
     ]
 }

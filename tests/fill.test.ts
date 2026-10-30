@@ -7,7 +7,10 @@ import { Scene } from '../src/engine/Scene'
 import { Clipper, area, type Paths } from '../src/core/Clipper'
 import { flattenPath, SvgFile } from '../src/core/SvgFile'
 import { getArtwork, toPolygons, type Conductor } from '../src/core/Cam'
-import { getFill } from '../src/core/Fill'
+import { getFill, getZoneFill } from '../src/core/Fill'
+import { contains } from '../src/core/Geometry'
+import { emptyBoard, type BoardData, type BoardPad } from '../src/core/Board'
+import { readKicad } from '../src/core/Kicad'
 import { Netlist } from '../src/core/Netlist'
 import { splitKey } from '../src/core/Document'
 import { createFills } from '../src/engine/Edit'
@@ -103,5 +106,70 @@ describe.skipIf(!HAS_FRITZING)('preenchimento de cobre (spec 03 §6)', () => {
         seeds.forEach(seed => expect(touches(seed, 1)).toBeGreaterThan(0))
         others.forEach(other => expect(touches(other, KEEPOUT - 0.5)).toBeLessThan(0.01))
         traces.forEach(trace => expect(touches(trace, 0)).toBeGreaterThan(0))
+    })
+})
+
+describe('áreas de cobre importadas (spec 09 §4)', () => {
+    const pad = (net: string, x: number, y: number): BoardPad => ({ name: '1', x, y, width: 100, height: 100, rotation: 0, form: 'circle', polygon: null, drill: 40, plated: true, side: 'both', net })
+
+    // PLACA DE 1000 × 1000 mil COM UM PAD GND, UM VCC E UM ANEL DE TRILHA VCC QUE CERCA UM CANTO SEM GND
+    const board = (): BoardData => {
+        const ring  = [[600, 600], [900, 600], [900, 900], [600, 900], [600, 600]]
+        const plain = emptyBoard()
+        return { ...plain, outline: [[0, 0, 1000, 0, 1000, 1000, 0, 1000]], footprints: [{ ref: 'J1', value: '', name: 'J', x: 0, y: 0, rotation: 0, side: 'top', pads: [pad('GND', 200, 200), pad('VCC', 500, 200)], silk: [] }], tracks: ring.slice(1).map((b, i) => ({ side: 'top', a: ring[i] as [number, number], b: b as [number, number], width: 20, net: 'VCC' })) }
+    }
+
+    it('despeja o contorno do EAGLE com as folgas e sem ilhas soltas', async () => {
+        const clipper   = new Clipper(await createClipper())
+        const data      = board()
+        const fragments = getZoneFill(clipper, { side: 'top', net: 'GND', fill: [], hatch: [], pour: { outline: [0, 0, 1000, 0, 1000, 1000, 0, 1000], clearance: 12, edge: 40, width: 0, thermal: false } }, data)
+        const inside    = (x: number, y: number) => fragments.some(fragment => contains(fragment.polygons, x, y))
+
+        expect(fragments).toHaveLength(1)
+        expect(fragments[0].layer).toBe('groundplane1')
+        expect(inside(200, 200)).toBe(true)          // O PAD DA PRÓPRIA NET FICA DENTRO (LIGAÇÃO SÓLIDA)
+        expect(inside(500, 200)).toBe(false)         // PAD DE OUTRA NET
+        expect(inside(500, 255)).toBe(false)         // NA FOLGA DO PAD VCC (RAIO 50 + 12)
+        expect(inside(500, 265)).toBe(true)
+        expect(inside(20, 500)).toBe(false)          // NA FAIXA DA BORDA
+        expect(inside(750, 750)).toBe(false)         // ILHA DENTRO DO ANEL VCC, SEM COBRE GND
+
+        const relieved = getZoneFill(clipper, { side: 'top', net: 'GND', fill: [], hatch: [], pour: { outline: [0, 0, 1000, 0, 1000, 1000, 0, 1000], clearance: 12, edge: 40, width: 10, thermal: true } }, data)
+        const touches  = (x: number, y: number) => relieved.some(fragment => contains(fragment.polygons, x, y))
+        expect(touches(240, 240)).toBe(false)        // ANEL DO ALÍVIO TÉRMICO, NA DIAGONAL DO PAD GND
+        expect(touches(200, 144)).toBe(true)         // RAIO VERTICAL DO ALÍVIO
+    })
+
+    it('lê o preenchimento gravado e o hachurado como cobre da face', async () => {
+        const clipper = new Clipper(await createClipper())
+        const text    = '(kicad_pcb (version 20240108) (layers (0 "F.Cu" signal) (31 "B.Cu" signal)) (net 0 "") (net 1 "GND")' +
+                        '(zone (net 1) (net_name "GND") (layer "B.Cu") (connect_pads (clearance 0.5)) (polygon (pts (xy 0 0) (xy 10 0) (xy 10 10) (xy 0 10)))' +
+                        '(filled_polygon (layer "B.Cu") (pts (xy 1 1) (xy 9 1) (xy 9 9) (xy 1 9)))))'
+        const data    = readKicad(text)
+        const [zone]  = data.zones
+
+        expect(data.zones).toHaveLength(1)
+        expect(zone).toMatchObject({ side: 'bottom', net: 'GND' })
+        expect(areaOf(getZoneFill(clipper, zone, data)[0].polygons)).toBeCloseTo((8 * 1000 / 25.4) ** 2, 0)
+
+        const hatched = getZoneFill(clipper, { side: 'top', net: '', fill: [], hatch: [{ side: 'top', points: [0, 0, 100, 0], closed: false, width: 10, fill: false }], pour: null }, data)
+        expect(areaOf(hatched[0].polygons)).toBeCloseTo(100 * 10 + Math.PI * 25, -1)
+    })
+})
+
+describe('área de cobre desenhada', () => {
+    it('preenche só dentro do contorno, afastada da trilha de outra net', async () => {
+        const clipper = new Clipper(await createClipper())
+        const trace: Conductor = { face: 'top', shape: { kind: 'path', points: [250, 0, 250, 1000], closed: false, w: 20, fill: false, cap: 'round' }, owner: 'T', key: 'T/connector0', kind: 'trace' }
+        const artwork = { board: { instance: {} as never, width: 1000, height: 1000, outline: [[0, 0, 1000, 0, 1000, 1000, 0, 1000]], layers: 2, frame: [1, 0, 0, 1, 0, 0] as [number, number, number, number, number, number] }, copper: { top: [], bottom: [] }, pads: [], silk: { top: [], bottom: [] }, holes: [], placed: [], conductors: [trace], skipped: 0 }
+        const limit   = [100, 100, 400, 100, 400, 400, 100, 400]
+        const parts   = getFill(clipper, artwork, 'top', 'plain', () => false, KEEPOUT, limit)
+        const all     = parts.flatMap(part => part.polygons)
+        const xs      = all.flat().filter((_, i) => i % 2 === 0)
+
+        expect(parts.length).toBe(2)
+        expect(Math.min(...xs)).toBeGreaterThanOrEqual(100)
+        expect(Math.max(...xs)).toBeLessThanOrEqual(400)
+        expect(clipper.intersection(all, clipper.inflate([[250, 0, 250, 1000]], 10 + KEEPOUT - 0.5)).length).toBe(0)
     })
 })

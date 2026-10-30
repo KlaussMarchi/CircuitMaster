@@ -18,7 +18,7 @@ import { Ngspice } from '../src/core/Ngspice'
 import { Simulation } from '../src/engine/Simulation'
 import { getStepResponse } from '../src/engine/Response'
 import { getPropertyDefs } from '../src/core/Properties'
-import { fieldsOf, simulate, toSpice } from '../src/core/KicadSim'
+import { fieldsOf, simulate, subcktOf, toSpice } from '../src/core/KicadSim'
 import type { Doc } from '../src/core/Document'
 import type { Library } from '../src/core/Library'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
@@ -286,6 +286,7 @@ describe.skipIf(!HAS_KICAD)('campos Sim.* das bibliotecas: o SPICE que o KiCad g
         expect(dual?.lines).toEqual(['X{instanceTitle} {net connector0} {net connector1} {net connector2} {net connector6} {net connector3} {net connector4} {net connector5} {net connector7} kicad_builtin_opamp_dual'])
         expect(dual?.models.map(model => model.split(' ')[1])).toEqual(['kicad_builtin_opamp', 'kicad_builtin_opamp_dual'])
         expect(spiceOf('Device', 'R_Potentiometer_Dual')).toBeNull()
+        expect(subcktOf(SPICE_LIBRARY.replace(/\r?\n/g, '\r\n'), 'kicad_builtin_opamp_dual')?.pins).toEqual(['out1', 'in1-', 'in1+', 'vee', 'in2+', 'in2-', 'out2', 'vcc'])    // ACERVO CLONADO NO WINDOWS (CRLF)
     })
 
     it('sem os campos, o resistor, o capacitor e a fonte de 2 pinos saem da referência e do Value; o valor do KiCad na notação do SPICE', () => {

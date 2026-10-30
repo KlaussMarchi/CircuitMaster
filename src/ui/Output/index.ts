@@ -7,6 +7,10 @@ import { exportEtchable, exportEtchablePdf, exportFabrication } from '../../core
 import { exportBomCsv, exportBomHtml, exportBomPdf, exportPickAndPlace } from '../../core/Bom'
 import { exportIpc } from '../../core/Ipc'
 import { exportSpice } from '../../core/Spice'
+import { writeAltium } from '../../core/Altium'
+import { writeKicad } from '../../core/Kicad'
+import { writeEagle } from '../../core/Eagle'
+import { exportBoard } from '../../engine/Board'
 import { Pdf } from '../../core/Pdf'
 import { Scene } from '../../engine/Scene'
 import { boardProblem, download, getClipper, needsBoard, type BoardKind, type Context, type ExportKind } from '../Export'
@@ -43,7 +47,10 @@ const BOARD: Record<BoardKind, (artwork: Artwork, clipper: Clipper, context: Con
     etchableSvg: (artwork, clipper, _, base) => [`${base}_etch_svg.zip`, zip(exportEtchable(artwork, clipper, base)), ZIP],
     etchablePdf: (artwork, clipper, _, base) => [`${base}_etch_pdf.zip`, zip(exportEtchablePdf(artwork, clipper, base)), ZIP],
     pnp: (artwork, _, context, base) => [`${base}_pnp.xy`, exportPickAndPlace(artwork, context.library, base), TEXT],
-    ipc: (artwork, _, context, base) => [`${base}.ipc`, exportIpc(context.doc, context.library, artwork, new Scene(context.doc, context.library, 'pcbView'), base), TEXT]
+    ipc: (artwork, _, context, base) => [`${base}.ipc`, exportIpc(context.doc, context.library, artwork, new Scene(context.doc, context.library, 'pcbView'), base), TEXT],
+    altium: (artwork, _, context, base) => [`${base}.PcbDoc`, writeAltium(exportBoard(artwork, context.doc, context.library, context.netlist)), 'application/octet-stream'],
+    kicad: (artwork, _, context, base) => [`${base}.kicad_pcb`, writeKicad(exportBoard(artwork, context.doc, context.library, context.netlist)), TEXT],
+    eagle: (artwork, _, context, base) => [`${base}.brd`, writeEagle(exportBoard(artwork, context.doc, context.library, context.netlist)), 'application/xml']
 }
 
 const SKETCH: Partial<Record<ExportKind, (context: Context, base: string) => Output | null>> = {
@@ -172,7 +179,9 @@ export const exportAs = async (kind: ExportKind, context: Context) => {
 
         const [name, data, type] = board(artwork, tools, context, base)
         download(name, data, type)
-        return artwork.skipped ? t('{0} exportado ({1} elementos sem suporte ignorados)', name, artwork.skipped) : t('{0} exportado', name)
+        const done  = artwork.skipped ? t('{0} exportado ({1} elementos sem suporte ignorados)', name, artwork.skipped) : t('{0} exportado', name)
+        const inner = artwork.board.instance.properties.inner && !['altium', 'kicad', 'eagle'].includes(kind) ? t('; atenção: as camadas internas guardadas só vão para Altium, KiCad e EAGLE') : ''
+        return done + inner
     }
 
     const output = plain?.(context, base)

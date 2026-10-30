@@ -5,9 +5,11 @@ import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import { IDENTITY, cubicAt, distance, nearestOnCubic, rotation, type Box, type Point } from '../src/core/Geometry'
 import { Scene } from '../src/engine/Scene'
-import { bendToVia, bendWire, setAutoroutable, connectEnd, copyItems, createInstance, createWire, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLabel, setLabelVisible, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, transformLabel, viaToBend } from '../src/engine/Edit'
+import { bendToVia, bendWire, setAutoroutable, connectEnd, copyItems, createInstance, createWire, createWires, deleteItems, deleteRatsnest, flipInstances, getChain, insertLegPoint, joinWires, pasteItems, removeLegPoint, setLabel, setLabelVisible, setLegEnd, setLogoText, setWireEnds, setZOrder, splitWire, transformLabel, viaToBend } from '../src/engine/Edit'
 import { getDrawing } from '../src/engine/Drawing'
+import { shoveTraces } from '../src/engine/Shove'
 import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
+import { milsToPx } from '../src/core/Units'
 
 type View = typeof VIEWS[number]
 
@@ -258,5 +260,28 @@ describe.skipIf(!HAS_FRITZING)('edição de fios e peças (spec 02 §4, §10)', 
         const styled = setLabel(turn(doc, 45), 'pcbView', ['1'], { keys: ['', 'resistance'], size: 12 })
         expect(new Scene(styled, library, 'pcbView').getLabelLines('1')).toHaveLength(2)
         expect(fromSketch(readSketch(exportSketch(styled))!).instances['1'].views.pcbView?.label).toEqual(styled.instances['1'].views.pcbView?.label)
+    })
+})
+
+describe.skipIf(!HAS_FRITZING)('empurrar trilhas na PCB', () => {
+    it('desvia a trilha de outra net em volta da nova com a folga e mantém as pontas; não desvia a que é cruzada', async () => {
+        const library = makeLibrary()
+        await library.load([WIRE])
+        const victim  = createWires(emptyDoc(), library, 'pcbView', [], [], [[0, 300], [600, 300]])
+        const near    = createWires(victim.doc, library, 'pcbView', [], [], [[250, 303], [350, 303]])
+        const result  = shoveTraces(near.doc, library, near.indexes, 10, () => undefined)
+        const scene   = new Scene(result.doc, library, 'pcbView')
+        const chain   = getChain(scene, victim.indexes[0])
+        const ends    = chain.flatMap(index => scene.getWireEnds(index) ?? [])
+        const reach   = milsToPx(24) + milsToPx(10)
+        const gapTo   = (a: Point, b: Point) => Math.min(...[0, 0.25, 0.5, 0.75, 1].map(t => Math.min(...[[250, 303], [350, 303]].map(p => distance(p as Point, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])))))
+
+        expect(result.shoved).toBe(1)
+        expect(chain.length).toBe(5)
+        expect(ends.some(point => distance(point, [0, 300]) < 1e-6) && ends.some(point => distance(point, [600, 300]) < 1e-6)).toBe(true)
+        expect(Math.min(...chain.map(index => gapTo(...(scene.getWireEnds(index) as [Point, Point]))))).toBeGreaterThanOrEqual(reach - 0.01)
+
+        const crossing = createWires(victim.doc, library, 'pcbView', [], [], [[300, 250], [300, 350]])
+        expect(shoveTraces(crossing.doc, library, crossing.indexes, 10, () => undefined)).toMatchObject({ shoved: 0, blocked: 1 })
     })
 })

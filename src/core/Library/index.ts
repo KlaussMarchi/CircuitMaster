@@ -3,7 +3,7 @@ import { SvgFile } from '../SvgFile'
 import { getPins, type PinGeometry } from '../Pins'
 import { VIEWS, type ViewName } from '../Layer'
 import type { Bundle, BundleFile, Instance } from '../Sketch'
-import { generateFzp, generateSvg, needsParametric, setParametric, getNetLabel, holeSvg, isResizableBoard, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg, stripboardSvg } from '../Generator'
+import { generateFzp, generateSvg, needsParametric, setParametric, getNetLabel, holeSvg, isResizableBoard, mirrorSvg, netLabelSvg, padSvg, resizeBoardSvg, resizeHolesSvg, sizeSvg, stripboardSvg } from '../Generator'
 import { MIL_PER_INCH } from '../Units'
 import { Font, type Fonts } from '../Font'
 import { equivalentOf } from '../Properties'
@@ -190,7 +190,8 @@ export class Library {
         return this.svgs.get(moduleId)?.[view]
     }
 
-    // VARIANTE GERADA PELAS PROPRIEDADES LOCAIS DA INSTÂNCIA (NET LABEL, PLACA REDIMENSIONÁVEL, PLANO DE COBRE, LOGO, FURO/VIA, hole size); VAZIO QUANDO A PEÇA USA O SVG DO ACERVO (SPEC 01 §5.7, §8.9–§8.11)
+    // VARIANTE GERADA PELAS PROPRIEDADES LOCAIS DA INSTÂNCIA (NET LABEL, PLACA REDIMENSIONÁVEL, PLANO DE COBRE, LOGO, FURO/VIA, hole size) E PELA PEÇA NA FACE DE BAIXO
+    // (ESPELHADA POR CIMA DA OUTRA VARIANTE); VAZIO QUANDO A PEÇA USA O SVG DO ACERVO (SPEC 01 §5.7, §8.9–§8.11)
     getVariant(instance: Instance | undefined, view: ViewName) {
         const part    = this.parts.get(instance?.moduleIdRef ?? '')
         const merged  = { ...part?.properties, ...instance?.properties }
@@ -204,8 +205,9 @@ export class Library {
         const layer   = part?.views.pcbView?.layers.find(name => name.startsWith('copper')) ?? 'copper1'
         const holes   = part?.kind === 'part' && view === 'pcbView' && base && instance?.properties['hole size'] && instance.properties['hole size'] !== part.properties['hole size']
         const strips  = part && view === 'breadboardView' && /Stripboard2?ModuleID$/.test(part.moduleId)
+        const bottom  = part?.kind === 'part' && view === 'pcbView' && base && instance?.views.pcbView?.bottom
 
-        const key = !part                ? '' :
+        const own = !part                ? '' :
                     options              ? `${part.moduleId}|${options.label}|${options.left}|${options.style}|${options.divisor}` :
                     board && base        ? `${part.moduleId}|${merged.width}|${merged.height}` :
                     fill                 ? fill :
@@ -214,6 +216,7 @@ export class Library {
                     padded               ? `${part.moduleId}|${merged.width}|${merged.height}|${merged.connect}` :
                     holes                ? `${part.moduleId}|holes|${merged['hole size']}` :
                     strips               ? `${part.moduleId}|strips|${merged.layout}|${merged.buses}` : ''
+        const key = bottom ? `${own || part?.moduleId}|bottom` : own
 
         if (!key)
             return ''
@@ -223,15 +226,20 @@ export class Library {
             const layers = part?.views.pcbView?.layers.filter(layer => layer.startsWith('copper')) ?? []
             const scale  = base ? base.viewBox[2] / base.inches / MIL_PER_INCH : 1
             const [w, h] = [Number(merged.width), Number(merged.height)]
-            const text   = strips  ? stripboardSvg(part.moduleId, merged) ?? '' :
+            const text   = !own    ? base?.text ?? '' :
+                           strips  ? stripboardSvg(part.moduleId, merged) ?? '' :
                            options ? netLabelSvg(options) :
                            board   ? resizeBoardSvg(base?.text ?? '', w, h) :
                            fill    ? fill :
                            logo    ? sizeSvg(logo, w, h) :
                            drilled ? holeSvg(merged['hole size'], pin, layers) ?? '' :
                            padded  ? padSvg(layer, part?.kind === 'blocker', w, h, merged.connect ?? 'center') : resizeHolesSvg(base?.text ?? '', merged['hole size'] ?? '', scale)
-            const svg    = new SvgFile(text)
-            svg.update()
+            const plain  = new SvgFile(text)
+            plain.update()
+            const svg    = bottom ? new SvgFile(mirrorSvg(text, plain.viewBox)) : plain
+
+            if (bottom)
+                svg.update()
 
             const id = svg.root ? `v${this.variants.size}` : ''
             this.variantIds.set(key, id)

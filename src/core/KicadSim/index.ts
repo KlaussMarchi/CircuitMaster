@@ -91,7 +91,7 @@ export const fieldsOf = (symbol: KicadSymbol) => {
 
 // .subckt PEDIDO DA BIBLIOTECA SPICE: O NOME, OS PINOS DO CABEÇALHO E OS BLOCOS, OS QUE ELE CHAMA ANTES (UM POR MODELO: DOIS AMP-OPS NO CIRCUITO NÃO DECLARAM O MESMO DUAS VEZES); NULO SEM ELE
 export const subcktOf = (library: string, name: string) => {
-    const blocks = new Map([...library.matchAll(/^\.subckt\s+(\S+)([^\n]*)\n[\s\S]*?^\.ends\b.*$/gim)].map(match => [match[1].toLowerCase(), match]))
+    const blocks = new Map([...library.replace(/\r\n?/g, '\n').matchAll(/^\.subckt\s+(\S+)([^\n]*)\n[\s\S]*?^\.ends\b.*$/gim)].map(match => [match[1].toLowerCase(), match]))
     const called = (block: RegExpMatchArray): string[] => [block[1].toLowerCase(), ...[...block[0].matchAll(/^\s*x\S*(?:\s+\S+)+?\s+(\S+)(?:\s+\w+=\S+)*\s*$/gim)].map(match => blocks.get(match[1].toLowerCase())).filter((item): item is RegExpExecArray => item !== undefined && item !== block).flatMap(called)]
     const block  = blocks.get(name.toLowerCase())
     const pins   = block?.[2].replace(/\bparams:.*$/i, '').split(/\s+/).filter(pin => pin && !pin.includes('=')) ?? []

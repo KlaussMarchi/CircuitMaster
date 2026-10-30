@@ -5,6 +5,7 @@
   --surface: #131217;
   --raised: #212023;
   --well: #0e0d11;
+  --gerber-clear: #0b0c0e;    /* FUNDO DO VISUALIZADOR DE GERBER: ESCURO NOS DOIS TEMAS, COMO A PCB */
   --border: #222224;
   --rule: #1b1a1f;
   --control: #3a3a3e;
@@ -39,6 +40,7 @@
   --surface: #ffffff;
   --raised: #f3f4f6;
   --well: #f7f8fa;
+  --gerber-clear: #0b0c0e;
   --border: #e1e4e8;
   --rule: #eceef1;
   --control: #c9cdd3;
@@ -612,3 +614,18 @@ details.sec[open] > summary h3::after { content: '▾'; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 }
+
+/* VISUALIZADOR DE GERBER (SPEC 09 §8): LISTA DE CAMADAS À ESQUERDA, PLACA NO FUNDO ESCURO EM AMBOS OS TEMAS, STATUS EMBAIXO */
+.modal > .card.gerber { width: min(1180px, 100%); height: min(86vh, 100%); max-height: none; display: flex; flex-direction: column; overflow: hidden; }
+.gerber-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px 1fr; gap: 12px; }
+.gerber-layers { list-style: none; margin: 0; padding: 0; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.gerber-layers label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--radius-control); cursor: pointer; }
+.gerber-layers label:hover { background: var(--raised); }
+.gerber-layers i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.gerber-layers span { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.gerber-layers small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gerber-canvas { width: 100%; height: 100%; background: var(--gerber-clear); border-radius: var(--radius-card); cursor: crosshair; touch-action: none; }
+.gerber-status { display: flex; justify-content: space-between; gap: 12px; padding-top: 10px; font: 12px var(--mono); color: var(--soft); }
+@media (max-width: 720px) { .gerber-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .gerber-layers { max-height: 30vh; } .gerber-status { flex-direction: column; } }
+
+.netclass { padding: 6px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }

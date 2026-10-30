@@ -16,10 +16,12 @@ import { t } from '../../core/Text'
 const PartEditor = lazy(() => import('../PartEditor').then(module => ({ default: module.PartEditor })))
 const Dialog     = lazy(() => import('../Dialog').then(module => ({ default: module.Dialog })))
 const Tour       = lazy(() => import('../Tour').then(module => ({ default: module.Tour })))
+const Gerber     = lazy(() => import('../GerberViewer').then(module => ({ default: module.GerberViewer })))
 
 const EditorSlot = () => useStore(state => state.editing) ? <Suspense fallback={null}><PartEditor /></Suspense> : null
 const DialogSlot = () => useStore(state => state.dialog !== null && state.dialog !== 'palette') ? <Suspense fallback={null}><Dialog /></Suspense> : null
 const TourSlot   = () => useStore(state => state.tour !== null) ? <Suspense fallback={null}><Tour /></Suspense> : null
+const GerberSlot = () => useStore(state => state.gerber !== null) ? <Suspense fallback={null}><Gerber /></Suspense> : null
 
 const NATIVE = new Set(['click', 'doubleClick', 'resetOrigin'])    // Enter, End E ESPAÇO NUM BOTÃO FOCADO SÃO DO PRÓPRIO BOTÃO
 
@@ -86,11 +88,12 @@ export const App = () => {
                 <button className="sheet-scrim" aria-label={t('Fechar painel')} onClick={() => toggleSheet(null)} />
             </div>
             <Boundary name="Barra de status" className="status"><StatusBar /></Boundary>
-            <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb,.kicad_sym,.kicad_mod" hidden onChange={onFile} />
+            <input id="open-file" type="file" accept=".fzz,.fz,.fzpz,.fzbz,.fzb,.kicad_sym,.kicad_mod,.PcbDoc,.kicad_pcb,.brd,.zip,.gbr,.ger,.gtl,.gbl,.gts,.gbs,.gto,.gbo,.gtp,.gbp,.gm1,.gko,.drl,.xln" hidden onChange={onFile} />
             <Boundary name="Diálogo" className="modal" close={() => useStore.setState({ dialog: null })}><DialogSlot /></Boundary>
             <Boundary name="Editor de peças" className="modal" close={() => useStore.getState().editPart(null)}><EditorSlot /></Boundary>
             <Boundary name="Paleta de comandos" className="modal" close={() => useStore.setState({ dialog: null })}><Palette /></Boundary>
             <Boundary name="Tour" className="modal" close={() => useStore.getState().finishTour()}><TourSlot /></Boundary>
+            <Boundary name="Visualizador de Gerber" className="modal" close={() => useStore.setState({ gerber: null })}><GerberSlot /></Boundary>
         </div>
     )
 }

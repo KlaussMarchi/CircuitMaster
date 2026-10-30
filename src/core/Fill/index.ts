@@ -1,5 +1,9 @@
-import { area, END, JOIN, type Clipper, type Paths } from '../Clipper'
+import { area, END, FILL, JOIN, type Clipper, type Paths } from '../Clipper'
+import { arcPoints, padPolygon, type BoardData, type BoardPad, type Stroke, type Zone } from '../Board'
 import { shapeBox, toPolygons, type Artwork, type Conductor, type Face } from '../Cam'
+import { isInside } from '../Geometry'
+
+export { isInside }
 
 export type FillMode     = 'ground' | 'plain'
 export type FillFragment = { face: Face, layer: string, x: number, y: number, svg: string, polygons: Paths }
@@ -14,19 +18,6 @@ const COLORS: Record<Face, [string, string]> = { bottom: ['groundplane', '#f9a43
 
 const boxOf = (paths: Paths) => paths.flat().reduce((box, value, i) => i % 2 ? [box[0], Math.min(box[1], value), box[2], Math.max(box[3], value)] : [Math.min(box[0], value), box[1], Math.max(box[2], value), box[3]], [Infinity, Infinity, -Infinity, -Infinity])
 
-export const isInside = (polygon: number[], x: number, y: number) => {
-    let hit = false
-
-    for (let i = 0, j = polygon.length - 2; i < polygon.length; j = i, i += 2) {
-        if ((polygon[i + 1] > y) !== (polygon[j + 1] > y) && x < (polygon[j] - polygon[i]) * (y - polygon[i + 1]) / (polygon[j + 1] - polygon[i + 1]) + polygon[i])
-            hit = !hit
-    }
-
-    return hit
-}
-
-// PONTO NO FRAGMENTO: DENTRO DO CONTORNO EXTERNO E FORA DOS FUROS
-export const contains = (fragment: Paths, x: number, y: number) => fragment.filter(polygon => isInside(polygon, x, y)).length % 2 === 1
 
 // CONTORNOS EXTERNOS (ÁREA POSITIVA) COM OS FUROS QUE CONTÊM; ILHAS DENTRO DE FUROS VIRAM FRAGMENTOS PRÓPRIOS
 const splitFragments = (polygons: Paths) => {
@@ -58,8 +49,11 @@ const fragmentSvg = (clipper: Clipper, fragment: Paths, face: Face) => {
     return { x: x0, y: y0, svg: `<svg xmlns='http://www.w3.org/2000/svg' width='${(w / 1000).toFixed(5)}in' height='${(h / 1000).toFixed(5)}in' viewBox='0 0 ${Math.round(w * UNITS)} ${Math.round(h * UNITS)}' >\n<g id='${layer}'>\n<path fill='${color}' stroke='none' stroke-width='0' d='${d}'/>\n${pad}\n</g>\n</svg>` }
 }
 
-// PREENCHIMENTO DE COBRE DE UMA FACE: N = P \ (C' ∪ E), F = abertura(N ⊖ k) \ T COM ALÍVIO TÉRMICO NAS SEMENTES DE TERRA (SPEC 03 §6.2)
-export const getFill = (clipper: Clipper, artwork: Artwork, face: Face, mode: FillMode, grounded: (conductor: Conductor) => boolean, keepout: number): FillFragment[] => {
+const toFragments = (clipper: Clipper, fragments: Paths[], face: Face): FillFragment[] => fragments.map(fragment => ({ face, layer: COLORS[face][0], ...fragmentSvg(clipper, fragment, face), polygons: fragment }))
+
+// PREENCHIMENTO DE COBRE DE UMA FACE: N = P \ (C' ∪ E), F = abertura(N ⊖ k) \ T COM ALÍVIO TÉRMICO NAS SEMENTES DE TERRA (SPEC 03 §6.2); COM limit (ÁREA DESENHADA,
+// mil DA PLACA), P VIRA P ∩ limit
+export const getFill = (clipper: Clipper, artwork: Artwork, face: Face, mode: FillMode, grounded: (conductor: Conductor) => boolean, keepout: number, limit: number[] | null = null): FillFragment[] => {
     const { board } = artwork
     const seeds     = mode === 'ground' ? artwork.conductors.filter(conductor => conductor.face === face && conductor.kind === 'pad' && grounded(conductor)) : []
     const copper    = clipper.union(artwork.conductors.filter(conductor => conductor.face === face && !(mode === 'ground' && conductor.kind === 'trace' && grounded(conductor))).flatMap(conductor => toPolygons(clipper, conductor.kind === 'blocker' && (conductor.shape.kind === 'rect' || conductor.shape.kind === 'circle') ? { ...conductor.shape, fill: true } : conductor.shape)))
@@ -68,7 +62,7 @@ export const getFill = (clipper: Clipper, artwork: Artwork, face: Face, mode: Fi
     const ground    = clipper.intersection(copper, rects)
     const others    = clipper.difference(copper, rects)
     const edge      = keepout < EDGE_MARGIN ? clipper.inflate(board.outline, EDGE_MARGIN - keepout, JOIN.round, END.joined) : []
-    const free      = clipper.difference(board.outline, clipper.union([...others, ...edge]))
+    const free      = clipper.difference(limit ? clipper.intersection(board.outline, [limit]) : board.outline, clipper.union([...others, ...edge]))
     const relief    = clipper.difference(clipper.inflate(ground, keepout), zones.flatMap(zone => spokes(zone, keepout)))
     const rho       = Math.max(keepout / 4, 1)
     const opened    = clipper.inflate(clipper.inflate(clipper.inflate(free, -keepout), -rho), rho)
@@ -78,5 +72,41 @@ export const getFill = (clipper: Clipper, artwork: Artwork, face: Face, mode: Fi
         const [dx, dy]         = [x1 - x0, y1 - y0]
         return !(dx < MIN_SIDE && dy < MIN_SIDE) && dx >= MIN_THICKNESS && dy >= MIN_THICKNESS
     })
-    return fragments.map(fragment => ({ face, layer: COLORS[face][0], ...fragmentSvg(clipper, fragment, face), polygons: fragment }))
+    return toFragments(clipper, fragments, face)
+}
+
+// TRAÇOS ENGROSSADOS PELA METADE DA LARGURA (PONTAS REDONDAS), UMA CHAMADA POR LARGURA
+const strokesOf = (clipper: Clipper, strokes: Stroke[]) => {
+    const widths = new Map<string, Stroke[]>()
+    strokes.filter(stroke => stroke.width > 0).forEach(stroke => widths.set(`${stroke.width}|${stroke.closed}`, [...widths.get(`${stroke.width}|${stroke.closed}`) ?? [], stroke]))
+    return clipper.union([...widths.values()].flatMap(group => clipper.inflate(group.map(stroke => stroke.points), group[0].width / 2, JOIN.round, group[0].closed ? END.joined : END.round)))
+}
+
+// COBRE DE UMA ÁREA IMPORTADA, EM FRAGMENTOS: O PREENCHIMENTO GRAVADO E O HACHURADO ENGROSSADO; COM pour (EAGLE), O DESPEJO
+// abertura((CONTORNO ∩ PLACA ⊖ edge) \ (COBRE DAS OUTRAS NETS ⊕ clearance), width / 2) \ ALÍVIO TÉRMICO DOS PADS DA NET, SEM AS ILHAS QUE NÃO TOCAM COBRE DA NET (SPEC 09 §4)
+// ponytail: RAIOS DO ALÍVIO COMO OS DO PREENCHIMENTO DO FRITZING (NÃO OS DO EAGLE) E CONTORNO SEM O TRAÇO DE width EM VOLTA (A BORDA FICA MEIA LARGURA PARA DENTRO)
+export const getZoneFill = (clipper: Clipper, zone: Zone, board: BoardData): FillFragment[] => {
+    const { pour } = zone
+
+    if (!pour)
+        return toFragments(clipper, splitFragments(clipper.union([...clipper.union(zone.fill, FILL.evenOdd), ...strokesOf(clipper, zone.hatch)])), zone.side)
+
+    const faced   = <T extends { side: string },>(items: T[]) => items.filter(item => item.side === zone.side || item.side === 'both')
+    const pads    = faced(board.footprints.flatMap(footprint => footprint.pads))
+    const shape   = (pad: BoardPad) => padPolygon(pad).map((value, i) => value + (i % 2 ? pad.y : pad.x))
+    // COBRE DA FACE DA PRÓPRIA NET (mine) OU DAS OUTRAS
+    const copper  = (mine: boolean) => clipper.union([
+        ...pads.filter(pad => (pad.net === zone.net) === mine).map(shape),
+        ...board.vias.filter(via => (via.net === zone.net) === mine).map(via => arcPoints(via.x, via.y, via.diameter / 2, 0, 360)),
+        ...strokesOf(clipper, faced(board.tracks).filter(track => (track.net === zone.net) === mine).map(track => ({ side: track.side, points: [...track.a, ...track.b], closed: false, width: track.width, fill: false })))
+    ])
+    const own     = pour.thermal ? pads.filter(pad => pad.net === zone.net) : []
+    const rays    = own.flatMap(pad => spokes(boxOf([shape(pad)]), pour.clearance))
+    const relief  = clipper.difference(clipper.inflate(clipper.union(own.map(shape)), pour.clearance), rays)
+    const area    = clipper.intersection(clipper.inflate(clipper.union(board.outline, FILL.evenOdd), -pour.edge), [pour.outline])
+    const free    = clipper.difference(area, clipper.inflate(copper(false), pour.clearance))
+    const cut     = clipper.difference(free, relief)
+    const poured  = pour.width > 0 ? clipper.inflate(clipper.inflate(cut, -pour.width / 2), pour.width / 2) : cut
+    const anchor  = clipper.union([...copper(true), ...rays])    // O PAD COM ALÍVIO SÓ TOCA A ÁREA PELOS RAIOS
+    return toFragments(clipper, splitFragments(poured).filter(fragment => clipper.intersection(fragment, anchor).length > 0), zone.side)
 }

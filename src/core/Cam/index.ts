@@ -23,7 +23,9 @@ export type Hole    = { x: number, y: number, diameter: number, plated: boolean,
 export type Placed  = { instance: Instance, x: number, y: number, rotation: number, face: Face }
 export type Board   = { instance: Instance, width: number, height: number, outline: Paths, layers: number, frame: Matrix }
 export type Conductor = { face: Face, shape: Shape, owner: string, key: string | null, kind: 'pad' | 'copper' | 'trace' | 'fill' | 'blocker' }
-export type Artwork   = { board: Board, copper: Record<Face, Shape[]>, pads: Pad[], silk: Record<Face, Shape[]>, holes: Hole[], placed: Placed[], conductors: Conductor[], skipped: number }
+export type Drawn     = { owner: string, layer: 'fab' | 'courtyard', face: Face, shape: Shape }
+// docs: DESENHO DE MONTAGEM E ÁREA DE CADA PEÇA (SÓ PARA A EXPORTAÇÃO DE PLACA; O GERBER NÃO LEVA)
+export type Artwork   = { board: Board, copper: Record<Face, Shape[]>, pads: Pad[], silk: Record<Face, Shape[]>, holes: Hole[], placed: Placed[], conductors: Conductor[], skipped: number, docs?: Drawn[] }
 
 const SCALE           = MIL_PER_INCH / PX_PER_INCH
 const POINTS_PER_INCH = 72
@@ -64,7 +66,8 @@ export const toShapes = (svg: SvgFile, element: XmlElement, m: Matrix, library: 
     const w     = svg.getStroke(element) * scale
     const fill  = svg.getStyle(element, 'fill') !== 'none'
     const cap   = svg.getStyle(element, 'stroke-linecap') ?? 'butt'
-    const even  = Math.abs(Math.abs(full[0]) - Math.abs(full[3])) < 1e-9 && Math.abs(full[1]) < 1e-9 && Math.abs(full[2]) < 1e-9
+    // SEMELHANÇA (ESCALA UNIFORME COM QUALQUER GIRO OU ESPELHO): CÍRCULO CONTINUA CÍRCULO; SÓ "SEM GIRO" FAZIA A PEÇA PASSANTE GIRADA PERDER OS FUROS (SPEC 03 §2.3)
+    const even  = Math.abs(full[0] * full[0] + full[1] * full[1] - full[2] * full[2] - full[3] * full[3]) < 1e-9 && Math.abs(full[0] * full[2] + full[1] * full[3]) < 1e-9
     const path  = (points: number[], closed: boolean): Shape => ({ kind: 'path', points: transform(full, points), closed, w, fill: fill && closed, cap })
 
     if (tag === 'text') {
@@ -249,7 +252,7 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
     const frame: Matrix        = [SCALE, 0, 0, SCALE, -bx0 * SCALE, -by0 * SCALE]
     const outline              = scenePolygons.map(polygon => transform(frame, polygon))
     const board: Board         = { instance: host, width: (bx1 - bx0) * SCALE, height: (by1 - by0) * SCALE, outline, layers: Number(library.getPart(host.moduleIdRef)?.properties.layers ?? host.properties.layers ?? 2) || 2, frame }
-    const artwork: Artwork     = { board, copper: { top: [], bottom: [] }, pads: [], silk: { top: [], bottom: [] }, holes: [], placed: [], conductors: [], skipped: 0 }
+    const artwork: Artwork     = { board, copper: { top: [], bottom: [] }, pads: [], silk: { top: [], bottom: [] }, holes: [], placed: [], conductors: [], skipped: 0, docs: [] }
     const inside               = (points: number[]) => {
         const [x0, y0, x1, y1] = boxOf(points)
         return x1 >= 0 && y1 >= 0 && x0 <= board.width && y0 <= board.height
@@ -312,6 +315,9 @@ export const getArtwork = (doc: Doc, library: Library, clipper: Clipper, placeme
         }
 
         artwork.conductors.splice(first, Infinity, ...absorb(artwork.conductors.slice(first)))
+
+        for (const layer of ['fab', 'courtyard'] as const)
+            leaves(svg.findFirst(layer), svg).filter(leaf => DRAWN.has(tagOf(leaf))).forEach(leaf => toShapes(svg, leaf, full, library).forEach(shape => artwork.docs?.push({ owner: instance.modelIndex, layer, face: flip ? 'bottom' : 'top', shape })))
         const label = getLabelShape(library, placement, instance, frame)
 
         if (label)

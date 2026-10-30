@@ -7,7 +7,7 @@ import { Netlist } from '../src/core/Netlist'
 import { Scene } from '../src/engine/Scene'
 import { Clipper } from '../src/core/Clipper'
 import { getArtwork } from '../src/core/Cam'
-import { checkRules, getGroupOf } from '../src/core/Drc'
+import { basicRules, checkRules, getGroupOf } from '../src/core/Drc'
 import { buildGrid, buildSheetGrid, getPlan, loadRouterWasm, routeGrid, ROUTE_DEFAULTS } from '../src/core/Router'
 import { applyPlan } from '../src/engine/Edit'
 import type { Library } from '../src/core/Library'
@@ -58,8 +58,8 @@ describe.skipIf(!HAS_FRITZING)('autorouter de PCB (spec 03 §8)', () => {
 
             const status  = after.getStatus('pcbView')
             const result  = getArtwork(routed, library, clipper, new Scene(routed, library, 'pcbView'))
-            const before  = checkRules(clipper, artwork, getGroupOf(doc, netlist), ROUTE_DEFAULTS.keepout).length
-            const found   = result ? checkRules(clipper, result, getGroupOf(routed, after), ROUTE_DEFAULTS.keepout) : []
+            const before  = checkRules(clipper, artwork, getGroupOf(doc, netlist), basicRules(ROUTE_DEFAULTS.keepout)).length
+            const found   = result ? checkRules(clipper, result, getGroupOf(routed, after), basicRules(ROUTE_DEFAULTS.keepout)) : []
             const traces  = found.filter(violation => violation.owners.some(owner => routed.instances[owner]?.moduleIdRef === 'WireModuleID' && !doc.instances[owner]))
 
             report.push(`${path.basename(file, '.fzz')}: grade ${grid.width}×${grid.height}×${grid.layers}, ${pass.connected}/${pass.requested} ligações, ${pass.vias} vias, ${plan.wires.length} trechos, ${elapsed.toFixed(0)} ms; nets roteadas ${status.routed}/${status.nets}; DRC ${before} → ${found.length} (${traces.length} com trilha nova)`)
@@ -71,6 +71,46 @@ describe.skipIf(!HAS_FRITZING)('autorouter de PCB (spec 03 §8)', () => {
 
         writeReport('router-report.txt', report.join('\n'))
         expect(report.length).toBeGreaterThan(5)
+    })
+
+    // TRILHA MAIS LARGA QUE O PAD E TRECHOS A 45°: O CAMINHO NÃO PODE SAIR DO PAD PARA A FOLGA DO VIZINHO (SPEC 03 §8.4)
+    it('com regras apertadas, as trilhas novas continuam sem violação de DRC', async () => {
+        const clipper = new Clipper(await createClipper())
+        const wasm    = await loadWasm()
+        const router  = await loadRouterWasm(fs.readFileSync(new URL('../src/core/Router/router.wasm', import.meta.url)))
+        const library = makeLibrary()
+        const config  = { ...ROUTE_DEFAULTS, traceWidth: 48, keepout: 24 }
+
+        for (const file of listSketches(true).filter(file => ['LCD', 'Op-amp'].includes(path.basename(file, '.fzz')))) {
+            const bundle = readBundle(fs.readFileSync(file))
+            library.addBundle(bundle)
+
+            const loaded = fromSketch(bundle.sketch ?? { fritzingVersion: '', projectProperties: {}, settings: {}, instances: [] })
+            await library.load([...Object.values(loaded.instances).map(instance => instance.moduleIdRef), 'ViaModuleID', 'WireModuleID'])
+
+            const doc     = unrouted(loaded, library)
+            const netlist = new Netlist(doc, library, wasm)
+            netlist.update()
+
+            const scene   = new Scene(doc, library, 'pcbView')
+            const artwork = getArtwork(doc, library, clipper, scene)
+
+            if (!artwork)
+                continue
+
+            const netOf  = (key: string) => netlist.index.has(key) ? netlist.nets.pcbView?.[netlist.index.get(key) ?? 0] ?? null : null
+            const subOf  = (key: string) => netlist.index.has(key) ? netlist.routed.pcbView?.[netlist.index.get(key) ?? 0] ?? null : null
+            const grid   = buildGrid(clipper, artwork, netOf, subOf, config)
+            const pass   = routeGrid(router, grid, config.cycles)
+            const routed = applyPlan(doc, library, 'pcbView', getPlan(grid, pass, artwork.board.frame, key => scene.getTerminal(key)), config.traceWidth, HOLE)
+            const after  = new Netlist(routed, library, wasm)
+            after.update()
+
+            const result = getArtwork(routed, library, clipper, new Scene(routed, library, 'pcbView'))
+            const found  = result ? checkRules(clipper, result, getGroupOf(routed, after), basicRules(config.keepout)) : []
+            expect(pass.connected, path.basename(file)).toBe(pass.requested)
+            expect(found.filter(violation => violation.owners.some(owner => !doc.instances[owner])).length, path.basename(file)).toBe(0)
+        }
     })
 
     it('roteia o esquemático dos exemplos sem fios', async () => {

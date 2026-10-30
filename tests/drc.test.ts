@@ -7,7 +7,7 @@ import { Netlist } from '../src/core/Netlist'
 import { Scene } from '../src/engine/Scene'
 import { Clipper } from '../src/core/Clipper'
 import { getArtwork, pickBoard, type Artwork, type Conductor } from '../src/core/Cam'
-import { checkRules, getGroupOf } from '../src/core/Drc'
+import { basicRules, checkRules, getGroupOf } from '../src/core/Drc'
 import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
@@ -26,14 +26,32 @@ describe('verificação de regras de projeto (spec 03 §7)', () => {
         const groupOf = (conductor: Conductor) => conductor.owner
 
         for (const [gap, expected] of [[KEEPOUT - 0.5, 1], [KEEPOUT + 0.5, 0]] as const) {
-            const found = checkRules(clipper, artworkOf([pad(300, 'A'), pad(300 + 40 + gap, 'B')]), groupOf, KEEPOUT)
+            const found = checkRules(clipper, artworkOf([pad(300, 'A'), pad(300 + 40 + gap, 'B')]), groupOf, basicRules(KEEPOUT))
             expect(found.filter(violation => violation.rule === 'overlap').length, `folga ${gap}`).toBe(expected)
         }
 
-        const same = checkRules(clipper, artworkOf([pad(300, 'A'), pad(305, 'A')]), groupOf, KEEPOUT)
-        const edge = checkRules(clipper, artworkOf([pad(25, 'A')]), groupOf, KEEPOUT)
+        const same = checkRules(clipper, artworkOf([pad(300, 'A'), pad(305, 'A')]), groupOf, basicRules(KEEPOUT))
+        const edge = checkRules(clipper, artworkOf([pad(25, 'A')]), groupOf, basicRules(KEEPOUT))
         expect(same.length).toBe(0)
         expect(edge.map(violation => violation.rule)).toEqual(['edge'])
+    })
+
+    it('acusa trilha fina, furo e anel abaixo do mínimo e usa a maior folga das classes', async () => {
+        const clipper = new Clipper(await createClipper())
+        const groupOf = (conductor: Conductor) => conductor.owner
+        const trace   = (w: number): Conductor => ({ face: 'top', shape: { kind: 'path', points: [300, 300, 600, 300], closed: false, w, fill: false, cap: 'round' }, owner: 'T', key: 'T/connector0', kind: 'trace' })
+        const rules   = { ...basicRules(KEEPOUT), minWidth: 10, minDrill: 11.8 }
+        const count   = (found: { rule: string }[], rule: string) => found.filter(violation => violation.rule === rule).length
+        const holed   = (minRing: number) => checkRules(clipper, { ...artworkOf([pad(500, 'A')]), holes: [{ x: 500, y: 500, diameter: 30, plated: true, connector: true }] }, groupOf, { ...basicRules(KEEPOUT), minRing })
+        const classed = { ...basicRules(KEEPOUT), classes: [{ name: 'Power', nets: ['GND'], width: 0, clearance: 15 }] }
+        const pair    = artworkOf([pad(300, 'A'), pad(300 + 40 + 12, 'B')])
+
+        expect(count(checkRules(clipper, artworkOf([trace(8)]), groupOf, rules), 'width')).toBe(1)
+        expect(count(checkRules(clipper, artworkOf([trace(12)]), groupOf, rules), 'width')).toBe(0)
+        expect(count(checkRules(clipper, { ...artworkOf([]), holes: [{ x: 500, y: 500, diameter: 10, plated: false, connector: false }] }, groupOf, rules), 'drill')).toBe(1)
+        expect([count(holed(4), 'ring'), count(holed(6), 'ring')]).toEqual([0, 1])
+        expect(count(checkRules(clipper, pair, groupOf, classed), 'overlap')).toBe(0)
+        expect(count(checkRules(clipper, pair, groupOf, classed, conductor => conductor.owner === 'A' ? 0 : -1), 'overlap')).toBe(1)
     })
 
     it.skipIf(!HAS_FRITZING)('roda nos exemplos com placa', async () => {
@@ -61,7 +79,7 @@ describe('verificação de regras de projeto (spec 03 §7)', () => {
 
             const found = boards.flatMap(board => {
                 const artwork = getArtwork(doc, library, clipper, scene, [board.modelIndex])
-                return artwork ? checkRules(clipper, artwork, getGroupOf(doc, netlist), KEEPOUT) : []
+                return artwork ? checkRules(clipper, artwork, getGroupOf(doc, netlist), basicRules(KEEPOUT)) : []
             })
 
             if (!boards.length)

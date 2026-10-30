@@ -1,3 +1,4 @@
+import '../../core/Xml/xmldom'    // SEM DOMParser NO WORKER: O XMLDOM ANTES DE TUDO
 import { exportBundle, type BundleFile } from '../../core/Sketch'
 import type { Doc } from '../../core/Document'
 import { serve } from '../Serve'

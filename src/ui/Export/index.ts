@@ -9,7 +9,7 @@ import { Scene } from '../../engine/Scene'
 import { t } from '../../core/Text'
 
 // EXPORTAÇÕES QUE PRECISAM DE UMA PLACA NA VISTA PCB; A GERAÇÃO DOS ARQUIVOS (ui/Output) SÓ CARREGA QUANDO SE EXPORTA
-const BOARD_EXPORTS = ['production', 'gerber', 'etchableSvg', 'etchablePdf', 'pnp', 'ipc'] as const
+const BOARD_EXPORTS = ['production', 'gerber', 'etchableSvg', 'etchablePdf', 'pnp', 'ipc', 'altium', 'kicad', 'eagle'] as const
 
 export type BoardKind  = typeof BOARD_EXPORTS[number]
 export type ExportKind = BoardKind | 'png' | 'jpg' | 'svg' | 'pdf' | 'bomHtml' | 'bomCsv' | 'bomPdf' | 'xml' | 'spice'

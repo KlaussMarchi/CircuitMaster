@@ -1,23 +1,41 @@
-import { DOMParser, ParseError, XMLSerializer, type Element } from '@xmldom/xmldom'
+import type * as Xmldom from '@xmldom/xmldom'
 
-export type XmlElement = Element
+export type XmlElement = Xmldom.Element
 
-const parser     = new DOMParser({ onError: () => {} })
-const serializer = new XMLSerializer()
+// O XMLDOM (80 KB) FICA FORA DO JAVASCRIPT INICIAL: ENTRA POR core/Xml/xmldom, CARREGADO NO setup DO STORE, NOS WORKERS QUE LEEM XML E NO
+// NODE DOS TESTES. O DOMParser NATIVO NÃO SERVE: NO CHROMIUM LÊ OS SVG DO ACERVO EM QUASE O DOBRO DO TEMPO E DEVOLVE HTML NO ERRO
+let xmldom: typeof Xmldom | null = null
+let parser: Xmldom.DOMParser | null = null
+let serializer: Xmldom.XMLSerializer | null = null
+
+export const useXmldom = (module: typeof Xmldom) => {
+    xmldom     = module
+    parser     = new module.DOMParser({ onError: () => {} })
+    serializer = new module.XMLSerializer()
+}
+
+const ready = () => {
+    if (!xmldom || !parser || !serializer)
+        throw new Error('core/Xml: xmldom não registrado (importe core/Xml/xmldom antes de ler XML)')
+
+    return { xmldom, parser, serializer }
+}
 
 // TEXTO SEM ELEMENTO RAIZ VIRA NULO: O XMLDOM LANÇA ParseError NO ERRO FATAL MESMO COM onError
 export const parseXml = (text: string) => {
+    const { xmldom, parser } = ready()
+
     try {
         return parser.parseFromString(text, 'text/xml').documentElement
     } catch (error) {
-        if (error instanceof ParseError)
+        if (error instanceof xmldom.ParseError)
             return null
 
         throw error
     }
 }
 
-export const serializeXml = (element: XmlElement) => serializer.serializeToString(element)
+export const serializeXml = (element: XmlElement) => ready().serializer.serializeToString(element)
 
 export const tagOf = (element: XmlElement) => element.localName ?? element.tagName.split(':').pop() ?? ''
 

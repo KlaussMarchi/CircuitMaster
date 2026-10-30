@@ -15,7 +15,7 @@ export type RouteConfig = { traceWidth: number, keepout: number, viaHole: number
 export type Grid        = { width: number, height: number, layers: number, step: number, owner: Int32Array, pads: Int32Array, nets: Map<number, [number, number[]][]>, keys: Map<number, string>, order: number[], params: Float64Array }
 export type Pass        = { connected: number, requested: number, vias: number, failed: number[], paths: { net: number, cells: number[] }[] }
 export type End         = { wire: number, end: 0 | 1 } | { via: number } | { key: string }
-export type Plan        = { wires: { layer: string, a: Point, b: Point }[], vias: Point[], links: [End, End][] }
+export type Plan        = { wires: { layer: string, a: Point, b: Point, mils?: number }[], vias: Point[], holes?: string[], links: [End, End][] }
 
 const FREE       = -1
 const BLOCKED    = -2
@@ -97,7 +97,7 @@ export const buildGrid = (clipper: Clipper, artwork: Artwork, netOf: (key: strin
     const owner     = new Int32Array(plane * layers).fill(BLOCKED)
     const pads      = new Int32Array(plane * layers).fill(FREE)
     const zone      = config.keepout + config.traceWidth / 2
-    const reach     = Math.hypot(zone, step / 2)    // ZONA VISTA DOS CENTROS: O TRECHO ENTRE DOIS CENTROS NÃO CHEGA MAIS PERTO QUE zone
+    const reach     = Math.hypot(zone, step / Math.SQRT2)    // ZONA VISTA DOS CENTROS: O TRECHO (ATÉ g·√2, NA DIAGONAL) ENTRE DOIS CENTROS NÃO CHEGA MAIS PERTO QUE zone
     const subnets   = new Map<number, Map<number, Set<number>>>()
     const keys      = new Map<number, string>()
     const centers   = new Map<number, Point[]>()
@@ -128,6 +128,14 @@ export const buildGrid = (clipper: Clipper, artwork: Artwork, netOf: (key: strin
 
         rasterize(toPolygons(clipper, solidOf(conductor.shape)), width, height, step, (x, y) => void cells.add(layer * plane + y * width + x))
 
+        // SÓ AS CÉLULAS DO PAD FORA DA ZONA DE OUTRA NET: A TRILHA MAIS LARGA QUE O PAD NÃO INVADE A FOLGA DO VIZINHO; SEM NENHUMA, FICA O PAD TODO (O DRC APONTA)
+        const clear = [...cells].filter(index => owner[index] === subnet)
+
+        if (clear.length && clear.length < cells.size) {
+            cells.clear()
+            clear.forEach(index => cells.add(index))
+        }
+
         if (!cells.size) {
             const box = shapeBox(conductor.shape)
             cells.add(layer * plane + Math.min(height - 1, Math.max(0, Math.floor((box[1] + box[3]) / 2 / step))) * width + Math.min(width - 1, Math.max(0, Math.floor((box[0] + box[2]) / 2 / step))))
@@ -152,7 +160,7 @@ export const buildGrid = (clipper: Clipper, artwork: Artwork, netOf: (key: strin
     const order   = [...nets.keys()].sort((a, b) => crowd(a) - crowd(b))
     const radius  = config.viaHole / 2 + config.viaRing
     const fit     = (radius + config.keepout - reach + step * Math.SQRT2) / step    // TODA CÉLULA NESTE DISCO ACESSÍVEL GARANTE COBRE A radius + k DO CENTRO DA VIA
-    const params  = Float64Array.from([VIA_COST, AVOID_COST, (config.traceWidth + config.keepout) / step, Math.max(0, fit), (radius + zone) / step, layers === 2 ? 1 : 0, 0])
+    const params  = Float64Array.from([VIA_COST, AVOID_COST, Math.hypot(config.traceWidth + config.keepout, step / Math.SQRT2) / step, Math.max(0, fit), Math.hypot(radius + zone, step / Math.SQRT2) / step, layers === 2 ? 1 : 0, 0, 1])
     return { width, height, layers, step, owner, pads, nets, keys, order, params }
 }
 
@@ -216,7 +224,7 @@ export const buildSheetGrid = (sheet: Sheet, netOf: (key: string) => number | nu
     })
 
     const nets   = new Map([...subnets].filter(([, groups]) => groups.size > 1).map(([net, groups]) => [net, [...groups].map(([subnet, cells]): [number, number[]] => [subnet, cells])]))
-    const params = Float64Array.from([VIA_COST, AVOID_COST, 0.5, 0, 0, 0, 1])
+    const params = Float64Array.from([VIA_COST, AVOID_COST, 0.5, 0, 0, 0, 1, 0])
     const grid: Grid = { width, height, layers: 1, step, owner, pads, nets, keys, order: [...nets.keys()].sort((a, b) => (centers.get(a)?.length ?? 0) - (centers.get(b)?.length ?? 0)), params }
     return { grid, frame }
 }

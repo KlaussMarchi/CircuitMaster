@@ -1,3 +1,4 @@
+import '../../src/core/Xml/xmldom'    // NO NODE NÃO HÁ DOMParser: O XMLDOM ANTES DE TUDO
 import fs from 'node:fs'
 import path from 'node:path'
 import { ROOTS as FRITZING, getListings, listFiles } from '../../tools/Fritzing'

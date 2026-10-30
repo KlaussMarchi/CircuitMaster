@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { keyOf, splitKey, WIRE_FLAGS } from '../../core/Document'
 import type { Instance } from '../../core/Sketch'
-import { formatReading, formatSi, getPropertyDefs, nameOf, parseSi } from '../../core/Properties'
+import { formatReading, formatSi, getPropertyDefs, nameOf, parseSi, parseValue } from '../../core/Properties'
 import { FREQUENCY_KEY, RAMP_KEY, SIGNAL_KEY, SIGNALS, getNets, getSwitching, isVoltageSource, signalOf, switchOf } from '../../core/Spice'
 import { Scene } from '../../engine/Scene'
 import { familyOf } from '../../engine/Simulation'
@@ -21,6 +21,8 @@ const FootprintField = lazy(() => import('../FootprintField').then(module => ({ 
 const Measures       = lazy(() => import('../Measures').then(module => ({ default: module.Measures })))                   // SÓ DEPOIS DE SIMULAR, NA PONTA ESCOLHIDA
 
 const HIDDEN = new Set(['family', 'sticky', 'mn', 'mpn', 'part number', 'shape', 'svg', 'lastfilename', 'switch status', 'footprint filters', 'kicad symbol'])
+
+const PERIOD_HINTS = ['1Hz', '10Hz', '50Hz', '60Hz', '100Hz', '1kHz', '10kHz']    // O PERÍODO ACEITA FREQUÊNCIA E GRAVA EM SEGUNDOS
 
 const PADS     = /(Copper0)?PadModuleID$/
 const SIZED    = (part: Part) => part.kind === 'logo' || part.kind === 'blocker' || isResizableBoard(part.moduleId) || PADS.test(part.moduleId)
@@ -320,7 +322,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
 
     const commitValue = (key: string, text: string) => {
         const def    = defs.find(item => item.name === key)
-        const number = def?.numeric ? parseSi(text, def.symbol) : null
+        const number = def?.numeric ? parseValue(key, text, def.symbol) : null
 
         if (def?.numeric && (number === null || (def.min !== null && number < def.min) || (def.max !== null && number > def.max)))
             return useStore.setState({ message: t('{0}: valor fora da faixa {1}…{2} {3}', key, def.min ?? '-∞', def.max ?? '∞', def.symbol) })
@@ -390,7 +392,7 @@ const PartEditor = ({ modelIndex }: { modelIndex: string }) => {
             )
 
         if (def)
-            return <Entry value={merged[key] ?? def.value} options={def.values.map(value => def.numeric ? formatSi(Number(value), def.symbol) : value)} numeric={def.numeric} commit={text => commitValue(key, text)} />
+            return <Entry value={merged[key] ?? def.value} options={key === 'period' ? PERIOD_HINTS : def.values.map(value => def.numeric ? formatSi(Number(value), def.symbol) : value)} numeric={def.numeric} commit={text => commitValue(key, text)} />
 
         return <span className="num" style={{ textAlign: 'right', overflowWrap: 'anywhere' }}>{merged[key]}</span>
     }

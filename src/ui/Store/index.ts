@@ -7,16 +7,18 @@ import { exportBinBundle, readFile, type Bundle, type BundleFile, type Instance,
 import type { Part } from '../../core/Part'
 import { VIEWS } from '../../core/Layer'
 import { PX_PER_INCH, toInches } from '../../core/Units'
-import { apply, boxesTouch, unionBoxes, type Matrix, type Point } from '../../core/Geometry'
+import { apply, boxesTouch, contains, unionBoxes, type Matrix, type Point } from '../../core/Geometry'
 import { FREQUENCY_KEY, RAMP_KEY, SIGNAL_KEY, SWITCH_KEY, buildCircuit, getSwitching, resumeCircuit, type Event } from '../../core/Spice'
 import { FONT_FILES } from '../../core/Font'
-import { getArtwork, pickBoard } from '../../core/Cam'
-import { getGroupOf, type Violation } from '../../core/Drc'
-import { contains, type FillFragment, type FillMode } from '../../core/Fill'
+import { getArtwork, pickBoard, type Face } from '../../core/Cam'
+import { getClassOf, getGroupOf, type Violation } from '../../core/Drc'
+import type { FillFragment, FillMode } from '../../core/Fill'
 import { buildSheetGrid, type Plan } from '../../core/Router'
-import { alignInstances, alignToGrid, applyPlan, connectByPath, copyItems, createFills, createInstance, createNote, deleteAutorouted, deleteItems, drawWires, flipInstances, getCarried, getChangedWires, getGridShift, moveInstances, pasteItems, rotateInstances, setZOrder, snapConnections, squareWires, swapPart, tidyWires, type AlignMode, type Clipboard, type WireEnd, type ZMode, setProperty, setPosition, setTraceSide } from '../../engine/Edit'
+import { alignInstances, alignToGrid, applyPlan, connectByPath, copyItems, createFills, createInstance, createNote, deleteAutorouted, deleteItems, drawWires, flipInstances, setPartSide, getCarried, getChangedWires, getGridShift, moveInstances, pasteItems, rotateInstances, setZOrder, snapConnections, squareWires, swapPart, tidyWires, type AlignMode, type Clipboard, type WireEnd, type ZMode, setProperty, setPosition, setTraceSide } from '../../engine/Edit'
 import { Scene, WIRE_STYLE } from '../../engine/Scene'
 import { getDrawing } from '../../engine/Drawing'
+import type { GerberLayer } from '../../core/GerberReader'
+import type { shoveTraces } from '../../engine/Shove'
 import { Simulation, fromRest, getInitial, joinRuns } from '../../engine/Simulation'
 import { BENCHES, BENCH_PARTS, buildBench } from '../../engine/Bench'
 import { FEATURED } from '../../core/Featured'
@@ -36,7 +38,7 @@ import wasmUrl from '../../core/Netlist/netlist.wasm?url'
 
 export type View       = typeof VIEWS[number]
 export type Viewport   = { x: number, y: number, zoom: number }
-export type Tool       = 'select' | 'area' | 'lasso' | 'erase' | 'zoomArea' | 'origin' | ProbeKind
+export type Tool       = 'select' | 'area' | 'lasso' | 'erase' | 'zoomArea' | 'origin' | 'measure' | 'zone' | ProbeKind
 export type GridKind   = 'parts' | 'wires'
 export type Panel      = 'properties' | 'routing' | 'document'
 export type Left       = 'parts' | 'ready' | 'project' | 'problems'
@@ -78,6 +80,10 @@ type State = {
     welcome: boolean
     theme: Theme
     side: Side
+    highlight: string | null    // CONECTOR CUJA NET FICA REALÇADA (O RESTO ESMAECE) ATÉ O Esc
+    ruler: Point[]              // PONTOS DA RÉGUA NA CENA (0, 1 OU 2)
+    outline: Point[]            // VÉRTICES DA ÁREA DE COBRE EM DESENHO, NA CENA
+    push: boolean               // MODO EMPURRAR DA PCB: TRILHA DESENHADA OU ARRASTADA EMPURRA AS DE OUTRAS NETS
     placing: string | null
     saved: Doc
     stored: boolean
@@ -99,6 +105,7 @@ type State = {
     vault: Vault
     autosave: Autosave
     recovery: Version[]
+    gerber: { name: string, layers: GerberLayer[] } | null
     drc: Checked | null
     sheets: Sheet[]
     sheet: number
@@ -153,6 +160,7 @@ type State = {
     isAligned: (view: View) => boolean
     isOrthogonal: (view: View) => boolean
     tidy: (origin: Doc, doc: Doc) => Doc
+    shove: (origin: Doc, doc: Doc) => Doc
     addPart: (moduleId: string, point: Point) => Promise<void>
     connect: (from: string, to: string) => Promise<void>
     drawWire: (from: string[], end: WireEnd | null, points: Point[]) => Promise<void>
@@ -187,6 +195,9 @@ type State = {
     remove: (minus: boolean) => void
     rotate: (degrees: number) => void
     flip: (horizontal: boolean) => void
+    flipSide: () => void
+    setHighlight: (key: string | null) => void
+    togglePush: () => Promise<void>
     zOrder: (mode: ZMode) => void
     nudge: (dx: number, dy: number) => void
     copy: () => void
@@ -227,6 +238,8 @@ type State = {
     checkRules: (quiet?: boolean) => Promise<void>
     fillCopper: (mode: FillMode) => Promise<void>
     fillUnit: (point: Point) => Promise<void>
+    drawZone: (points: Point[], net: string) => Promise<void>
+    refillZones: () => Promise<void>
     removeFills: () => void
     autoroute: () => Promise<void>
     autorouteSheet: () => Promise<void>
@@ -243,7 +256,7 @@ type State = {
 const HISTORY   = 200
 const START_VIEW: View = 'schematicView'    // O APP, O SKETCH NOVO E O ARQUIVO ABERTO COMEÇAM NO ESQUEMÁTICO (FRIZING_KICAD §5, DECISÃO 1)
 const TOOL_NAMES: Record<ProbeKind, string> = { voltage: 'Ponta de tensão', current: 'Ponta de corrente', both: 'Ponta de tensão e corrente' }
-const TOOL_HINTS: Partial<Record<Tool, string>> = { area: 'Seletor: arraste no quadro para selecionar várias peças (Esc volta)', lasso: 'Laço: desenhe em volta das peças para selecioná-las (Esc volta)', erase: 'Apagar: clique em cada peça ou fio para apagar (Esc volta)', zoomArea: 'Zoom na área: arraste um retângulo no quadro', origin: 'Origem da grade: clique no ponto que vira a origem (Esc cancela)' }
+const TOOL_HINTS: Partial<Record<Tool, string>> = { area: 'Seletor: arraste no quadro para selecionar várias peças (Esc volta)', lasso: 'Laço: desenhe em volta das peças para selecioná-las (Esc volta)', erase: 'Apagar: clique em cada peça ou fio para apagar (Esc volta)', zoomArea: 'Zoom na área: arraste um retângulo no quadro', origin: 'Origem da grade: clique no ponto que vira a origem (Esc cancela)', measure: 'Régua: clique em dois pontos para medir; perto de um terminal, mede do centro dele (Esc sai)', zone: 'Área de cobre: clique nos vértices; duplo clique ou clique no primeiro vértice fecha (Esc cancela)' }
 const NOTE      = 'NoteModuleID'
 const FILL      = 'GroundPlaneModuleID'
 const VIA       = 'ViaModuleID'
@@ -359,6 +372,8 @@ const PADS = /(Copper0)?PadModuleID$|SchematicFrameModuleID$/
 export const isEditable = (part: Part | undefined) => part?.kind === 'part' && !PADS.test(part.moduleId)
 
 // DOCUMENTO ABERTO, HISTÓRICO, VISTA CORRENTE E DERIVADOS; O NETLIST SÓ É REFEITO QUANDO A TOPOLOGIA MUDA (SPEC 02 §6.5)
+let shover: typeof shoveTraces | null = null    // EMPURRAR TRILHAS, CARREGADO PELO togglePush
+
 export const useStore = create<State>((set, get) => {
     const withNetlist = (doc: Doc, netlist = get().netlist) => {
         const { wasm, library } = get()
@@ -457,6 +472,10 @@ export const useStore = create<State>((set, get) => {
         welcome: false,
         theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
         side: 'both',
+        highlight: null,
+        ruler: [],
+        outline: [],
+        push: false,
         placing: null,
         saved: blank,
         stored: false,
@@ -479,6 +498,7 @@ export const useStore = create<State>((set, get) => {
         vault,
         autosave: new Autosave(vault, message => set({ message })),
         recovery: [],
+        gerber: null,
         drc: null,
         sheets: [{ id: 1, ...blankSheet() }],
         sheet: 1,
@@ -497,6 +517,7 @@ export const useStore = create<State>((set, get) => {
             if (get().catalog.supervisor.worker)
                 return
 
+            await import('../../core/Xml/xmldom')    // O LEITOR DE XML CHEGA ANTES DE QUALQUER PEÇA, FONTE OU SKETCH, FORA DO JAVASCRIPT INICIAL
             const started = get().catalog.start()
             get().saver.start()    // SALVAR NÃO PODE DEPENDER DA REDE: O WORKER QUE MONTA O .fzz SOBE JÁ NA ABERTURA
             const fonts   = Promise.all(Object.entries(FONT_FILES).map(([key, file]) => loadFont(get().library, key, file)))
@@ -521,6 +542,23 @@ export const useStore = create<State>((set, get) => {
 
         open: async (name, bytes) => {
             const { library } = get()
+            const foreign     = !/\.(fzz|fz|fzpz|fzbz|fzb|kicad_sym|kicad_mod)$/i.test(name)    // PLACA DE OUTRO PROGRAMA OU ARQUIVOS DE FABRICAÇÃO: O LEITOR SÓ CARREGA QUANDO PRECISA (SPEC 09)
+            const imported    = foreign ? await import('../../engine/Board').then(module => module.openForeign(name, bytes, library, getClipper)).catch((error: Error) => ({ error: error.message })) : null
+
+            if (imported && 'error' in imported)
+                return set({ message: `${name}: ${imported.error}` })
+
+            if (imported && 'layers' in imported)
+                return set({ gerber: imported, message: t('{0}: {1} camadas de fabricação', name, imported.layers.length) })
+
+            if (imported) {
+                const { doc, dropped, inner, source } = imported
+                place({ ...blankSheet(), name: name.replace(/\.[^.]+$/, '.fzz'), doc, saved: emptyDoc(), view: 'pcbView' }, '')
+                const status = get().netlist?.getStatus('pcbView')
+                const parts  = [t('{0} importado do {1}: {2} itens', name, source, Object.keys(doc.instances).length), status ? t('{0} de {1} nets roteadas', status.routed, status.nets) : '', inner ? t('{0} itens das camadas internas guardados na placa para a exportação (fora da tela e do DRC)', inner) : '', dropped ? t('{0} itens ficaram de fora', dropped) : '']
+                return set({ message: parts.filter(Boolean).join('; ') })
+            }
+
             const kicad       = /\.kicad_(sym|mod)$/i.test(name)    // SÍMBOLOS E FOOTPRINTS DO KICAD VIRAM PEÇAS EM MEUS ITENS, COMO O .fzpz (SPEC 08 §4)
             const bundle      = kicad ? await import('../../core/KicadPart').then(module => module.importKicad(name, new TextDecoder().decode(bytes), (root, path) => library.source.read(root, path))) : readFile(name, bytes)
 
@@ -866,6 +904,26 @@ export const useStore = create<State>((set, get) => {
             return tidyWires(squared, library, view, getChangedWires(origin, squared, view))
         },
 
+        // MODO EMPURRAR NA PCB: OS TRECHOS QUE A EDIÇÃO MUDOU (origin → doc) EMPURRAM AS TRILHAS DE OUTRAS NETS COM A FOLGA DO DRC
+        shove: (origin, doc) => {
+            const { push, view, library, netlist } = get()
+            const movers = push && view === 'pcbView' ? getChangedWires(origin, doc, view) : []
+
+            if (!shover || !movers.length)
+                return doc
+
+            const labels = netlist?.nets.pcbView
+            const result = shover(doc, library, movers, getConfig(doc.settings.pcbView).keepout, key => {
+                const node = netlist?.index.get(key)
+                return node === undefined ? undefined : labels?.[node]
+            })
+
+            if (result.shoved || result.blocked)
+                set({ message: result.blocked ? t('empurradas {0} trilhas; {1} sem espaço para desviar (rode o DRC)', result.shoved, result.blocked) : t('empurradas {0} trilhas', result.shoved) })
+
+            return result.doc
+        },
+
         addPart: async (moduleId, point) => {
             const { library, view, viewports, isAligned, gridOf } = get()
             await library.load([moduleId])
@@ -910,11 +968,12 @@ export const useStore = create<State>((set, get) => {
             if (!made.indexes.length)
                 return
 
-            get().commit(view === 'pcbView' && get().side === 'bottom' ? made.indexes.reduce(setTraceSide, made.doc) : made.doc)
-            set({ selection: made.indexes, message: t(made.indexes.length > 1 ? (end ? 'fio com {0} trechos' : 'fio com {0} trechos, ponta solta') : (end ? 'fio com {0} trecho' : 'fio com {0} trecho, ponta solta'), made.indexes.length) })
+            const message = get().message
+            get().commit(get().shove(doc, view === 'pcbView' && get().side === 'bottom' ? made.indexes.reduce(setTraceSide, made.doc) : made.doc))
+            set({ selection: made.indexes, message: get().message !== message ? get().message : t(made.indexes.length > 1 ? (end ? 'fio com {0} trechos' : 'fio com {0} trechos, ponta solta') : (end ? 'fio com {0} trecho' : 'fio com {0} trecho, ponta solta'), made.indexes.length) })
         },
 
-        setTool: tool => set({ tool, message: tool === 'select' ? '' : TOOL_HINTS[tool] ? t(TOOL_HINTS[tool]) : t('{0}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)', t(TOOL_NAMES[tool as ProbeKind])) }),
+        setTool: tool => set({ tool, ruler: [], outline: [], message: tool === 'select' ? '' : TOOL_HINTS[tool] ? t(TOOL_HINTS[tool]) : t('{0}: clique num fio ou num terminal (Shift mantém a ferramenta, Esc ou botão direito sai)', t(TOOL_NAMES[tool as ProbeKind])) }),
 
         setPanel: panel => set({ panel }),
 
@@ -948,6 +1007,7 @@ export const useStore = create<State>((set, get) => {
         },
 
         setSide: side => set({ side, message: side === 'both' ? '' : t(side === 'top' ? 'trilhas novas e cliques na face de cima (vermelha); a outra fica esmaecida' : 'trilhas novas e cliques na face de baixo (azul); a outra fica esmaecida') }),
+
 
         // PLACA RETANGULAR DE DUAS FACES EM VOLTA DAS PEÇAS COM COBRE; INSTRUMENTOS DE BANCADA (FONTES, MULTÍMETRO, OSCILOSCÓPIO) VÃO PARA UMA COLUNA À ESQUERDA DELA; DEPOIS O AUTOROUTER (SPEC 03 §8.3.1)
         makeBoard: async () => {
@@ -1079,6 +1139,24 @@ export const useStore = create<State>((set, get) => {
         flip: horizontal => {
             const { doc, library, view, selection } = get()
             get().commit(get().tidy(doc, settle(flipInstances(doc, library, view, selection, horizontal), selection)))
+        },
+
+        setHighlight: highlight => set({ highlight }),
+
+        // O MÓDULO DE EMPURRAR SÓ CARREGA NA PRIMEIRA VEZ QUE O MODO É LIGADO
+        togglePush: async () => {
+            const on = !get().push
+            shover  = on ? shover ?? await import('../../engine/Shove').then(module => module.shoveTraces) : shover
+            set({ push: on, message: t(on ? 'modo empurrar: a trilha nova desvia as de outras nets' : 'trilhas sem empurrar') })
+        },
+
+        // F NA PCB: AS PEÇAS SELECIONADAS VÃO PARA A FACE DE BAIXO; SE JÁ ESTÃO TODAS EMBAIXO, VOLTAM PARA CIMA
+        flipSide: () => {
+            const { doc, library, view, selection } = get()
+            const parts = selection.filter(modelIndex => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')?.kind === 'part' && !doc.instances[modelIndex]?.views.pcbView?.locked)
+
+            if (view === 'pcbView' && parts.length)
+                get().commit(setPartSide(doc, library, parts, !parts.every(modelIndex => doc.instances[modelIndex]?.views.pcbView?.bottom)))
         },
 
         zOrder: mode => {
@@ -1333,11 +1411,12 @@ export const useStore = create<State>((set, get) => {
 
             const { artwork, config } = board
             const groups              = artwork.conductors.map(getGroupOf(doc, board.netlist))
+            const classes             = artwork.conductors.map(getClassOf(doc, get().library, board.netlist, config.drc.classes))
 
             if (!quiet)
                 set({ message: t('verificando regras de projeto…') })
 
-            const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, keepout: config.keepout })
+            const violations = await get().pcb.request<Violation[]>({ type: 'drc', artwork, groups, classes, rules: config.drc })
             const message    = !violations ? stopped('DRC', get().pcb.failure) : violations.length ? t('DRC: {0} problemas com folga de {1} mil', violations.length, config.keepout.toFixed(1)) : t('DRC: nenhum problema com folga de {0} mil', config.keepout.toFixed(1))
 
             if (get().doc !== doc)
@@ -1395,6 +1474,37 @@ export const useStore = create<State>((set, get) => {
             const { doc } = get()
             get().commit(createFills(doc, [hit], artwork.board.frame, 'individual'))
             set({ selection: [String(doc.nextIndex)], message: t('preenchimento criado na área do ponto') })
+        },
+
+        // ÁREA DE COBRE DESENHADA: PREENCHIMENTO SÓ DENTRO DO POLÍGONO, NA FACE ATIVA (DE CIMA COM "AMBAS"), LIGADO À NET PELO NOME DE UM TERMINAL (VAZIO = SEM NET)
+        drawZone: async (points, net) => {
+            const zone = { outline: points.flat(), face: get().side === 'bottom' ? 'bottom' : 'top', net: net.trim() } as Zone
+            const next = await fillZone(get(), get().doc, zone)
+
+            if (typeof next === 'string')
+                return set({ message: next })
+
+            get().commit(next)
+            set({ message: zone.net ? t('área de cobre ligada a {0}', zone.net) : t('área de cobre sem net') })
+        },
+
+        // PREENCHE DE NOVO AS ÁREAS DESENHADAS PELO CONTORNO GRAVADO, UMA DEPOIS DA OUTRA (CADA UMA RESPEITA A FOLGA DAS QUE JÁ FORAM)
+        refillZones: async () => {
+            const { doc } = get()
+            const zones   = [...new Set(Object.values(doc.instances).flatMap(instance => instance.properties.zone ? [instance.properties.zone] : []))]
+            let current   = Object.values(doc.instances).filter(instance => instance.properties.zone).reduce((result, instance) => removeInstance(result, instance.modelIndex), doc)
+
+            for (const text of zones) {
+                const next = await fillZone(get(), current, JSON.parse(text) as Zone)
+
+                if (typeof next === 'string')
+                    return set({ message: next })
+
+                current = next
+            }
+
+            get().commit(current)
+            set({ message: zones.length ? t('{0} áreas de cobre preenchidas de novo', zones.length) : t('nenhuma área de cobre desenhada') })
         },
 
         removeFills: () => {
@@ -1717,10 +1827,34 @@ const removeFills = (doc: Doc, library: Library, selection: string[]) => {
     const area  = boardArea(doc, library, selection)
     const scene = new Scene(doc, library, 'pcbView')
     const fills = Object.values(doc.instances).filter(instance => {
-        const box = library.getPart(instance.moduleIdRef)?.kind === 'copperFill' ? scene.getBounds(instance.modelIndex) : null
+        const box = library.getPart(instance.moduleIdRef)?.kind === 'copperFill' && !instance.properties.zone ? scene.getBounds(instance.modelIndex) : null
         return area && box && boxesTouch(box, area)
     })
     return fills.reduce((current, instance) => removeInstance(current, instance.modelIndex), doc)
+}
+
+type Zone = { outline: number[], face: Face, net: string }
+
+// FRAGMENTOS DE UMA ÁREA DESENHADA NO DOCUMENTO, COM O CONTORNO GRAVADO NA PROPRIEDADE zone DE CADA UM (PARA PREENCHER DE NOVO)
+const fillZone = async (state: State, doc: Doc, zone: Zone): Promise<Doc | string> => {
+    const board = await pcbBoard({ ...state, doc })
+
+    if (typeof board === 'string')
+        return board
+
+    const { artwork, config, netlist } = board
+    const face      = artwork.board.layers > 1 ? zone.face : 'bottom'
+    const classOf   = getClassOf(doc, state.library, netlist, zone.net ? [{ name: zone.net, nets: [zone.net], width: 0, clearance: 0 }] : [])
+    const grounded  = artwork.conductors.map(conductor => classOf(conductor) === 0)
+    const limit     = Array.from({ length: zone.outline.length / 2 }, (_, i) => apply(artwork.board.frame, zone.outline[2 * i], zone.outline[2 * i + 1])).flat()
+    const mode      = grounded.some(Boolean) ? 'ground' : 'plain'
+    const fragments = await state.pcb.request<FillFragment[]>({ type: 'fill', artwork, grounded, faces: [face], mode, keepout: config.fillKeepout, limit })
+
+    if (!fragments?.length)
+        return t('a área não cobre nenhum espaço livre da placa')
+
+    await state.library.load([FILL])
+    return createFills(doc, fragments, artwork.board.frame, mode, { zone: JSON.stringify(zone) })
 }
 
 // PLACA PRONTA PARA DRC, PREENCHIMENTO E AUTOROUTER: NETLIST DO DOCUMENTO, ARTE DA PCB E AJUSTES; OU O MOTIVO DE NÃO HAVER

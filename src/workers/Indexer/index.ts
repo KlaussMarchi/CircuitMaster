@@ -1,3 +1,4 @@
+import '../../core/Xml/xmldom'    // SEM DOMParser NO WORKER: O XMLDOM ANTES DE TUDO
 import { readPart, type Kind } from '../../core/Part'
 import { readBin } from '../../core/Sketch'
 import { alternativesOf, haystackOf, prepare, rankParts, termsOf, type Words } from '../../core/Search'

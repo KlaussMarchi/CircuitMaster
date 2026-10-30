@@ -122,8 +122,8 @@ ou `error` (spec 06 §2).
 
 ## Especificação e licença
 
-- `docs/specs/01–04` e `06` (formatos e peças; sincronização de vistas e netlist; PCB, DRC e Gerber; SPICE;
-  robustez) são o que o código implementa; `00-MATRIZ.md` é o placar das funções do Fritzing e do KiCad. Os comentários citam a seção (`SPEC 04 §8.3`): leia a seção antes de mudar uma regra e
+- `docs/specs/01–04`, `06` e `09` (formatos e peças; sincronização de vistas e netlist; PCB, DRC e Gerber; SPICE;
+  robustez; intercâmbio de placas com Altium, KiCad e EAGLE e o visualizador de Gerber) são o que o código implementa; `00-MATRIZ.md` é o placar das funções do Fritzing e do KiCad. Os comentários citam a seção (`SPEC 04 §8.3`): leia a seção antes de mudar uma regra e
   mantenha a citação. Cada spec termina com o plano de testes que os `describe` seguem.
 - O projeto é GPL-3.0-or-later, como o Fritzing (`../Fritzing/fritzing-app`) e o KiCad (`../KiCad/kicad`), e pode
   portar código dos dois. Módulo com código portado ou adaptado leva a origem na primeira linha

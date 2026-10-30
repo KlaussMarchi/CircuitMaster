@@ -116,3 +116,18 @@ export const nearestOnCubic = (p0: Point, p1: Point, p2: Point, p3: Point, p: Po
 
     return best
 }
+
+// PONTO NO POLÍGONO (x0 y0 x1 y1 …) PELA REGRA PAR-ÍMPAR
+export const isInside = (polygon: number[], x: number, y: number) => {
+    let hit = false
+
+    for (let i = 0, j = polygon.length - 2; i < polygon.length; j = i, i += 2) {
+        if ((polygon[i + 1] > y) !== (polygon[j + 1] > y) && x < (polygon[j] - polygon[i]) * (y - polygon[i + 1]) / (polygon[j + 1] - polygon[i + 1]) + polygon[i])
+            hit = !hit
+    }
+
+    return hit
+}
+
+// PONTO NO FRAGMENTO DO PREENCHIMENTO: DENTRO DO CONTORNO EXTERNO E FORA DOS FUROS
+export const contains = (polygons: number[][], x: number, y: number) => polygons.filter(polygon => isInside(polygon, x, y)).length % 2 === 1

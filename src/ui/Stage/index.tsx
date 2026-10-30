@@ -142,6 +142,8 @@ export const Stage = () => {
                     <button className="tool" aria-label={t('Girar')} title={`${t('Girar 90°')} (])`} disabled={!selected} onClick={() => rotate(90)}><Icon name="rotate" /></button>
                     {view === 'schematicView' && <button className="tool" aria-label={t('Espelhar')} title={`${t('Espelhar')} (|)`} disabled={!selected} onClick={() => flip(true)}><Icon name="flip" /></button>}
                     <button className="tool" aria-label={t('Apagar')} title={`${t('Apagar')} (Delete)`} disabled={!selected} onClick={() => remove(false)}><Icon name="trash" /></button>
+                    {view === 'pcbView' && <button className="tool" aria-pressed={tool === 'zone'} aria-label={t('Área de cobre')} title={t('Área de cobre: clique nos vértices e feche no primeiro; fica na face ativa e liga à net escolhida')} onClick={() => setTool(tool === 'zone' ? 'select' : 'zone')}><Icon name="zone" /></button>}
+                    {view === 'pcbView' && <button className="tool" aria-pressed={tool === 'measure'} aria-label={t('Régua')} title={`${t('Régua: clique em dois pontos para medir')} (Ctrl+M)`} onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}><Icon name="ruler" /></button>}
                 </div>
                 {view === 'pcbView' && (
                     <div className="tabs layerswitch" role="tablist" aria-label={t('Face da placa')}>

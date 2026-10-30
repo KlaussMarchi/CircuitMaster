@@ -1,16 +1,17 @@
+import '../../core/Xml/xmldom'    // SEM DOMParser NO WORKER: O XMLDOM ANTES DE TUDO
 import createClipper from '../../core/Clipper/clipper2.js'
 import { Clipper } from '../../core/Clipper'
 import type { Artwork, Conductor, Face } from '../../core/Cam'
 import type { Matrix, Point } from '../../core/Geometry'
-import { checkRules } from '../../core/Drc'
+import { checkRules, type Rules } from '../../core/Drc'
 import { getFill, type FillMode } from '../../core/Fill'
 import { buildGrid, getPlan, loadRouterWasm, routeGrid, type Grid, type RouteConfig } from '../../core/Router'
 import routerUrl from '../../core/Router/router.wasm?url'
 import { serve } from '../Serve'
 
 export type PcbRequest =
-    { type: 'drc', artwork: Artwork, groups: string[], keepout: number } |
-    { type: 'fill', artwork: Artwork, grounded: boolean[], faces: Face[], mode: FillMode, keepout: number } |
+    { type: 'drc', artwork: Artwork, groups: string[], classes: number[], rules: Rules } |
+    { type: 'fill', artwork: Artwork, grounded: boolean[], faces: Face[], mode: FillMode, keepout: number, limit?: number[] } |
     { type: 'route', artwork: Artwork, keys: Record<string, [number, number]>, terminals: Record<string, Point>, config: RouteConfig } |
     { type: 'sheet', grid: Grid, frame: Matrix, terminals: Record<string, Point>, cycles: number }
 
@@ -29,10 +30,10 @@ serve<PcbRequest>(async (request, progress) => {
     const [clipper, router] = await tools
 
     if (request.type === 'drc')
-        return checkRules(clipper, request.artwork, byIndex(request.artwork, request.groups), request.keepout)
+        return checkRules(clipper, request.artwork, byIndex(request.artwork, request.groups), request.rules, byIndex(request.artwork, request.classes))
 
     if (request.type === 'fill')
-        return request.faces.flatMap(face => getFill(clipper, request.artwork, face, request.mode, byIndex(request.artwork, request.grounded), request.keepout))
+        return request.faces.flatMap(face => getFill(clipper, request.artwork, face, request.mode, byIndex(request.artwork, request.grounded), request.keepout, request.limit ?? null))
 
     const sheet  = request.type === 'sheet'
     const grid   = sheet ? request.grid : buildGrid(clipper, request.artwork, key => request.keys[key]?.[0] ?? null, key => request.keys[key]?.[1] ?? null, request.config)

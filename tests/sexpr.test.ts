@@ -30,7 +30,7 @@ const roundTrip = (files: string[]) => files.map(file => {
     const flat = flatOf(text)
     const out  = flat === null ? '' : prettify(flat, 'normal')
     const back = flat === null ? null : flatOf(out)
-    return { file, read: flat !== null, same: out === text, ours: text.includes(KICAD_10), tree: back === flat, stable: back !== null && prettify(back, 'normal') === out }
+    return { file, read: flat !== null, same: out === text.replace(/\r\n/g, '\n'), ours: text.includes(KICAD_10), tree: back === flat, stable: back !== null && prettify(back, 'normal') === out }
 })
 
 const report = (name: string, results: ReturnType<typeof roundTrip>) => `${name}: ${results.length} arquivos, ${results.filter(result => result.same).length} iguais byte a byte, ${results.filter(result => !result.same && result.tree).length} com a mesma árvore e outra formatação\n${results.filter(result => !result.same).slice(0, 50).map(result => `  ${path.relative(ROOTS.symbols + '/..', result.file)}`).join('\n')}\n`

@@ -1,5 +1,5 @@
 import { rotation, type Matrix, type Point } from '../../core/Geometry'
-import { WIRE_FLAGS } from '../../core/Document'
+import { WIRE_FLAGS, keyOf } from '../../core/Document'
 import { Scene } from '../../engine/Scene'
 import { WIRE_COLORS } from '../../engine/Drawing'
 import { bendToVia, clearGroundFillSeeds, deleteItems, deleteRatsnest, joinWires, setAutoroutable, setGroundFillSeed, setLabel, setLabelVisible, setLayerHidden, setLocked, setSticky, setTraceSide, setWire, splitWire, straightenWire, transformLabel, viaToBend, type ZMode } from '../../engine/Edit'
@@ -36,7 +36,7 @@ const zMenu = (disabled: boolean): MenuEntry => ({ label: 'Elevar e rebaixar', d
 
 // MENU DE PEÇA DA VISTA CORRENTE (SPEC 02 §10.1)
 const partMenu = (target: Target): MenuEntry[] => {
-    const { doc, library, view, selection, edit, rotate, flip, copy, duplicate, remove, addToMine, userBins, addToBin, editPart, keys } = useStore.getState()
+    const { doc, library, view, selection, edit, rotate, flip, flipSide, copy, duplicate, remove, addToMine, userBins, addToBin, editPart, keys } = useStore.getState()
     const scene     = new Scene(doc, library, view)
     const chosen    = selection.filter(modelIndex => !scene.isWire(modelIndex))
     const partOf    = (modelIndex: string) => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')
@@ -53,6 +53,7 @@ const partMenu = (target: Target): MenuEntry[] => {
     const stickyOn  = doc.instances[target.modelIndex]?.properties.sticky === 'true'
     const turn45    = free.some(modelIndex => partOf(modelIndex)?.kind !== 'breadboard')
     const canFlip   = (horizontal: boolean) => view === 'schematicView' && free.some(modelIndex => horizontal ? partOf(modelIndex)?.views[view]?.flipHorizontal : partOf(modelIndex)?.views[view]?.flipVertical)
+    const sided     = free.filter(modelIndex => partOf(modelIndex)?.kind === 'part')
     const locked    = chosen.some(isLocked)
     const modules   = [...new Set(chosen.map(modelIndex => doc.instances[modelIndex]?.moduleIdRef ?? ''))]
 
@@ -77,8 +78,10 @@ const partMenu = (target: Target): MenuEntry[] => {
             { label: 'Novo bin…', apply: () => promptBin(modules) }
         ] },
         null,
+        { label: 'Realçar a net deste terminal', disabled: !target.key, apply: () => useStore.setState({ highlight: target.key }) },
         { label: visible.length === labelled.length && labelled.length ? 'Ocultar rótulo da peça' : 'Mostrar rótulo da peça', disabled: !labelled.length, apply: () => edit(current => setLabelVisible(current, library, view, labelled, visible.length !== labelled.length)) },
         ...view === 'pcbView' ? [
+            { label: sided.length && sided.every(modelIndex => scene.getView(modelIndex)?.bottom) ? 'Colocar na face de cima' : 'Colocar na face de baixo', shortcut: shortcutOf(keys, 'flipSide'), disabled: !sided.length, apply: flipSide },
             { label: silkOff ? 'Mostrar serigrafia da peça' : 'Ocultar serigrafia da peça', disabled: !silk.length, apply: () => edit(current => setLayerHidden(current, view, silk, SILKSCREEN, !silkOff)) },
             ...part?.kind === 'via' ? [{ label: 'Converter via em dobra', disabled: viaToBend(doc, library, target.modelIndex) === doc, apply: () => edit(current => viaToBend(current, library, target.modelIndex)) }] : [],
             null,
@@ -141,6 +144,7 @@ const wireMenu = (target: Target): MenuEntry[] => {
         null,
         ...colors.length ? [{ label: 'Cor do fio', disabled: isRat, items: colors.map(([name, color]) => ({ label: COLOR_NAMES[name], checked: state?.wire?.color.toLowerCase() === color, apply: () => edit(current => setWire(current, view, [wire], { color })) })) }] : [],
         ...view === 'pcbView' ? [{ label: state?.layer === 'copper0trace' ? 'Mover para a face de cima' : 'Mover para a face de baixo', disabled: isRat || !trace, apply: () => edit(current => setTraceSide(current, wire)) }] : [],
+        { label: 'Realçar a net', apply: () => useStore.setState({ highlight: isRat ? rat[0] : keyOf(wire, 'connector0') }) },
         { label: view === 'breadboardView' ? 'Criar fio a partir do ratsnest' : 'Criar trilha a partir do ratsnest', disabled: !isRat, apply: () => void connect(rat[0], rat[1]) },
         ...view !== 'breadboardView' ? [{ label: 'Não rotear automaticamente', checked: trace && (flags & AUTOROUTE) === 0, disabled: isRat || !trace, apply: () => edit(current => setAutoroutable(current, library, view, wire, (flags & AUTOROUTE) === 0)) }] : [],
         null,

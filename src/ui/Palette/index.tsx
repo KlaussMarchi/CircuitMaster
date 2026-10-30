@@ -8,6 +8,9 @@ const SHOWN = 12    // COMANDOS NA LISTA
 
 // TERMOS EM INGLÊS DO FRITZING E DO KICAD PARA CADA RÓTULO: QUEM VEM DE LÁ ACHA PELO NOME QUE CONHECE
 const ALIASES: Record<string, string> = {
+    'Para outro programa de PCB': 'export board kicad_pcb pcbdoc brd altium kicad eagle', 'Empurrar trilhas': 'push shove traces interactive router walkaround', 'Régua': 'measure ruler distance measurement tool',
+    'Desenhar área de cobre': 'add filled zone copper pour polygon area', 'Preencher áreas desenhadas': 'refill fill all zones', 'Realçar a net': 'highlight net', 'Realçar a net deste terminal': 'highlight net pin',
+    'Colocar na face de baixo': 'flip side bottom layer footprint', 'Colocar na face de cima': 'flip side top layer footprint',
     'Novo': 'new sketch project', 'Abrir…': 'open file load', 'Exemplos': 'examples samples sketches', 'Salvar': 'save', 'Versões salvas automaticamente…': 'autosave backup recover versions local history rescue', 'Fechar sketch': 'close sketch tab document', 'Localizar peça no sketch…': 'find part in sketch search', 'Selecionar peças travadas': 'select all locked parts', 'Selecionar peças desatualizadas': 'select outdated obsolete parts',
     'Atualizar peças selecionadas': 'update selected parts swap obsolete', 'Exportar peça…': 'export part fzpz', 'Desligar todos os fios': 'disconnect all wires', 'Selecionar trilhas "não rotear"': 'select all dont autoroute traces',
     'Selecionar todos os jumpers': 'select all jumpers', 'Abrir recentes': 'open recent files history', 'Limpar recentes': 'clear recent files', 'Reverter': 'revert reload discard changes',

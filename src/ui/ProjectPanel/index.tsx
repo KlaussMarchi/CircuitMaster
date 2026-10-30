@@ -51,6 +51,15 @@ const SimulationOptions = () => {
 }
 
 // ABA DE DOCUMENTO: RESUMO DO SKETCH, AJUSTES DA VISTA CORRENTE, ARQUIVO, EXPORTAÇÃO, OPÇÕES DA SIMULAÇÃO E OS EXEMPLOS DO FRITZING
+// CAMADAS DE COBRE GUARDADAS NA PLACA IMPORTADA (JSON DO ARQUIVO ABERTO: MALFORMADO CONTA COMO NENHUMA)
+const copperOf = (inner: string | undefined) => {
+    try {
+        return inner ? Number(JSON.parse(inner).copper) || 0 : 0
+    } catch {
+        return 0
+    }
+}
+
 export const ProjectPanel = () => {
     const doc             = useStore(state => state.doc)
     const library         = useStore(state => state.library)
@@ -81,6 +90,7 @@ export const ProjectPanel = () => {
     const wires           = instances.filter(instance => instance.moduleIdRef === 'WireModuleID').length
     const scene           = useMemo(() => new Scene(doc, library, 'pcbView'), [doc, library])
     const board           = instances.some(instance => scene.isShown(instance) && BOARDS.includes(library.getPart(instance.moduleIdRef)?.kind ?? ''))
+    const copper          = instances.map(instance => copperOf(instance.properties.inner)).find(Boolean)
     const found           = useMemo(() => samples.filter(file => file.toLowerCase().includes(text.trim().toLowerCase())), [samples, text])
     const folders         = [...new Set(found.map(file => file.split('/').slice(0, -1).join(' / ')))]
 
@@ -97,6 +107,7 @@ export const ProjectPanel = () => {
                 <Kv label="Conexões" value={String(doc.edges.length)} />
                 <Kv label="Pontas de prova" value={String(doc.probes.length)} />
                 <Kv label="Formato" value={`Fritzing ${doc.fritzingVersion || '1.0.8'}`} />
+                {copper && <Kv label="Camadas de cobre" value={t('{0} ({1} internas só na exportação)', copper, copper - 2)} />}
             </div>
             <div className="sec">
                 <h3>{t('Arquivo')}</h3>

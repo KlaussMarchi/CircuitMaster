@@ -11,9 +11,9 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 
 | Parte | Linhas | feita | falta | não se aplica |
 |---|---|---|---|---|
-| Fritzing | 251 | 208 | 17 | 26 |
+| Fritzing | 251 | 209 | 17 | 25 |
 | KiCad esquemático, comuns e projeto | 404 | 123 | 268 | 13 |
-| KiCad PCB, 3D, GerbView e calculadora | 421 | 32 | 387 | 2 |
+| KiCad PCB, 3D, GerbView e calculadora | 421 | 37 | 382 | 2 |
 
 ## Fritzing
 
@@ -44,7 +44,7 @@ manuais do KiCad. Toda linha "feita" aponta para um arquivo de teste que existe 
 | F-021 | Exportar › Netlist IPC-D-356A (IPC-D-356A netlist) | Fritzing › File › Export › IPC-D-356A netlist | feita | 0 | tests/cam.test.ts · e2e/export.spec.ts | exige placa |
 | F-022 | Exportar › Netlist XML… (XML Netlist...) | Fritzing › File › Export › XML Netlist... | feita | 0 | tests/cam.test.ts · e2e/export.spec.ts | netlist da vista corrente |
 | F-023 | Exportar › Netlist SPICE… (SPICE Netlist...) | Fritzing › File › Export › SPICE Netlist... | feita | 0 | tests/spice.test.ts · e2e/export.spec.ts | .cir pelo mesmo gerador do deck da simulação |
-| F-024 | Exportar › Eagle… (Eagle...) | Fritzing › File › Export › Eagle... (mainwindow_export.cpp) | não se aplica | — | — | a ação existe mas está comentada no menu do 1.0.8; o Eagle foi descontinuado e exportar para KiCad substitui (FRIZING_KICAD §10) |
+| F-024 | Exportar › Eagle… (Eagle...) | Fritzing › File › Export › Eagle... (mainwindow_export.cpp) | feita | — | tests/boardio.test.ts | Arquivo › Exportar › Para outro programa de PCB › EAGLE (.brd), com KiCad e Altium (spec 09) |
 | F-025 | Imprimir… (Print...) | Fritzing › File › Print... | feita | 3 | e2e/fritzing.spec.ts | Ctrl+P: a vista em SVG numa folha (@media print) e window.print(); Page Setup fica com o navegador |
 | F-026 | Abrir programa externo (Launch ‹programa›...) | Fritzing › File › Launch ‹programa›... | não se aplica | — | — | só aparece quando o Fritzing é iniciado com um programa externo na linha de comando; desktop |
 | F-027 | Sair (Quit) | Fritzing › File › Quit | não se aplica | — | — | Ctrl+Q; desktop, no navegador fecha-se a aba |
@@ -814,7 +814,7 @@ Fora desta parte da matriz (extensões do CircuitMaster, cobertas pelos mesmos a
 | KC-121 | Agrupar (Group Items) | KiCad › Common | falta | 8 | — | P2 |
 | KC-122 | Entrar no grupo (Enter Group) | KiCad › Common | falta | 8 | — | P2 |
 | KC-123 | Sair do grupo (Leave Group) | KiCad › Common | falta | 8 | — | P2 |
-| KC-124 | Régua (Measure Tool) | KiCad › Common | falta | 10 | — | P2 |
+| KC-124 | Régua (Measure Tool) | KiCad › Common | falta | 10 | — | P2; parcial: Régua na PCB (Ctrl+M), sem teste automático |
 | KC-125 | Colar (Paste) | KiCad › Common | feita | 0 | tests/edit.test.ts, e2e/edit.spec.ts | Ctrl+V |
 | KC-126 | Colar especial (Paste Special...) | KiCad › Common | falta | 8 | — | parcial: Colar no lugar (Ctrl+Shift+V); faltam as opções de anotação |
 | KC-127 | Refazer (Redo) | KiCad › Common | feita | 0 | e2e/edit.spec.ts | Ctrl+Shift+Z e Ctrl+Y |
@@ -1192,8 +1192,8 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-088 | Anexar outra placa (Append Board...) | KiCad › PCB Editor | falta | 6 | — | P1; lê .kicad_pcb; não descrito nos capítulos do manual |
 | KP-089 | Atribuir classe de net por padrão de nome (Assign Netclass...) | KiCad › PCB Editor | falta | 10 | — | P1 |
 | KP-090 | Largura da trilha vinda da trilha de origem (Automatically select track width) | KiCad › PCB Editor | falta | 11 | — | P1 |
-| KP-091 | Configuração da placa (Board Setup...) | KiCad › PCB Editor | falta | 10 | — | P1; parcial: largura, folga e via gravadas no sketch, na aba Roteamento |
-| KP-092 | Limpar o realce de net (Clear Net Highlighting) | KiCad › PCB Editor | falta | 10 | — |  |
+| KP-091 | Configuração da placa (Board Setup...) | KiCad › PCB Editor | falta | 10 | — | P1; parcial: largura, folga, via, trilha, anel e furo mínimos e classes de net gravados no sketch, na aba Roteamento |
+| KP-092 | Limpar o realce de net (Clear Net Highlighting) | KiCad › PCB Editor | falta | 10 | — | parcial: Esc tira o realce de net, sem teste automático |
 | KP-093 | Reunir e embutir os modelos 3D (Collect And Embed 3D Models) | KiCad › PCB Editor | falta | 12 | — | P2 |
 | KP-094 | Origem dos arquivos de furação e posição (Drill/Place File Origin) | KiCad › PCB Editor | falta | 13 | — | parcial: origem fixa no canto inferior esquerdo da placa |
 | KP-095 | Zerar a origem de furação (Reset Drill Origin) | KiCad › PCB Editor | falta | 13 | — | parcial: origem fixa no canto inferior esquerdo da placa |
@@ -1214,7 +1214,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-110 | Arquivo de posição dos componentes (Component Placement (.pos, .gbr)...) | KiCad › PCB Editor | feita | 0 | tests/cam.test.ts, e2e/export.spec.ts | Pick-and-place no formato do Fritzing (.xy, mil); .pos, CSV e Gerber de posição do KiCad na fase 13 |
 | KP-111 | Relatório de footprints (Footprint Report (.rpt)...) | KiCad › PCB Editor | falta | 13 | — | P3 |
 | KP-112 | Ocultar a net no ratsnest (Hide Net in Ratsnest) | KiCad › PCB Editor | falta | 10 | — | P2 |
-| KP-113 | Realçar a net sob o cursor (Highlight Net) | KiCad › PCB Editor | falta | 10 | — |  |
+| KP-113 | Realçar a net sob o cursor (Highlight Net) | KiCad › PCB Editor | falta | 10 | — | parcial: menu de contexto › Realçar a net, sem teste automático |
 | KP-114 | Realçar as nets selecionadas (Highlight Net) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-115 | Importar netlist (Import Netlist...) | KiCad › PCB Editor | falta | 6 | — | P1; as vistas já compartilham o grafo; falta ler netlist de arquivo |
 | KP-116 | Importar sessão Specctra (Import Specctra Session...) | KiCad › PCB Editor | falta | 16 | — | P3 |
@@ -1223,7 +1223,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-119 | Próximo modo de linha (Line Modes) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-120 | Modo de linha horizontal e vertical (Line Modes) | KiCad › PCB Editor | falta | 10 | — | parcial: Fios ortogonais (90°) só na protoboard e no esquemático |
 | KP-121 | Travar (Lock) | KiCad › PCB Editor | feita | 0 | e2e/edit.spec.ts | Peça › Travar peça; trava peças, não trilhas |
-| KP-122 | Importar placa de outro programa (Non-KiCad Board File...) | KiCad › PCB Editor | falta | 16 | — | P2 (Eagle, EasyEDA), P3 |
+| KP-122 | Importar placa de outro programa (Non-KiCad Board File...) | KiCad › PCB Editor | feita | 16 | tests/boardio.test.ts | Abrir aceita .PcbDoc (Altium), .kicad_pcb (KiCad 4+) e .brd (EAGLE 6+) e a placa vira um sketch novo (spec 09); EasyEDA falta |
 | KP-123 | Colocar footprints (Place Footprints) | KiCad › PCB Editor | feita | 0 | e2e/circuit.spec.ts | peças do painel Peças entram na PCB; footprints do KiCad na fase 5 |
 | KP-124 | Recuperar o arquivo de resgate (Rescue) | KiCad › PCB Editor | feita | 1 | e2e/robust.spec.ts | P1; a recuperação do salvamento automático cobre a PCB, que está no mesmo documento (spec 06 §6.3) |
 | KP-125 | Ir para o editor de esquemático (Switch to Schematic Editor) | KiCad › PCB Editor | feita | 0 | e2e/circuit.spec.ts | aba Esquemático (Ctrl+2) |
@@ -1298,7 +1298,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-194 | Escrever texto (Draw Text) | KiCad › PCB Editor | falta | 10 | — | parcial: logo de texto do Fritzing na serigrafia ou no cobre |
 | KP-195 | Caixa de texto (Draw Text Boxes) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-196 | Colocar vias soltas (Place Vias) | KiCad › PCB Editor | feita | 0 | tests/edit.test.ts, e2e/pcb.spec.ts | via do acervo do Fritzing ou dobra convertida em via |
-| KP-197 | Desenhar zona de cobre (Draw Filled Zones) | KiCad › PCB Editor | falta | 10 | — | P1; parcial: preencher a face com cobre ou com terra (sementes) e preenchimento unitário por clique, sem contorno, prioridade nem térmicos configuráveis |
+| KP-197 | Desenhar zona de cobre (Draw Filled Zones) | KiCad › PCB Editor | falta | 10 | — | P1; parcial: Roteamento › Preenchimento de cobre › Desenhar área de cobre (vértices na face ativa, ligada a uma net, refeita pelo contorno; tests/fill.test.ts), preencher a face com cobre ou com terra e preenchimento unitário por clique, sem prioridade nem térmicos configuráveis |
 | KP-198 | Recorte de zona (Add a Zone Cutout) | KiCad › PCB Editor | falta | 10 | — | P1 |
 | KP-199 | Buscar footprint pela referência e mover (Get and Move Footprint) | KiCad › PCB Editor | falta | 10 | — | parcial: o painel Projeto leva até a peça e a seleciona |
 | KP-200 | Chanfrar linhas (Chamfer Lines...) | KiCad › PCB Editor | falta | 10 | — |  |
@@ -1310,7 +1310,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-206 | Estender linhas até se encontrarem (Extend Lines to Meet) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-207 | Arredondar linhas (Fillet Lines...) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-208 | Arredondar trilhas (Fillet Tracks) | KiCad › PCB Editor | falta | 10 | — |  |
-| KP-209 | Trocar de face (Change Side / Flip) | KiCad › PCB Editor | falta | 10 | — | peças só na face de cima; trilhas trocam pelo menu |
+| KP-209 | Trocar de face (Change Side / Flip) | KiCad › PCB Editor | feita | 10 | tests/cam.test.ts | F ou menu de contexto (Colocar na face de baixo/de cima); o SVG é espelhado na variante, como no Fritzing |
 | KP-210 | Emendar formas (Heal Shapes) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-211 | Interseção de polígonos (Intersect Polygons) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-212 | União de polígonos (Merge Polygons) | KiCad › PCB Editor | falta | 10 | — |  |
@@ -1355,7 +1355,7 @@ Fonte das ações: `pcbnew/pcbnew_actions_reference.adoc` do KiCad 10.0.7, na or
 | KP-251 | Escolher camada e colocar via passante (Select Layer and Place Through Via…) | KiCad › PCB Editor | falta | 11 | — | P1 |
 | KP-252 | Definir o par de camadas (Set Layer Pair...) | KiCad › PCB Editor | falta | 10 | — |  |
 | KP-253 | Ajustes do roteador interativo (Interactive Router Settings…) | KiCad › PCB Editor | falta | 11 | — | P1 |
-| KP-254 | Roteador em modo empurrar (Router Shove Mode) | KiCad › PCB Editor | falta | 11 | — | P1 |
+| KP-254 | Roteador em modo empurrar (Router Shove Mode) | KiCad › PCB Editor | feita | 11 | tests/edit.test.ts | Roteamento › Empurrar trilhas (Shift+R): a trilha desenhada ou arrastada desvia as de outras nets com a folga do DRC; uma passada só |
 | KP-255 | Rotear trilha individual (Route Single Track) | KiCad › PCB Editor | falta | 11 | — | P1; parcial: trilha por cliques que sai dos pinos em 45° e desvia de peças, sem empurrar nem realce de colisão |
 | KP-256 | Inverter a postura da trilha (Switch Track Posture) | KiCad › PCB Editor | falta | 11 | — | P1 |
 | KP-257 | Cantos a 45° (Track Corner Mode 45) | KiCad › PCB Editor | falta | 11 | — | P1; parcial: a trilha por cliques já sai a 45°, sem troca de modo |
@@ -1493,8 +1493,8 @@ Sem tabela de ações no manual; uma linha por função descrita em `gerbview/ge
 
 | ID | Função | Origem | Status | Fase | Teste | Nota |
 |---|---|---|---|---|---|---|
-| KG-001 | Carregar arquivos Gerber RS-274X e X2 (Load Gerber files) | KiCad › GerbView | falta | 13 | — | P2; os Gerbers do CircuitMaster só são conferidos nos testes (build/gerber) |
-| KG-002 | Carregar arquivos de furação Excellon (Load Excellon drill files) | KiCad › GerbView | falta | 13 | — | P2 |
+| KG-001 | Carregar arquivos Gerber RS-274X e X2 (Load Gerber files) | KiCad › GerbView | feita | 13 | tests/boardio.test.ts | Abrir um Gerber solto ou o .zip de fabricação mostra as camadas sobrepostas, com régua (spec 09 §8) |
+| KG-002 | Carregar arquivos de furação Excellon (Load Excellon drill files) | KiCad › GerbView | feita | 13 | tests/boardio.test.ts | o Excellon entra como camada de furação no mesmo visualizador (spec 09 §8) |
 | KG-003 | Até 32 arquivos abertos ao mesmo tempo, um por camada (Up to 32 files) | KiCad › GerbView | falta | 13 | — | P2 |
 | KG-004 | Limpar todas as camadas (Clear all layers) | KiCad › GerbView | falta | 13 | — | P2 |
 | KG-005 | Tamanho da página (Set page size) | KiCad › GerbView | falta | 13 | — | P2 |

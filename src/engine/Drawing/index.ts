@@ -3,7 +3,7 @@ import { milsToPx } from '../../core/Units'
 import { childrenOf, parseXml, serializeXml, tagOf, walk, type XmlElement } from '../../core/Xml'
 import { getTextRuns, type Fonts, type TextRun } from '../../core/Font'
 import { keyOf, WIRE_FLAGS } from '../../core/Document'
-import { getLayerZ, type VIEWS, type ViewName } from '../../core/Layer'
+import { flipLayer, getLayerZ, type VIEWS, type ViewName } from '../../core/Layer'
 import type { Part } from '../../core/Part'
 import type { SvgFile } from '../../core/SvgFile'
 import type { Geometry } from '../../core/Sketch'
@@ -29,7 +29,7 @@ export type Drawing   = { items: (PartItem | WireItem | NoteItem)[], ratsnest: R
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
 const PCB_COLORS: [string, string][] = [['copper0', '#f9a435'], ['copper1', '#fdde68'], ['silkscreen0', '#444444'], ['silkscreen', '#000000']]
-const PCB_DRAWN  = ['board', 'groundplane', 'silkscreen0', 'copper0', 'groundplane1', 'copper1', 'silkscreen', 'partimage']
+const PCB_DRAWN  = ['board', 'groundplane', 'silkscreen0', 'copper0', 'groundplane1', 'copper1', 'silkscreen', 'partimage', 'fab', 'courtyard']
 
 // CADA CAMADA É UMA IMAGEM QUE COBRE A CAIXA TODA DA PEÇA, ENTÃO SÓ UMA RECEBE CLIQUE: A DE BAIXO NA PLACA E A DE COBRE MAIS ALTA NAS PEÇAS (ACIMA DO PREENCHIMENTO, ABAIXO DAS TRILHAS DE CIMA)
 const BOARD_KINDS   = ['board', 'resizableBoard']
@@ -103,18 +103,19 @@ const getTexts = (scene: Scene, modelIndex: string): [string, string][] => {
     return voltage ? [['label', voltageText(voltage)]] : []
 }
 
-// CAMADAS DESENHADAS NA PCB, CADA UMA NO z DA SUA CAMADA: SÓ A SUBÁRVORE DO GRUPO; THT SEM GRUPO copper1 REPETE O copper0 POR CIMA (SPEC 01 §2.5, §3.3)
-const getPcbLayers = (part: Part, svg: SvgFile, hidden: string[]) => {
+// CAMADAS DESENHADAS NA PCB, CADA UMA NO z DA SUA CAMADA: SÓ A SUBÁRVORE DO GRUPO; THT SEM GRUPO copper1 REPETE O copper0 POR CIMA; PEÇA NA FACE DE BAIXO
+// DESENHA CADA GRUPO NO z E NA COR DA CAMADA DA OUTRA FACE (SPEC 01 §2.5, §3.3)
+const getPcbLayers = (part: Part, svg: SvgFile, hidden: string[], bottom: boolean) => {
     const declared = PCB_DRAWN.filter(layer => part.views.pcbView?.layers.includes(layer))
-    const colors   = PCB_COLORS.filter(([layer]) => declared.includes(layer))
+    const colorOf  = (layer: string) => PCB_COLORS.find(([id]) => id === flipLayer(layer, bottom))?.[1]
 
     if (declared.length <= 1)
-        return [{ layer: declared[0] ?? '', source: '', recolor: colors }]
+        return [{ layer: flipLayer(declared[0] ?? '', bottom), source: '', recolor: declared.flatMap(layer => colorOf(layer) ? [[layer, colorOf(layer)] as [string, string]] : []) }]
 
     return declared.filter(layer => !hidden.includes(layer)).flatMap(layer => {
         const source = svg.findFirst(layer) ? layer : layer === 'copper1' && svg.findFirst('copper0') ? 'copper0' : ''
-        const color  = colors.find(([id]) => id === layer)?.[1]
-        return source ? [{ layer, source, recolor: color ? [[source, color] as [string, string]] : [] }] : []
+        const color  = colorOf(layer)
+        return source ? [{ layer: flipLayer(layer, bottom), source, recolor: color ? [[source, color] as [string, string]] : [] }] : []
     })
 }
 
@@ -163,8 +164,9 @@ const getItem = (scene: Scene, modelIndex: string, byLength: boolean): (PartItem
     if (scene.view !== 'pcbView')
         return [item]
 
-    const layers = getPcbLayers(part, svg, state.hidden)
-    const hit    = BOARD_KINDS.includes(part.kind) ? 0 : Math.max(0, layers.map(({ layer }) => COPPER_LAYERS.includes(layer)).lastIndexOf(true))
+    const layers = getPcbLayers(part, svg, state.hidden, state.bottom && part.kind === 'part')
+    const copper = layers.map(({ layer }) => COPPER_LAYERS.includes(layer) ? getLayerZ('pcbView', layer) : -Infinity)    // NA FACE DE BAIXO O COBRE MAIS ALTO É O copper0 VIRADO
+    const hit    = BOARD_KINDS.includes(part.kind) ? 0 : Math.max(0, copper.indexOf(Math.max(...copper)))
     return layers.map(({ layer, source, recolor }, i) => ({ ...item, z: (layer ? getLayerZ('pcbView', layer) : state.geometry.z) + (layer ? offset : 0), layer: source, plane: layer || state.layer, recolor, hit: i === hit }))
 }
 

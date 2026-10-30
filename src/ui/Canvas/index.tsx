@@ -22,8 +22,8 @@ import { FEATURED } from '../../core/Featured'
 import { getSwitching, isPressedAt, switchOf } from '../../core/Spice'
 import { switchText } from '../Inspector'
 import { t } from '../../core/Text'
-import { VIEW_BACKGROUNDS, getLayerZ } from '../../core/Layer'
-import { clampZoom as clamp, fit, useCursor } from '../Navigation'
+import { VIEW_BACKGROUNDS, flipLayer, getLayerZ } from '../../core/Layer'
+import { clampZoom as clamp, fit, formatLength, useCursor } from '../Navigation'
 
 const QuickValue = lazy(() => import('../QuickValue').then(module => ({ default: module.QuickValue })))    // SÓ COM UMA PEÇA ESCOLHIDA: FORA DO JAVASCRIPT INICIAL
 
@@ -70,6 +70,7 @@ const OVERSCAN    = 0.25      // MARGEM DESENHADA FORA DA TELA EM CADA LADO, PAR
 const MAX_STRETCH = 2         // AMPLIAÇÃO DO BITMAP NO GESTO ANTES DE REDESENHAR NÍTIDO
 const NOTE_MIN    = 30        // PX, MENOR LADO DE UMA NOTA REDIMENSIONADA
 const EDITABLE    = '[contenteditable="true"]'
+const ZONE_CLOSE  = 8         // PX DE TELA: CLIQUE A ISSO DO PRIMEIRO VÉRTICE FECHA A ÁREA DE COBRE
 const SELECTED    = 'var(--accent)'
 const AIMED       = 'var(--accent)'
 const CONNECTED_MARK = '#00ff00'    // NO ESQUEMÁTICO E NA PCB SÓ O TERMINAL SOLTO (VERMELHO) FICA MARCADO
@@ -304,6 +305,12 @@ export const Canvas = () => {
     const focused   = useStore(state => state.probe)
     const theme     = useStore(state => state.theme)
     const side      = useStore(state => state.side)
+    const highlight = useStore(state => state.highlight)
+    const ruler     = useStore(state => state.ruler)
+    const rulerEnd  = useCursor(state => tool === 'measure' && ruler.length === 1 ? state.point : null)
+    const units     = useStore(state => state.preferences.units)
+    const outline   = useStore(state => state.outline)
+    const zoneEnd   = useCursor(state => tool === 'zone' && outline.length ? state.point : null)
     const placing   = useStore(state => state.placing)
     const values    = useStore(state => state.show.values)
     const planesOff = useStore(state => state.hiddenLayers)
@@ -312,7 +319,7 @@ export const Canvas = () => {
     const loose     = useStore(state => state.preferences.unconnectedColor)
     const fromBelow = useStore(state => state.fromBelow && state.view === 'pcbView')
     const unrouted  = useStore(state => state.unrouted)
-    const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, gridOf, originOf, drawWire, tidy, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing, setGridOrigin, remove } = useStore.getState()
+    const { preview, commit, select, setHover, setViewport, setSize, connect, addPart, gridOf, originOf, drawWire, tidy, shove, isOrthogonal, setTool, addProbe, updateProbe, removeProbes, selectProbe, setPlacing, setGridOrigin, remove } = useStore.getState()
 
     const svgRef              = useRef<SVGSVGElement>(null)
     const spaceRef            = useRef(false)
@@ -677,6 +684,16 @@ export const Canvas = () => {
         if (probing)
             return placeProbe(point, target, event.shiftKey)
 
+        if (tool === 'zone')
+            return outline.length >= 3 && distance(outline[0], point) * vp.zoom <= ZONE_CLOSE ? closeZone(outline) : useStore.setState({ outline: [...outline, snapPoint(point)] })
+
+        // RÉGUA: O PRIMEIRO CLIQUE COMEÇA, O SEGUNDO FECHA, O TERCEIRO RECOMEÇA; PERTO DE UM TERMINAL O PONTO VAI PARA O CENTRO DELE
+        if (tool === 'measure') {
+            const key = startKey(point)
+            const at  = (key && scene.getTerminal(key)) || point
+            return useStore.setState(state => ({ ruler: state.ruler.length === 1 ? [state.ruler[0], at] : [at] }))
+        }
+
         if (tool === 'origin') {
             setGridOrigin(snapPoint(point))
             return setTool('select')
@@ -936,16 +953,16 @@ export const Canvas = () => {
             commit(view === 'breadboardView' ? snapConnections(tidy(drag.origin, doc), library, drag.moved) : tidy(drag.origin, doc), drag.origin)
 
         if (drag?.type === 'end' && drag.moved)
-            commit(tidy(drag.origin, drag.bend ? doc : connectEnd(doc, library, view, drag.keys[0])), drag.origin)
+            commit(shove(drag.origin, tidy(drag.origin, drag.bend ? doc : connectEnd(doc, library, view, drag.keys[0]))), drag.origin)
 
         if (drag?.type === 'end' && !drag.moved)
             resume(drag.keys, point, drag.bend, event)
 
         if (drag?.type === 'body' && drag.moved)
-            commit(doc, drag.origin)
+            commit(shove(drag.origin, doc), drag.origin)
 
         if (drag?.type === 'segment' && drag.moved)
-            commit(tidyWires(doc, library, view, getChangedWires(drag.origin, doc, view)), drag.origin)
+            commit(shove(drag.origin, tidyWires(doc, library, view, getChangedWires(drag.origin, doc, view))), drag.origin)
 
         if (drag?.type === 'leg' && drag.moved)
             commit(connectEnd(doc, library, view, drag.key), drag.origin)
@@ -969,6 +986,21 @@ export const Canvas = () => {
         setDrag(null)
     }
 
+    // FECHA A ÁREA DE COBRE (O DUPLO CLIQUE REPETE O ÚLTIMO VÉRTICE) E PERGUNTA A NET; CANCELAR NÃO CRIA
+    const closeZone = (points: Point[]) => {
+        const { drawZone, setTool } = useStore.getState()
+        const unique = points.filter((vertex, i) => i === 0 || distance(vertex, points[i - 1]) > 1e-6)
+        setTool('select')
+
+        if (unique.length < 3)
+            return useStore.setState({ message: t('a área de cobre precisa de pelo menos 3 vértices') })
+
+        const net = window.prompt(t('Net da área de cobre: nome de um terminal (GND, VCC) ou peça.terminal; vazio = sem net'), 'GND')
+
+        if (net !== null)
+            void drawZone(unique, net)
+    }
+
     const onDoubleClick = (event: MouseEvent<SVGSVGElement>) => {
         const point   = toScene(event.clientX, event.clientY)
         const element = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-leg], [data-index]')
@@ -977,6 +1009,9 @@ export const Canvas = () => {
 
         if (wiring || probing)
             return
+
+        if (tool === 'zone')
+            return closeZone(outline)
 
         if (leg) {
             const inner = (scene.getLegPoints(leg) ?? []).slice(1, -1).some(vertex => distance(vertex, point) <= handle(0))
@@ -1024,7 +1059,8 @@ export const Canvas = () => {
         const layers  = part?.views.pcbView?.layers ?? []
         const through = layers.includes('copper0') && layers.includes('copper1')
         const board   = part?.kind === 'board' || part?.kind === 'resizableBoard'
-        const paint   = (layer: string, color: string): [string, string] => [layer, through && layer.startsWith('copper') ? MULTI_LAYER : ALTIUM[layer] ?? color]
+        const bottom  = part?.kind === 'part' && (scene.getView(item.modelIndex)?.bottom ?? false)
+        const paint   = (layer: string, color: string): [string, string] => [layer, through && layer.startsWith('copper') ? MULTI_LAYER : ALTIUM[flipLayer(layer, bottom)] ?? color]
         return { ...item, recolor: [...item.recolor.map(([layer, color]) => paint(layer, color)), ...board ? [['board', ALTIUM.board] as [string, string], ['silkscreen', ALTIUM.silkscreen] as [string, string]] : []] }
     }
 
@@ -1067,7 +1103,7 @@ export const Canvas = () => {
         const art    = symbolArt(item)
 
         if (view === 'pcbView')
-            return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.layer) ? DIMMED : 1} pointerEvents={blocked.has(item.modelIndex) ? 'none' : undefined}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
+            return <g key={`${item.modelIndex}|${item.layer}`} opacity={dimmed(item.plane) ? DIMMED : 1} pointerEvents={blocked.has(item.modelIndex) ? 'none' : undefined}><PartShape item={shown} image={getImage(library, shown, view, item.paint)} effect={null} greyed={false} view={view} lab={false} art={null} /></g>
 
         return <PartShape key={`${item.modelIndex}|${item.layer}`} item={shown} image={art ? undefined : getImage(library, shown, view, effect?.color ? [['color_', effect.color]] : item.paint)} effect={effect} greyed={greyed} view={view} lab={item.moduleId.includes('LabDCPowerSupply')} art={art} />
     }), [ordered, effects, running, library, view, editing, plans, result, simulated.step, side, planes, blocked])
@@ -1142,6 +1178,13 @@ export const Canvas = () => {
     const gridStyle = settings.showGrid !== '0' && cell >= MIN_GRID_PX ? { backgroundImage: `url(${gridTile(cell, dotColor)})`, backgroundSize: `${cell}px ${cell}px`, backgroundPosition: `${(origin[0] - vp.x) * vp.zoom + mx}px ${(origin[1] - vp.y) * vp.zoom + my}px` } : {}
 
     const style    = WIRE_STYLE[view]
+    const netKeys  = highlight && netlist ? netlist.getNet(view, highlight) : []
+    const netWires = [...new Set(netKeys.map(owner))].flatMap(index => wireItems.get(index) ?? []).filter(item => !planes.has(scene.getView(item.modelIndex)?.layer ?? ''))
+    const netPads  = netKeys.filter(key => !wireItems.has(owner(key)) && !scene.isWire(owner(key))).map(key => scene.getConnectorBox(key)).filter((box): box is Box => box !== null)
+    const lift     = view === 'pcbView' ? '#ffffff' : SELECTED
+    const measured = tool === 'measure' && ruler.length ? [ruler[0], ruler[1] ?? rulerEnd ?? ruler[0]] as [Point, Point] : null
+    const span     = measured ? [measured[1][0] - measured[0][0], measured[1][1] - measured[0][1]] : [0, 0]
+    const measureText = `${formatLength(Math.hypot(span[0], span[1]), units)} ${units} · Δx ${formatLength(Math.abs(span[0]), units)} · Δy ${formatLength(Math.abs(span[1]), units)}`
     const marks    = (hover && netlist ? netlist.getNet(view, hover) : []).map(key => scene.getTerminal(key)).filter((point): point is Point => point !== null)
     const idle     = !drag && !wiring && !placing
     const boxes    = selection.filter(modelIndex => !wireItems.has(modelIndex)).map(modelIndex => scene.getBounds(modelIndex)).filter((box): box is Box => box !== null)
@@ -1170,12 +1213,16 @@ export const Canvas = () => {
     const flat     = ends && orthogonal && isAxisAligned(...ends) && !scene.getWireCurve(pointed?.index ?? '') ? Math.abs(ends[0][1] - ends[1][1]) < Math.abs(ends[0][0] - ends[1][0]) ? 'ns-resize' : 'ew-resize' : 'move'
     const cursor   = drag?.type === 'pan' || drag?.type === 'move' ? 'grabbing' : wiring || placing || probing || hover || pointed?.end ? 'crosshair' : pointed && wireItems.has(pointed.index) ? flat : pointed && tool === 'select' ? 'move' : tool === 'area' ? 'default' : tool !== 'select' ? 'crosshair' : 'grab'
     const inverted = theme === 'dark' && view === 'schematicView'
+    const labelPlane = (label: LabelItem) => view === 'pcbView' ? label.color === '#000000' ? 'silkscreenLabel' : 'silkscreen0Label' : LABEL_PLANE[view]    // NA PCB O RÓTULO SEGUE A SERIGRAFIA DA SUA FACE
     const ink      = (color: string) => view === 'pcbView' ? color === '#000000' ? ALTIUM.silkscreen : ALTIUM.silkscreen0 : /^#0{3,6}$/.test(color) ? 'var(--text)' : color
     const hint     = wiring ? t('Clique para dobrar · clique num terminal termina · botão direito deixa a ponta solta · Backspace desfaz · Esc cancela') :
                      placing ? t('Clique no quadro para posicionar {0} · Shift mantém · Esc cancela', t(FEATURED.find(item => item.moduleId === placing)?.name ?? library.getPart(placing)?.title ?? 'a peça')) :
                      probing ? t('Clique num fio ou terminal para medir · Shift mantém a ferramenta · Esc sai') :
                      drag?.type === 'marquee' ? (drag.crossing ? t('Da direita para a esquerda: seleciona tudo que o retângulo tocar') : t('Da esquerda para a direita: seleciona o que ficar inteiro dentro do retângulo')) :
                      drag ? '' :
+                     tool === 'measure' ? t('Régua · clique em dois pontos para medir · Ctrl+U ou Q troca a unidade · Esc sai') :
+                     tool === 'zone' ? t('Área de cobre · clique nos vértices · duplo clique ou clique no primeiro vértice fecha · Esc cancela') :
+                     netKeys.length ? t('Net realçada: {0} terminais · Esc tira o realce', netKeys.filter(key => !scene.isWire(owner(key))).length) :
                      hover ? t('Terminal {0} · clique ou arraste até outro terminal para ligar', pinName(hover)) :
                      pointed?.end ? t('Ponta do fio · arraste para mover · clique para continuar o fio') :
                      pointed && wireItems.has(pointed.index) ? (flat === 'move' ? t('Fio · arraste para dobrar · duplo clique cria uma dobra') : t('Fio · arraste para deslocar o trecho · duplo clique cria uma dobra · Ctrl+arrastar faz curva')) :
@@ -1205,12 +1252,19 @@ export const Canvas = () => {
                         {!planes.has(RAT_PLANE[view]) && ratsnest}
                         {viaHits}
                     </g>
-                    {!planes.has(LABEL_PLANE[view]) && drawing.labels.map(label => (
+                    {drawing.labels.filter(label => !planes.has(labelPlane(label))).map(label => (
                         <g key={label.modelIndex} data-label={label.modelIndex} transform={labelTransform(label, fromBelow)} fontSize={label.size} fontFamily={view === 'pcbView' ? label.font : 'var(--font)'} fill={ink(label.color)}>
                             {label.rect && <rect x={label.rect[0]} y={label.rect[1]} width={label.rect[2] - label.rect[0]} height={label.rect[3] - label.rect[1]} fill="transparent" />}
                             {label.lines.map((line, i) => view === 'pcbView' ? <text key={i} x={label.x} y={label.y + label.size * (i + 1)}>{line}</text> : <text key={i} x={label.x} y={label.y + label.size * (i + 1)} fontWeight={i === 0 ? 600 : 400} fill={i === 0 ? undefined : 'var(--soft)'}>{i === 0 ? line : unitSpace(line)}</text>)}
                         </g>
                     ))}
+                    {netKeys.length > 0 && (
+                        <g pointerEvents="none" data-overlay>
+                            <rect x={vp.x - mx / vp.zoom} y={vp.y - my / vp.zoom} width={w} height={h} fill={view === 'pcbView' ? '#000000' : 'var(--well)'} fillOpacity={0.65} />
+                            {netWires.map(item => <path key={`net${item.modelIndex}`} d={item.d} fill="none" stroke={view === 'pcbView' ? ALTIUM_TRACE[scene.getView(item.modelIndex)?.layer ?? ''] ?? item.color : item.color} strokeWidth={item.width} strokeLinecap="round" />)}
+                            {netPads.map((box, i) => <rect key={`pad${i}`} x={box[0]} y={box[1]} width={box[2] - box[0]} height={box[3] - box[1]} fill={lift} fillOpacity={0.5} stroke={lift} strokeWidth={zoomed(1)} />)}
+                        </g>
+                    )}
                     {unrouted.map(key => scene.getTerminal(key)).filter((point): point is Point => point !== null).map((point, i) => <circle key={`un${i}`} cx={point[0]} cy={point[1]} r={UNROUTED_PX / vp.zoom} style={{ fill: 'var(--warning)', stroke: 'var(--warning)' }} fillOpacity={0.4} strokeWidth={1.5 / vp.zoom} pointerEvents="none" data-overlay />)}
                     {flagged.map((d, i) => <path key={`drc${i}`} d={d} style={{ fill: 'var(--negative)', stroke: 'var(--negative)' }} fillOpacity={0.45} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay data-drc />)}
                     {chain.map(modelIndex => halo(modelIndex, modelIndex === pointed?.index ? 0.4 : 0.18))}
@@ -1220,6 +1274,22 @@ export const Canvas = () => {
                     {boxes.map((box, i) => <rect key={i} x={box[0] - zoomed(3)} y={box[1] - zoomed(3)} width={box[2] - box[0] + zoomed(6)} height={box[3] - box[1] + zoomed(6)} rx={zoomed(4)} fill={SELECTED} fillOpacity={0.06} stroke={SELECTED} strokeWidth={zoomed(1.2)} pointerEvents="none" data-overlay />)}
                     {lit && <rect x={lit[0] - zoomed(3)} y={lit[1] - zoomed(3)} width={lit[2] - lit[0] + zoomed(6)} height={lit[3] - lit[1] + zoomed(6)} rx={zoomed(4)} fill="none" stroke={SELECTED} strokeOpacity={0.5} strokeWidth={zoomed(1)} strokeDasharray={dash} pointerEvents="none" data-overlay />}
                     {marks.map((point, i) => <circle key={i} cx={point[0]} cy={point[1]} r={MARK_PX / vp.zoom} fill={SELECTED} fillOpacity={0.35} stroke={SELECTED} strokeWidth={1 / vp.zoom} pointerEvents="none" data-overlay />)}
+                    {tool === 'zone' && outline.length > 0 && (
+                        <g pointerEvents="none" data-overlay>
+                            <polygon points={[...outline, zoneEnd ?? outline[outline.length - 1]].map(vertex => vertex.join(',')).join(' ')} fill={SELECTED} fillOpacity={0.15} stroke={SELECTED} strokeWidth={zoomed(1.5)} strokeDasharray={dash} />
+                            {outline.map(([x, y], i) => <circle key={`zone${i}`} cx={x} cy={y} r={zoomed(i === 0 ? ZONE_CLOSE / 2 : 3)} fill={i === 0 ? 'var(--surface)' : SELECTED} stroke={SELECTED} strokeWidth={zoomed(1.5)} />)}
+                        </g>
+                    )}
+                    {measured && (
+                        <g pointerEvents="none" data-overlay>
+                            <line x1={measured[0][0]} y1={measured[0][1]} x2={measured[1][0]} y2={measured[1][1]} stroke={SELECTED} strokeWidth={zoomed(1.5)} />
+                            {measured.map(([x, y], i) => <circle key={`ruler${i}`} cx={x} cy={y} r={zoomed(3)} fill={SELECTED} />)}
+                            <g transform={`translate(${(measured[0][0] + measured[1][0]) / 2} ${(measured[0][1] + measured[1][1]) / 2}) scale(${(fromBelow ? -1 : 1) / vp.zoom} ${1 / vp.zoom})`}>
+                                <rect x={10} y={-30} width={measureText.length * 6.6 + 16} height={20} rx={10} fill="var(--surface)" stroke={SELECTED} />
+                                <text x={18} y={-16} fontSize={TEXT_PX} fontWeight={500} fill="var(--text)" fontFamily="var(--font)">{measureText}</text>
+                            </g>
+                        </g>
+                    )}
                     {probes}
                     {switches}
                     {wiring && <WiringShape points={simplifyPath([...wiring.points, ...legOf(wiring)])} color={inverted ? 'var(--wire)' : style.color} width={milsToPx(style.mils)} zoom={vp.zoom} aimed={wiring.aim !== null} />}

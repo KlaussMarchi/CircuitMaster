@@ -38,6 +38,8 @@ export const LAYER_GROUPS: Record<View, Group[]> = {
         ['silk0', 'Serigrafia de baixo', ['silkscreen0', 'silkscreen0Label'], ALTIUM.silkscreen0],
         ['board', 'Placa', ['board'], ALTIUM.board],
         ['image', 'Imagem das peças', ['partimage'], '#8a8a8a'],
+        ['fab', 'Montagem', ['fab'], '#b4b4b4'],
+        ['courtyard', 'Área da peça', ['courtyard'], '#ff26e2'],
         ['rats', 'Ratsnest', ['ratsnest'], '#9be7c4'],
         ['notes', 'Notas', ['pcbNote'], SOFT],
         ['rulers', 'Réguas', ['pcbRuler'], SOFT]

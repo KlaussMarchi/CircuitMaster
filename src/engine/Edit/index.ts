@@ -1,6 +1,6 @@
 import { IDENTITY, apply, boxesTouch, cubicAt, distance, invert, lerp, multiply, nearestOnCubic, nearestOnSegment, splitCubic, translate, unionBoxes, type Box, type Matrix, type Point } from '../../core/Geometry'
 import { addEdges, addInstance, getTitle, keyOf, removeEdges, removeInstance, splitKey, updateInstance, updateView, WIRE_FLAGS, type Doc, type Edge } from '../../core/Document'
-import { VIEWS, getLayerZ, type ViewName } from '../../core/Layer'
+import { VIEWS, flipLayer, getLayerZ, type ViewName } from '../../core/Layer'
 import type { Library } from '../../core/Library'
 import { getStrips, logoTextSvg, toggleCut } from '../../core/Generator'
 import type { ConnectorState, Instance, InstanceView, Label, WireExtras } from '../../core/Sketch'
@@ -534,12 +534,12 @@ export const setNoteSize = (doc: Doc, view: ViewName, modelIndex: string, size: 
 
 export const setNoteText = (doc: Doc, modelIndex: string, text: string) => updateInstance(doc, modelIndex, instance => ({ ...instance, text }))
 
-const addTrace = (doc: Doc, home: View, layer: string, a: Point, b: Point, mils: number) => {
+const addTrace = (doc: Doc, home: View, layer: string, a: Point, b: Point, mils: number, routed: number) => {
     const modelIndex = String(doc.nextIndex)
     const views      = Object.fromEntries(VIEWS.map(view => {
         const own   = view === home
         const style = WIRE_STYLE[view]
-        const state: InstanceView = { layer: own ? layer : style.layer, locked: false, bottom: own && layer === 'copper0trace', geometry: { x: a[0], y: a[1], z: getLayerZ(view, own ? layer : style.layer) + doc.nextIndex * Z_STEP, transform: null, line: [0, 0, b[0] - a[0], b[1] - a[1]], wireFlags: WIRE_FLAGS[home] | AUTOROUTABLE, size: null }, wire: { mils: own ? mils : HIDDEN_WIRE_MILS, color: own ? TRACE_COLORS[layer] ?? style.color : style.color, opacity: 1, banded: false, bezier: null }, connectors: [], label: null, hidden: [] }
+        const state: InstanceView = { layer: own ? layer : style.layer, locked: false, bottom: own && layer === 'copper0trace', geometry: { x: a[0], y: a[1], z: getLayerZ(view, own ? layer : style.layer) + doc.nextIndex * Z_STEP, transform: null, line: [0, 0, b[0] - a[0], b[1] - a[1]], wireFlags: WIRE_FLAGS[home] | routed, size: null }, wire: { mils: own ? mils : HIDDEN_WIRE_MILS, color: own ? TRACE_COLORS[layer] ?? style.color : style.color, opacity: 1, banded: false, bezier: null }, connectors: [], label: null, hidden: [] }
         return [view, state]
     }))
 
@@ -547,20 +547,22 @@ const addTrace = (doc: Doc, home: View, layer: string, a: Point, b: Point, mils:
 }
 
 // VIA NO PONTO: CENTRADA PELO TERMINAL DO SVG GERADO PARA O FURO/ANEL PEDIDO, MARCADA COMO AUTOROTEÁVEL (SPEC 01 §8.11)
-const addVia = (doc: Doc, library: Library, point: Point, holeSize: string) => {
+const addVia = (doc: Doc, library: Library, point: Point, holeSize: string, routed: number) => {
     const modelIndex = String(doc.nextIndex)
     const placed     = createInstance(doc, library, 'ViaModuleID', { breadboardView: point, schematicView: point, pcbView: point })
     const sized      = updateInstance(placed, modelIndex, instance => ({ ...instance, properties: { ...instance.properties, 'hole size': holeSize } }))
     const terminal   = new Scene(sized, library, 'pcbView').getTerminal(keyOf(modelIndex, 'connector0')) ?? point
-    return updateView(sized, 'pcbView', modelIndex, state => ({ ...state, geometry: { ...state.geometry, x: state.geometry.x + point[0] - terminal[0], y: state.geometry.y + point[1] - terminal[1], wireFlags: AUTOROUTABLE } }))
+    return updateView(sized, 'pcbView', modelIndex, state => ({ ...state, geometry: { ...state.geometry, x: state.geometry.x + point[0] - terminal[0], y: state.geometry.y + point[1] - terminal[1], wireFlags: routed } }))
 }
 
-// PLANO DO AUTOROUTER NO DOCUMENTO: CADA TRECHO VIRA TRILHA DA VISTA (PCBTrace OU SchematicTrace) Autoroutable, CADA TROCA DE CAMADA UMA VIA, AS PONTAS LIGADAS CONFORME O PLANO (SPEC 03 §8.2)
-export const applyPlan = (doc: Doc, library: Library, view: View, plan: Plan, mils: number, holeSize: string) => {
+// PLANO DO AUTOROUTER NO DOCUMENTO: CADA TRECHO VIRA TRILHA DA VISTA (PCBTrace OU SchematicTrace) Autoroutable, CADA TROCA DE CAMADA UMA VIA, AS PONTAS LIGADAS CONFORME O PLANO (SPEC 03 §8.2);
+// LARGURA E FURO POR ITEM QUANDO O PLANO TRAZ; autoroutable FALSO PARA TRILHAS QUE O "APAGAR AUTOROTEADAS" DEVE PRESERVAR (IMPORTAÇÃO, SPEC 09 §4)
+export const applyPlan = (doc: Doc, library: Library, view: View, plan: Plan, mils: number, holeSize: string, autoroutable = true) => {
+    const routed   = autoroutable ? AUTOROUTABLE : 0
     const wireBase = doc.nextIndex
-    const traced   = plan.wires.reduce((current, wire) => addTrace(current, view, wire.layer, wire.a, wire.b, mils), doc)
+    const traced   = plan.wires.reduce((current, wire) => addTrace(current, view, wire.layer, wire.a, wire.b, wire.mils ?? mils, routed), doc)
     const viaBase  = traced.nextIndex
-    const placed   = plan.vias.reduce((current, point) => addVia(current, library, point, holeSize), traced)
+    const placed   = plan.vias.reduce((current, point, i) => addVia(current, library, point, plan.holes?.[i] ?? holeSize, routed), traced)
     const keyOfEnd = (end: End) => 'key' in end ? end.key : 'via' in end ? keyOf(String(viaBase + end.via), 'connector0') : keyOf(String(wireBase + end.wire), `connector${end.end}`)
     return addEdges(placed, plan.links.map(([a, b]): Edge => [keyOfEnd(a), keyOfEnd(b)]))
 }
@@ -575,7 +577,7 @@ export const bendToVia = (doc: Doc, library: Library, key: string, holeSize: str
         return doc
 
     const via    = keyOf(String(doc.nextIndex), 'connector0')
-    const placed = addVia(removeEdges(doc, ([a, b]) => bend.includes(a) && bend.includes(b)), library, point, holeSize)
+    const placed = addVia(removeEdges(doc, ([a, b]) => bend.includes(a) && bend.includes(b)), library, point, holeSize, AUTOROUTABLE)
     return addEdges(updateView(placed, 'pcbView', owner(via), state => ({ ...state, geometry: { ...state.geometry, wireFlags: 0 } })), bend.map((end): Edge => [end, via]))
 }
 
@@ -602,10 +604,10 @@ export const deleteAutorouted = (doc: Doc, library: Library, view: ViewName, are
 }
 
 // FRAGMENTOS DE PREENCHIMENTO COMO INSTÂNCIAS GroundPlaneModuleID NA FACE, COM AS PROPRIEDADES svg E fillType (SPEC 03 §6.2, PASSO 9)
-export const createFills = (doc: Doc, fragments: FillFragment[], frame: Matrix, fillType: string) => fragments.reduce((current, fragment) => {
+export const createFills = (doc: Doc, fragments: FillFragment[], frame: Matrix, fillType: string, extra: Record<string, string> = {}) => fragments.reduce((current, fragment) => {
     const [x, y] = apply(invert(frame), fragment.x, fragment.y)
     const pcb: InstanceView = { layer: fragment.layer, locked: false, bottom: fragment.face === 'bottom', geometry: { x, y, z: getLayerZ('pcbView', fragment.layer) + current.nextIndex * Z_STEP, transform: null, line: null, wireFlags: 0, size: null }, wire: null, connectors: [], label: null, hidden: [] }
-    return addInstance(current, { moduleIdRef: 'GroundPlaneModuleID', modelIndex: String(current.nextIndex), path: 'groundplane.fzp', title: getTitle(current, 'Copper Fill'), text: '', properties: { svg: fragment.svg, fillType }, localConnectors: {}, views: { pcbView: pcb } })
+    return addInstance(current, { moduleIdRef: 'GroundPlaneModuleID', modelIndex: String(current.nextIndex), path: 'groundplane.fzp', title: getTitle(current, 'Copper Fill'), text: '', properties: { svg: fragment.svg, fillType, ...extra }, localConnectors: {}, views: { pcbView: pcb } })
 }, doc)
 
 const primaryLayer = (view: ViewName, layers: string[]) => view === 'pcbView' ? ['copper0', 'copper1'].find(layer => layers.includes(layer)) ?? layers[0] : layers[0]
@@ -908,6 +910,12 @@ export const transformLabel = (doc: Doc, library: Library, view: View, modelInde
 export const moveLabel = (doc: Doc, view: ViewName, modelIndex: string, dx: number, dy: number) => updateView(doc, view, modelIndex, state => ({ ...state, label: state.label && { ...state.label, x: state.label.x + dx, y: state.label.y + dy, xOffset: state.label.xOffset + dx, yOffset: state.label.yOffset + dy } }))
 
 export const setLayerHidden = (doc: Doc, view: ViewName, modelIndexes: string[], layers: string[], hidden: boolean) => modelIndexes.reduce((current, modelIndex) => updateView(current, view, modelIndex, state => ({ ...state, hidden: hidden ? [...new Set([...state.hidden, ...layers])] : state.hidden.filter(layer => !layers.includes(layer)) })), doc)
+
+// PEÇA NA FACE DE CIMA OU DE BAIXO: A POSIÇÃO FICA, O SVG SAI ESPELHADO E A CAMADA DA INSTÂNCIA PASSA PARA A DA OUTRA FACE, COMO O layer="copper0" bottom="true" DO FRITZING
+export const setPartSide = (doc: Doc, library: Library, modelIndexes: string[], bottom: boolean) => modelIndexes.filter(modelIndex => library.getPart(doc.instances[modelIndex]?.moduleIdRef ?? '')?.kind === 'part').reduce((current, modelIndex) => updateView(current, 'pcbView', modelIndex, state => {
+    const layer = state.bottom === bottom ? state.layer : flipLayer(state.layer, true)
+    return { ...state, bottom, layer, geometry: { ...state.geometry, z: getLayerZ('pcbView', layer) + state.geometry.z - getLayerZ('pcbView', state.layer) } }
+}), doc)
 
 export const setTraceSide = (doc: Doc, wireIndex: string) => updateView(doc, 'pcbView', wireIndex, state => {
     const layer = state.layer === 'copper1trace' ? 'copper0trace' : 'copper1trace'

@@ -24,3 +24,8 @@ const toNumber = (text: string, divisor: number) => {
 }
 
 export const milsToPx = (mils: number) => mils * PX_PER_INCH / MIL_PER_INCH
+
+export const pxToMils = (px: number) => px * MIL_PER_INCH / PX_PER_INCH
+
+// COMPRIMENTO NA UNIDADE DA PCB: mm COM 3 CASAS (1 µm), mil COM 1 CASA
+export const formatLength = (mils: number, unit: 'mm' | 'mil') => unit === 'mm' ? `${(mils * 25.4 / MIL_PER_INCH).toFixed(3)} mm` : `${mils.toFixed(1)} mil`

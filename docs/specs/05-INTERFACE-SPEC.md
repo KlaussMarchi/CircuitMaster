@@ -133,7 +133,8 @@ dela. A tecla escolhida para uma ação sai da ação que a tinha; "padrão" e "
 
 - A legenda "Camadas" no canto do quadro liga e desliga cada grupo num clique, nas três vistas (protoboard: protoboards,
   peças, fios, rótulos, ratsnest, notas, réguas; esquemático: moldura, peças, texto, fios, rótulos, ratsnest, notas,
-  réguas; PCB: cobre de cima e de baixo, serigrafias, placa, imagem das peças, ratsnest, notas, réguas); fora da PCB
+  réguas; PCB: cobre de cima e de baixo, serigrafias, placa, imagem das peças, montagem e área da peça (spec 09),
+  ratsnest, notas, réguas); fora da PCB
   ela começa recolhida. Exibir › Camadas tem os mesmos e mostrar/ocultar todas; o que fica oculto é guardado por vista.
 - Roteamento › Ver de baixo espelha o quadro da PCB e põe as camadas de baixo por cima (como o Fritzing), com os
   rótulos legíveis; clique, pan e a exportação da vista seguem o espelho. Vale só na sessão.
