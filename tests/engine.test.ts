@@ -10,7 +10,7 @@ import { SvgFile } from '../src/core/SvgFile'
 import { Scene } from '../src/engine/Scene'
 import { createInstance, createWire, moveInstances, rotateInstances, snapConnections } from '../src/engine/Edit'
 import { getDrawing, getImageText, getUpright } from '../src/engine/Drawing'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_COLLECTION, HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
 
 type View = typeof VIEWS[number]
 
@@ -41,7 +41,7 @@ const inkOf = (group: XmlElement) => {
 }
 
 describe.skipIf(!HAS_FRITZING)('motor de cena e desenho', () => {
-    it('desenha toda peça visível com SVG e todo ratsnest dos exemplos', async () => {
+    it.skipIf(!HAS_COLLECTION)('desenha toda peça visível com SVG e todo ratsnest dos exemplos', async () => {
         const wasm    = await loadWasm()
         const library = makeLibrary()
         const totals  = { shown: 0, drawn: 0, missing: 0, ratsnest: 0, legs: 0, leftLegs: 0 }

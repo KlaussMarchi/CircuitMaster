@@ -4,7 +4,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { exportBundle, exportSketch, readBundle, readSketch, type Instance, exportBin, exportBinBundle, readBin, OversizedBundle } from '../src/core/Sketch'
 import { fromSketch } from '../src/core/Document'
 import { VIEWS } from '../src/core/Layer'
-import { HAS_FRITZING, listSketches } from './Fixtures'
+import { HAS_COLLECTION, HAS_FRITZING, listSketches } from './Fixtures'
 
 const comparable = (instance: Instance) => ({
     moduleIdRef: instance.moduleIdRef,
@@ -19,7 +19,7 @@ const comparable = (instance: Instance) => ({
 })
 
 describe.skipIf(!HAS_FRITZING)('gravação .fz/.fzz (spec 01 §5, §6; spec 02 §7.3)', () => {
-    it('ida e volta nos sketches de exemplo preserva instâncias, geometria e conexões', () => {
+    it.skipIf(!HAS_COLLECTION)('ida e volta nos sketches de exemplo preserva instâncias, geometria e conexões', () => {
         let checked = 0
 
         for (const file of listSketches(false)) {

@@ -4,6 +4,7 @@ import { buildCircuit } from '../src/core/Spice'
 import { Ngspice } from '../src/core/Ngspice'
 import { Simulation, fromRest } from '../src/engine/Simulation'
 import { BENCHES, BENCH_PARTS, buildBench } from '../src/engine/Bench'
+import { Scene } from '../src/engine/Scene'
 import { getGain, getStepResponse } from '../src/engine/Response'
 import { HAS_FRITZING, loadWasm, makeLibrary } from './Fixtures'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
@@ -24,7 +25,7 @@ const run = async (id: string) => {
     const vectors    = circuit.analysis.type === 'tran' && circuit.analysis.initial === 'zero' ? fromRest(result.vectors) : result.vectors
     const simulation = new Simulation(doc, library, circuit, vectors)
     const voltage    = (probe: string) => simulation.getProbe(probe).voltage ?? new Float64Array()
-    return { doc, netlist, circuit, simulation, voltage, time: vectors.time }
+    return { doc, library, netlist, circuit, simulation, voltage, time: vectors.time }
 }
 
 describe.skipIf(!HAS_FRITZING)('circuitos de teste da simulação (spec 04 §8.9)', () => {
@@ -36,7 +37,26 @@ describe.skipIf(!HAS_FRITZING)('circuitos de teste da simulação (spec 04 §8.9
         }
     })
 
-    it('LED com resistor: regime com (5 − 2,2) / 220 ≈ 13 mA e o LED aceso', async () => {
+    it('na protoboard nenhum fio vai até fonte ou terra, que só aparecem no esquemático', async () => {
+        for (const bench of BENCHES) {
+            const { doc, library } = await run(bench.id)
+            const scene = new Scene(doc, library, 'breadboardView')
+            const shown = (key: string) => scene.isShown(doc.instances[key.split('/')[0]])
+            const wire  = (key: string) => doc.instances[key.split('/')[0]].moduleIdRef === 'WireModuleID'
+            const loose = doc.edges.filter(([a, b]) => wire(a) && shown(a) && !wire(b) && !shown(b) || wire(b) && shown(b) && !wire(a) && !shown(a))
+            expect(loose, bench.id).toEqual([])
+        }
+    })
+
+    it('na PCB a fonte de bancada não aparece (só pinos hybrid), mas as pilhas, com pads de verdade, sim', async () => {
+        const lab  = await run('rlc')
+        const aaa  = await run('led')
+        expect(new Scene(lab.doc, lab.library, 'pcbView').isShown(lab.doc.instances['1'])).toBe(false)
+        expect(new Scene(lab.doc, lab.library, 'breadboardView').isShown(lab.doc.instances['1'])).toBe(true)
+        expect(new Scene(aaa.doc, aaa.library, 'pcbView').isShown(aaa.doc.instances['1'])).toBe(true)
+    })
+
+    it('LED com resistor: regime com (4,8 − 2,2) / 220 ≈ 12 mA e o LED aceso', async () => {
         const { simulation } = await run('led')
         const current = simulation.getProbe('P1').current?.[0] ?? 0
 
@@ -114,7 +134,7 @@ describe.skipIf(!HAS_FRITZING)('circuitos de teste da simulação (spec 04 §8.9
         const capacitor = Array.from(voltage('P1'))
         const current   = Array.from(simulation.getProbe('P2').current ?? [])
         const at        = (series: number[], t: number) => series[Array.from(time).findIndex(value => value >= t)]
-        const closed    = 5 * 2.2 / 3.2
+        const closed    = 4.8 * 2.2 / 3.2    // PILHAS DE 4,8 V
 
         expect(circuit.analysis).toMatchObject({ type: 'tran', t0: 0, t1: 2 })
         expect(circuit.deck).toMatch(/PWL\(0 0 0\.1 0 0\.1\d* 1 0\.5\d* 1 0\.5\d* 0\)/)

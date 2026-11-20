@@ -3,7 +3,7 @@ import { readPart } from '../src/core/Part'
 import { readBin } from '../src/core/Sketch'
 import { haystackOf, prepare, rankParts } from '../src/core/Search'
 import { FEATURED } from '../src/core/Featured'
-import { HAS_FRITZING, listParts, readText } from './Fixtures'
+import { HAS_COLLECTION, listParts, readText } from './Fixtures'
 
 const TOP = 3    // A PEÇA ESPERADA TEM DE APARECER ENTRE AS PRIMEIRAS
 
@@ -16,8 +16,8 @@ const load = () => {
     return { entries, words: new Map(entries.map(entry => [entry.moduleId, prepare(entry)])), bins }
 }
 
-describe.skipIf(!HAS_FRITZING)('busca de peças (spec 01 §7)', () => {
-    const { entries, words, bins } = load()
+describe.skipIf(!HAS_COLLECTION)('busca de peças (spec 01 §7)', () => {
+    const { entries, words, bins } = HAS_COLLECTION ? load() : { entries: [], words: new Map(), bins: [] }    // O CORPO DO describe RODA NA COLETA MESMO PULADO
     const top = (text: string) => rankParts(entries, words, text, bins).slice(0, TOP).map(entry => entry.moduleId)
 
     it('as sugeridas existem no acervo', () => {

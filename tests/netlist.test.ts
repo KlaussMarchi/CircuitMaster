@@ -5,7 +5,7 @@ import { fromSketch } from '../src/core/Document'
 import { Netlist } from '../src/core/Netlist'
 import { VIEWS } from '../src/core/Layer'
 import { Scene } from '../src/engine/Scene'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
+import { HAS_COLLECTION, HAS_FRITZING, listSketches, loadWasm, makeLibrary } from './Fixtures'
 
 const onlyView = (sketch: Sketch, view: typeof VIEWS[number]): Sketch => ({ ...sketch, instances: sketch.instances.map(instance => ({ ...instance, views: Object.fromEntries(Object.entries(instance.views).map(([name, state]) => [name, name === view ? state : { ...state, connectors: state.connectors.map(connector => ({ ...connector, connects: [] })) }])) })) })
 
@@ -25,7 +25,7 @@ const samePartition = (a: Uint32Array, b: Uint32Array) => {
 }
 
 describe.skipIf(!HAS_FRITZING)('netlist unificado (spec 02 §2.3, §9)', () => {
-    it('a projeção por vista reproduz as conexões gravadas em cada vista', async () => {
+    it.skipIf(!HAS_COLLECTION)('a projeção por vista reproduz as conexões gravadas em cada vista', async () => {
         const wasm    = await loadWasm()
         const library = makeLibrary()
         const result  = { same: 0, different: [] as string[] }
@@ -57,7 +57,7 @@ describe.skipIf(!HAS_FRITZING)('netlist unificado (spec 02 §2.3, §9)', () => {
         expect(result.same).toBeGreaterThanOrEqual(119)
     })
 
-    it('o ratsnest de cada vista tem uma linha por conexão pendente', async () => {
+    it.skipIf(!HAS_COLLECTION)('o ratsnest de cada vista tem uma linha por conexão pendente', async () => {
         const wasm    = await loadWasm()
         const library = makeLibrary()
         const totals  = Object.fromEntries(VIEWS.map(view => [view, { nets: 0, left: 0, ratsnest: 0 }]))

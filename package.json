@@ -13,6 +13,10 @@
     "preview": "vite preview",
     "e2e": "npm run wasm && playwright test",
     "perf": "npm run build && playwright test --config playwright.perf.config.ts",
+    "data": "node tools/Data/pack.ts",
+    "data:fixtures": "node tools/Data/fixtures.ts",
+    "data:fetch": "node tools/Data/fetch.ts",
+    "data:release": "node tools/Data/release.ts",
     "soak": "npm run wasm && playwright test --config playwright.soak.config.ts",
     "verify": "npm run check && npm test && npm run e2e && npm run perf"
   },

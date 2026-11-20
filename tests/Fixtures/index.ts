@@ -1,7 +1,8 @@
 import '../../src/core/Xml/xmldom'    // NO NODE NÃO HÁ DOMParser: O XMLDOM ANTES DE TUDO
 import fs from 'node:fs'
 import path from 'node:path'
-import { ROOTS as FRITZING, getListings, listFiles } from '../../tools/Fritzing'
+import { FULL, ROOTS as FRITZING, getListings, listFiles } from '../../tools/Fritzing'
+import { recording } from './record'
 import { ROOTS as KICAD } from '../../tools/KiCad'
 import { Library, type PartLocation, type Source } from '../../src/core/Library'
 import { loadNetlistWasm } from '../../src/core/Netlist'
@@ -9,7 +10,8 @@ import { FONT_FILES } from '../../src/core/Font'
 
 const ROOTS: Record<string, string> = { ...FRITZING, 'kicad-symbols': KICAD.symbols, 'kicad-footprints': KICAD.footprints }    // RAÍZES DO Source: O ACERVO DO FRITZING E AS BIBLIOTECAS DO KICAD (core/KicadPart)
 
-export const HAS_FRITZING = fs.existsSync(ROOTS.parts)
+export const HAS_FRITZING   = fs.existsSync(ROOTS.parts)                  // O PACOTE (data/) OU O SUBCONJUNTO VERSIONADO (tests/fixtures)
+export const HAS_COLLECTION = FULL                                        // SÓ O PACOTE COMPLETO: OS TESTES QUE PERCORREM TODAS AS PEÇAS OU TODOS OS EXEMPLOS
 
 const BUILD = path.resolve(import.meta.dirname, '../../build')
 
@@ -30,6 +32,7 @@ export const getModuleIndex = () => {
         return moduleIndex
 
     moduleIndex = new Map()
+    recording.paused = true
 
     for (const { root, path: file } of listParts()) {
         const id = readText(root, file).slice(0, 4000).match(/moduleId\s*=\s*["']([^"']+)/)?.[1]
@@ -38,6 +41,7 @@ export const getModuleIndex = () => {
             moduleIndex.set(id, { root, path: file })
     }
 
+    recording.paused = false
     return moduleIndex
 }
 

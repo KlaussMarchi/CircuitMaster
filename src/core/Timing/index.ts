@@ -165,9 +165,19 @@ const solve = (matrix: number[][]) => {
     return result
 }
 
+// LIMITADOR ilimit DO XSPICE (A<nome> in pos neg out modelo, FONTE DE BANCADA): SEGUE A ENTRADA COM GANHO 1, ENTÃO NA ESTIMATIVA É O r_out_source ENTRE in E out
+const getLimiters = (deck: string): Element[] => {
+    const models = new Map([...deck.matchAll(/^\.model\s+(\S+)\s+ilimit\s*\(([^)]*)\)/gim)].map(match => [match[1].toLowerCase(), valueOf(match[2].match(/r_out_source\s*=\s*(\S+)/i)?.[1] ?? '1')]))
+    return getElements(deck).filter(element => element.kind === 'a').flatMap(element => {
+        const fields = element.wave.split(/\s+/)    // ponytail: SÓ A FORMA ESCALAR DO FRITZING (QUATRO NÓS E O MODELO), SEM VETORES [ ] NEM %v
+        const value  = models.get(fields[4]?.toLowerCase() ?? '')
+        return value !== undefined ? [{ kind: 'r', name: element.name, nodes: [fields[0], fields[3]], value, wave: '' }] : []
+    })
+}
+
 // ESCALAS DE TEMPO DO CIRCUITO: τ = R·C DE CADA CAPACITOR E L/R DE CADA INDUTOR PELA RESISTÊNCIA QUE ELE VÊ (FONTES EM CURTO), E A FREQUÊNCIA NATURAL, O AMORTECIMENTO E A ACOMODAÇÃO DE CADA PAR L–C COM UM NÓ EM COMUM (SPEC 04 §5.5)
 export const getTiming = (deck: string): Timing => {
-    const elements   = getElements(deck).filter(element => !OPEN.includes(element.kind) || element.kind === 'v')
+    const elements   = [...getElements(deck).filter(element => !OPEN.includes(element.kind) || element.kind === 'v'), ...getLimiters(deck)]
     const reactive   = (kind: string) => elements.filter(element => element.kind === kind && element.value > 0 && Number.isFinite(element.value))
     const sources    = elements.filter(element => element.kind === 'v')
     const [cs, ls]   = [reactive('c'), reactive('l')]

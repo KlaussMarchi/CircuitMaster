@@ -21,7 +21,7 @@ identificador ($id = modelIndex \times 10$). O que muda por vista é a **visibil
 |---|---|
 | Breadboard | símbolos (alimentação, terra, net label), subpartes esquemáticas, jumper de PCB, plano de cobre, logos (exceto `moduleId` contendo `breadboard`), furos, vias |
 | Esquemático | breadboards/perfboards/stripboards, jumper, plano de cobre, vias, furos, pads, logos (exceto `moduleId` contendo `schematic`) |
-| PCB | breadboards/perfboards/stripboards, símbolos, subpartes esquemáticas, moldura esquemática, `…PowerModuleID` |
+| PCB | breadboards/perfboards/stripboards, símbolos, subpartes esquemáticas, moldura esquemática, `…PowerModuleID`, instrumentos de bancada (peças cujos pinos de PCB são todos `hybrid` ou fora do cobre: fontes e geradores de laboratório, multímetro, osciloscópio) |
 
 Peças cuja vista não declara nenhuma camada daquela vista (ex.: breadboard com `layerId="breadboardbreadboard"`
 em `pcbView`) também ficam sem desenho, mas existem.

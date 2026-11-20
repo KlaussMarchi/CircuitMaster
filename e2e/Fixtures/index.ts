@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
+import { ROOTS } from '../../tools/Fritzing'
 import type { Point } from '../../src/core/Geometry'
 import type { Scene } from '../../src/engine/Scene'
 import type { useStore } from '../../src/ui/Store'
@@ -11,8 +12,7 @@ declare global {
 
 export { expect }
 
-export const FRITZING = process.env.FRITZING_ROOT ?? path.resolve(import.meta.dirname, '../../../Fritzing')
-export const SAMPLES  = path.join(FRITZING, 'fritzing-app/sketches')
+export const SAMPLES  = ROOTS.sketches
 export const SHOTS    = 'build/ui'
 export const WIDTHS   = [1920, 1280, 390]
 export const AUTOSAVE_MS = 2000    // MAIS QUE O ATRASO DO SALVAMENTO AUTOMÁTICO: A RECARGA SEMPRE OFERECE RECUPERAR

@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { readBundle } from '../src/core/Sketch'
 import { fromSketch, keyOf, WIRE_FLAGS } from '../src/core/Document'
 import { Scene } from '../src/engine/Scene'
-import { HAS_FRITZING, listSketches, makeLibrary, writeReport } from './Fixtures'
+import { HAS_COLLECTION, listSketches, makeLibrary, writeReport } from './Fixtures'
 
 const EXACT = 0.01
 const NEAR  = 0.5
 const VIEWS = ['breadboardView', 'schematicView'] as const
 
-describe.skipIf(!HAS_FRITZING)('ancoragem de pinos nos sketches de exemplo (spec 01 §10)', () => {
+describe.skipIf(!HAS_COLLECTION)('ancoragem de pinos nos sketches de exemplo (spec 01 §10)', () => {
     it('as pontas de fio coincidem com os pontos terminais calculados', async () => {
         const library = makeLibrary()
         const counts  = Object.fromEntries(VIEWS.map(view => [view, { exact: 0, near: 0, fail: 0, missing: 0 }]))

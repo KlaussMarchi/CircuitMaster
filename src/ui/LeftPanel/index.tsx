@@ -15,7 +15,7 @@ const Ready = () => (
         <div className="lp-body">
             {BENCHES.map(bench => (
                 <div key={bench.id} className="sec" role="group" aria-label={t(bench.title)}>
-                    <h3>{t(bench.title)}</h3>
+                    <h3 className="bench-title">{t(bench.title)}</h3>
                     <p className="sub">{t(bench.summary)}</p>
                     <div className="bin-actions">{VIEWS.map(view => <button key={view} className="btn sm" onClick={() => void useStore.getState().openBench(bench.id, view)}>{t(VIEW_LABELS[view])}</button>)}</div>
                 </div>

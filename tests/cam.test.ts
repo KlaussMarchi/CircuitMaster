@@ -11,7 +11,7 @@ import { exportEtchablePdf, exportFabrication } from '../src/core/Gerber'
 import { exportBomCsv, exportBomPdf, exportPickAndPlace } from '../src/core/Bom'
 import { exportIpc } from '../src/core/Ipc'
 import { Netlist } from '../src/core/Netlist'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
+import { HAS_COLLECTION, HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
 const SAMPLES = ['Knock', 'Amplification', 'Timer']
@@ -31,7 +31,7 @@ const checkGerber = (name: string, text: string) => {
 }
 
 describe.skipIf(!HAS_FRITZING)('manufatura da PCB (spec 03 §2–§5)', () => {
-    it('gera Gerber, Excellon, pick-and-place e BOM coerentes nos sketches com placa', async () => {
+    it.skipIf(!HAS_COLLECTION)('gera Gerber, Excellon, pick-and-place e BOM coerentes nos sketches com placa', async () => {
         const clipper = new Clipper(await createClipper())
         const wasm    = await loadWasm()
         const library = makeLibrary(true)

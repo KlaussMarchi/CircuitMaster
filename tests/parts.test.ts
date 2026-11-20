@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { readPart } from '../src/core/Part'
 import { readBin } from '../src/core/Sketch'
-import { HAS_FRITZING, listParts, readText } from './Fixtures'
+import { HAS_COLLECTION, listParts, readText } from './Fixtures'
 
-describe.skipIf(!HAS_FRITZING)('acervo de peças', () => {
-    const files = listParts()
+describe.skipIf(!HAS_COLLECTION)('acervo de peças', () => {
+    const files = HAS_COLLECTION ? listParts() : []    // O CORPO DO describe RODA NA COLETA MESMO PULADO
     const parts = files.map(file => readPart(readText(file.root, file.path), file.root === 'app'))
 
     it('lê todos os .fzp sem erro', () => {

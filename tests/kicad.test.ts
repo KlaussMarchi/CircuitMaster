@@ -23,11 +23,12 @@ import type { Doc } from '../src/core/Document'
 import type { Library } from '../src/core/Library'
 import createNgspice from '../src/workers/Simulator/ngspice/ngspice.js'
 import { loadWasm, makeLibrary, writeReport } from './Fixtures'
+import { FULL } from '../tools/Fritzing'
 import { ROOTS } from '../tools/KiCad'
 
 const HAS_KICAD = fs.existsSync(ROOTS.symbols)
 const CLI       = process.env.KICAD_CLI ?? 'kicad-cli'
-const HAS_CLI   = HAS_KICAD && spawnSync(CLI, ['version']).status === 0
+const HAS_CLI   = FULL && spawnSync(CLI, ['version']).status === 0    // O kicad-cli LÊ A PASTA DA BIBLIOTECA INTEIRA: SÓ COM O PACOTE COMPLETO
 const OUT       = path.resolve('build/kicad/symbols')
 const MIL       = 1000 / 25.4
 const SAMPLE    = [['Device', 'R'], ['Device', 'C'], ['Amplifier_Operational', 'LM358'], ['Timer', 'NE555P'], ['MCU_Microchip_ATmega', 'ATmega328P-P']]
@@ -404,7 +405,7 @@ describe.skipIf(!HAS_KICAD)('peças das bibliotecas simulam pelos campos Sim.* (
 const GRID = PX_PER_INCH / 10    // px ENTRE DOIS FUROS DA PROTOBOARD
 
 // SEÇÃO 12 DO PLANO: TODO SÍMBOLO COM PINOS ENTRA NA PROTOBOARD, PELO FOOTPRINT PASSANTE DE 0,1 in OU PELA PLACA ADAPTADORA
-describe.skipIf(!HAS_KICAD)('toda peça das bibliotecas entra na protoboard (spec 08 §3, seção 12 do plano)', () => {
+describe.skipIf(!FULL)('toda peça das bibliotecas entra na protoboard (spec 08 §3, seção 12 do plano)', () => {
     it('em todos os símbolos, cada pino tem lugar na protoboard e os pinos caem na grade de 0,1 in', () => {
         const failures: string[] = []
         const counts   = { footprint: 0, adapter: 0, schematic: 0 }

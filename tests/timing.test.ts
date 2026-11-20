@@ -22,6 +22,10 @@ describe('escala de tempo do circuito pelo deck (spec 04 §5.5)', () => {
         near(getTiming('V1 1 0 5\nR1 1 2 10\nL1 2 0 10m').constants[0], 1e-3)
     })
 
+    it('a fonte de bancada (ilimit do XSPICE) entrega pela resistência de saída, em vez de ficar aberta', () => {
+        near(getTiming('.model lab ilimit(r_out_source=1 r_out_sink=1)\nVAux 1_a2 1_a 5\nV1 1_a 0 5\nA1 1_a 1_a2 0 1 lab\nR1 1 2 1k\nC1 2 0 100u').constants[0], 1001 * 100e-6)
+    })
+
     it('RLC série: frequência natural, amortecimento e acomodação a 2%', () => {
         const [ring] = getTiming(RLC).resonances
         near(ring?.frequency, 1 / (2 * Math.PI * Math.sqrt(10e-3 * 10e-6)))

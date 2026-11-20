@@ -11,10 +11,9 @@ BOM, IPC-D-356A, netlist XML, PDF e SVG. Importa e exporta placas do Altium Desi
 - Node 20 (o Vitest 5 exige Node 22; por isso o projeto fixa o Vitest 4).
 - Rust com o alvo `wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`), para o netlist e o
   roteador.
-- Acervo do Fritzing ao lado do projeto, em `../Fritzing/fritzing-parts` e `../Fritzing/fritzing-app`. Outra
-  pasta pode ser indicada em `FRITZING_ROOT`.
-- As bibliotecas e os demos do KiCad 10 em `../KiCad` (ou `KICAD_ROOT`), servidos em `/kicad`; o `kicad-cli` no `PATH`
-  (opcional) é o oráculo dos testes dos arquivos do KiCad.
+- O acervo de peças em `data/`: `npm run data:fetch` baixa do release do GitHub (34 MB; Node ≥ 22.18), ou
+  `npm run data` o gera a partir de `../Fritzing` e `../KiCad` (ou de `FRITZING_ROOT` e `KICAD_ROOT`). Sem ele, app e testes usam o subconjunto `tests/fixtures`. O `kicad-cli` no `PATH` é opcional:
+  é o oráculo dos testes dos arquivos do KiCad. Créditos e licenças dos dados em `THIRD_PARTY.md`.
 - Só para recompilar os módulos C/C++ já incluídos: emsdk (`emcc`), cmake ≥ 3.20 e bison ≥ 3.0 (flex também, para o
   ngspice com XSPICE).
 
@@ -32,7 +31,7 @@ npm run build     # verificação de tipos e build de produção em dist/
 npm run preview   # serve o dist/ com o acervo
 ```
 
-O próprio Vite serve o acervo do Fritzing em `/fritzing`, tanto no `dev` quanto no `preview`. Os E2E usam o
+O próprio Vite serve o acervo em `/fritzing` e `/kicad`, tanto no `dev` quanto no `preview`. Os E2E usam o
 Chromium e o Firefox do Playwright (`npx playwright install chromium firefox` na primeira vez).
 
 ## Interface

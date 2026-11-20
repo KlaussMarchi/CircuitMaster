@@ -4,3 +4,5 @@ build
 crates/*/target
 src/core/Netlist/netlist.wasm
 src/core/Router/router.wasm
+data
+data.tmp

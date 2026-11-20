@@ -17,12 +17,17 @@ npm run wasm                                 # só os crates → src/core/Netlis
 npm run e2e                                  # Playwright no Chromium e no Firefox (playwright.config.ts, Vite na porta 5210)
 npm run perf                                 # build + e2e/perf.spec.ts no vite preview (5211) → build/perf-report.txt
 npm run verify                               # check + test + e2e + perf: verde antes de todo commit
-npm run preview                              # serve o dist/ com o acervo em /fritzing
+npm run preview                              # serve o dist/ com o acervo em /fritzing e /kicad
+npm run data:fetch                           # baixa o acervo do release fixado em tools/Data/release.json para data/
+npm run data                                 # empacota ../Fritzing e ../KiCad em data/
+npm run data:release                         # data/ → build/circuitmaster-data.tar.zst e um release.json novo
+npm run data:fixtures                        # refaz tests/fixtures (subconjunto que os testes leem) a partir do data/
 npx vitest run tests/spice.test.ts           # um arquivo, sem recompilar o Rust
 npx vitest run tests/drc.test.ts -t 'nome'   # um teste pelo nome
 npx playwright test --project=chromium e2e/edit.spec.ts -g 'nome'   # um E2E pelo nome
 ```
 
+- Os scripts de `tools/Data` rodam `.ts` direto e usam o zstd do `node:zlib`: Node ≥ 22.18.
 - Node 20, por isso o Vitest fica na 4 (a 5 exige Node 22). Rust com o alvo `wasm32-unknown-unknown`.
 - `netlist.wasm` e `router.wasm` são gerados e ignorados pelo git: depois de mudar `crates/*/src/lib.rs`, rode
   `npm run wasm` antes de chamar o `vitest` direto.
@@ -30,32 +35,40 @@ npx playwright test --project=chromium e2e/edit.spec.ts -g 'nome'   # um E2E pel
   `tools/Clipper2/build.sh` (emsdk, cmake ≥ 3.20, bison). `build.sh native` e `build.sh xspice` geram em `build/`
   os ngspice nativos usados apenas pelos testes de comparação numérica.
 
-## Acervo do Fritzing
+## Acervo (pacote de dados)
 
-App e testes leem o acervo em `../Fritzing` (ou `FRITZING_ROOT`): raízes `parts`, `app`, `sketches` e `fonts`
-definidas em `tools/Fritzing/index.ts`. Não há backend: o plugin `dataServer` do `vite.config.ts` serve
-`/fritzing/<raiz>/<caminho>` e as listagens `fzp.json`, `svg.json` e `sketches.json`, no `dev` e no
-`npx vite preview`. O `dist/` servido por outro servidor fica sem peças.
+App e testes leem o acervo de `data/` (ou `CM_DATA`). Ele vem do release do GitHub fixado em `tools/Data/release.json`
+(`npm run data:fetch`, com o SHA-256 conferido) ou é gerado por `npm run data` (`tools/Data/pack.ts`) a partir de
+`../Fritzing` e `../KiCad` (ou `FRITZING_ROOT`, `KICAD_ROOT`). Esses repositórios só são lidos por esse script e pelos
+testes opcionais dos demos do KiCad (`DEMOS` em `tools/KiCad`). O pacote traz só o que o app usa: raízes `parts`, `app`,
+`sketches` e `fonts` em `data/fritzing` e `symbols` e `footprints` em `data/kicad` (`tools/Fritzing/index.ts`,
+`tools/KiCad/index.ts`). Ficam de fora os modelos 3D, os templates e os demos. O pacote também traz as licenças, as
+listagens já gravadas (`fzp.json`, `svg.json`, `sketches.json`, `bins.json`, `symbols.json`, `symbols-index.json` e
+`footprints.json`) e os commits de origem em `data/VERSION.json`. Ocupa cerca de 830 MB e é ignorado pelo git
+(cerca de 35 MB com `tar` e `zstd`). Para atualizar o acervo: rode `npm run data` e depois `npm run data:release`, crie
+o release com a tag impressa, anexe o arquivo e faça commit do `release.json`. Não há backend: o plugin `dataServer` do `vite.config.ts` serve
+`data/fritzing` e `data/kicad` em `/fritzing` e `/kicad`, no `dev` e no `preview`. Num servidor estático, basta
+publicar essas duas pastas nesses caminhos ao lado do `dist/`. Sem `data/`, app e testes usam o subconjunto
+versionado em `tests/fixtures`.
 
-## Acervo do KiCad
-
-As bibliotecas e os demos do KiCad 10 ficam em `../KiCad` (ou `KICAD_ROOT`), com as pastas `symbols`, `footprints`,
-`models`, `templates` e `demos` de `tools/KiCad/index.ts`, servidas pelo mesmo `dataServer` em `/kicad` com as
-listagens `symbols.json`, `footprints.json`, `models.json`, `templates.json` e `demos.json`. `core/Sexpr` lê e grava
-os arquivos S-expression (`.kicad_sch`, `.kicad_pcb`, `.kicad_sym`, `.kicad_mod`, `.kicad_wks`) sem perda: átomos
-crus e o `Prettify` portado do KiCad (spec 07). Os testes do oráculo usam o `kicad-cli` do `PATH` (ou `KICAD_CLI`),
-gravando em `build/kicad/`, e são pulados sem ele.
+`core/Sexpr` lê e grava os arquivos S-expression do KiCad (`.kicad_sch`, `.kicad_pcb`, `.kicad_sym`, `.kicad_mod`,
+`.kicad_wks`) sem perda: átomos crus e o `Prettify` portado do KiCad (spec 07). Os testes do oráculo usam o
+`kicad-cli` do `PATH` (ou `KICAD_CLI`), gravando em `build/kicad/`, e são pulados sem ele.
 
 Símbolo e footprint viram peça de três vistas (spec 08): `moduleId` `cm:<Biblioteca>:<Símbolo>[@<Lib>:<Footprint>]`;
 a `Library` vê só o prefixo e chama `core/KicadPart.readKicadPart` por import dinâmico (fora do JavaScript inicial),
 que monta o `.fzp` e os SVG (`core/KicadSymbol`, `core/KicadFootprint`) como pacote. O `Source` lê as raízes
 `kicad-symbols` e `kicad-footprints` (em `/kicad/symbols` e `/kicad/footprints` no navegador). O indexador lê os
-símbolos do `symbols-index.json` que o servidor de dados monta e os põe na mesma busca e no mesmo catálogo das outras
+símbolos do `symbols-index.json` do pacote e os põe na mesma busca e no mesmo catálogo das outras
 peças (`core/Category`: categorias e famílias próprias).
 
 ## Testes
 
-- Quase todo `describe` tem `skipIf(!HAS_FRITZING)`: sem o acervo os testes são pulados, não falham.
+- `npm test` roda sem nada fora do repositório: sem `data/`, os testes leem o subconjunto `tests/fixtures`, que tem
+  só os arquivos do acervo que eles leem. Quem percorre todas as peças, todos os sketches ou uma biblioteca inteira
+  do KiCad tem `skipIf(!HAS_COLLECTION)` (ou `!FULL`) e só roda com o pacote completo. Teste novo que leia outra peça
+  do acervo: rode `npm run data:fixtures` (`tools/Data/fixtures.ts`, precisa do `data/`). Ele roda os testes gravando
+  as leituras (`CM_RECORD`, `tests/Fixtures/record.ts`) e refaz `tests/fixtures`.
   `tests/Fixtures` monta a `Library` lendo do disco (`fileSource`) e carrega o `netlist.wasm` de `src/`.
 - Vários testes percorrem todas as peças ou todos os sketches de exemplo (`testTimeout` de 10 min) e gravam
   relatórios em `build/` (`*-report.txt`, `build/gerber/<sketch>/`, `fill-*.svg`, `fonts.svg`); compare esses

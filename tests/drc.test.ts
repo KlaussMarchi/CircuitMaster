@@ -8,13 +8,13 @@ import { Scene } from '../src/engine/Scene'
 import { Clipper } from '../src/core/Clipper'
 import { getArtwork, pickBoard, type Artwork, type Conductor } from '../src/core/Cam'
 import { basicRules, checkRules, getGroupOf } from '../src/core/Drc'
-import { HAS_FRITZING, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
+import { HAS_COLLECTION, listSketches, loadWasm, makeLibrary, writeReport } from './Fixtures'
 import createClipper from '../src/core/Clipper/clipper2.js'
 
 const KEEPOUT = 10
 
 // EXEMPLOS DO FRITZING QUE VIOLAM AS REGRAS DE VERDADE (MEDIDO): CURTO DE COBRE, TRILHA A 9,33 mil DE PADS, PEÇAS FORA OU A MENOS DE k DA BORDA
-const DIRTY = ['Arduino-no-FTDI', 'Shift_Register_2x', 'Workshop_03_FlipFlop-w-Button', 'measure_dc_current', 'simple_button', 'full_wave_rectifier']
+const DIRTY = ['Arduino-no-FTDI', 'Shift_Register_2x', 'Workshop_03_FlipFlop-w-Button', 'measure_dc_current', 'simple_button']
 
 const pad = (x: number, owner: string): Conductor => ({ face: 'top', shape: { kind: 'circle', x, y: 500, r: 20, w: 0, fill: true, drill: false }, owner, key: `${owner}/connector0`, kind: 'pad' })
 
@@ -54,7 +54,7 @@ describe('verificação de regras de projeto (spec 03 §7)', () => {
         expect(count(checkRules(clipper, pair, groupOf, classed, conductor => conductor.owner === 'A' ? 0 : -1), 'overlap')).toBe(1)
     })
 
-    it.skipIf(!HAS_FRITZING)('roda nos exemplos com placa', async () => {
+    it.skipIf(!HAS_COLLECTION)('roda nos exemplos com placa', async () => {
         const clipper = new Clipper(await createClipper())
         const wasm    = await loadWasm()
         const library = makeLibrary()

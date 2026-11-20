@@ -11,6 +11,7 @@ const GLOW_GAIN    = 4
 const DIGIT_ASPECT = 0.62                         // LARGURA DO DÍGITO EM UNIDADES DA FONTE
 const SCOPE_STROKE = milsToPx(20)
 const LEGEND_PX    = milsToPx(60)
+const LAB_SCREENS  = [[740, 667.7], [740, 1338.9]].map(([x, y]) => ({ x: x / 3149.6, y: y / 6140.5, width: 1758.3 / 3149.6, height: 600.2 / 6140.5 }))    // voltage_screen E current_screen DO power_supply_dc_lab_1_breadboard.svg, EM FRAÇÃO DA PEÇA
 const DISPLAYS     = { breadboardView: { width: 0.8, top: 0.07, font: 'DSEG7 Classic, Consolas, monospace' }, schematicView: { width: 0.5, top: 0.13, font: 'Noto Sans, sans-serif' } }
 
 export const Glow = ({ item, effect }: { item: PartItem, effect: Effect }) => {
@@ -45,13 +46,28 @@ const Smoke = ({ item }: { item: PartItem }) => {
     )
 }
 
+// CADA LINHA DENTRO DO SEU VISOR, COM FOLGA DE 8% DOS LADOS E A ALTURA DOS DÍGITOS EM 60% DO VISOR
+const LabDisplay = ({ item, lines }: { item: PartItem, lines: string[] }) => (
+    <g fill="rgb(200,48,48)" fontFamily={DISPLAYS.breadboardView.font} style={{ whiteSpace: 'pre' }}>
+        {lines.slice(0, LAB_SCREENS.length).map((line, i) => {
+            const screen = LAB_SCREENS[i]
+            const [width, height] = [screen.width * item.width, screen.height * item.height]
+            const size   = Math.min(height * 0.6, width * 0.84 / 5 / DIGIT_ASPECT)
+            return <text key={i} x={screen.x * item.width + width * 0.08} y={screen.y * item.height + (height + size * 0.72) / 2} fontSize={size} textLength={width * 0.84} lengthAdjust="spacingAndGlyphs">{line}</text>
+        })}
+    </g>
+)
+
 const Display = ({ item, lines, view, lab }: { item: PartItem, lines: string[], view: Shown, lab: boolean }) => {
+    if (lab)
+        return view === 'breadboardView' ? <LabDisplay item={item} lines={lines} /> : null    // O FRITZING SÓ ESCREVE NA TELA DA FONTE DE BANCADA NA PROTOBOARD (updateLabPowerSupplyScreen)
+
     const style = DISPLAYS[view]
-    const width = item.width * (lab ? 0.72 : style.width)
+    const width = item.width * style.width
     const size  = width / 5 / DIGIT_ASPECT
-    const top   = item.height * (lab ? 0.075 : style.top)
+    const top   = item.height * style.top
     return (
-        <g fill={lab ? 'rgb(200,48,48)' : 'rgb(48,48,48)'} fontFamily={style.font} fontSize={size} style={{ whiteSpace: 'pre' }}>
+        <g fill="rgb(48,48,48)" fontFamily={style.font} fontSize={size} style={{ whiteSpace: 'pre' }}>
             {lines.map((line, i) => <text key={i} x={(item.width - width) / 2} y={top + size * (i + 0.85)} textLength={width} lengthAdjust="spacingAndGlyphs">{line}</text>)}
         </g>
     )

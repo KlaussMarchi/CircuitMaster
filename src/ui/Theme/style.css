@@ -397,6 +397,7 @@ kbd { font: 400 11px/16px var(--mono); color: var(--muted); border: 1px solid va
 .sec { margin-top: 18px; }
 .sec:first-child { margin-top: 0; }
 .sec h3 { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sec h3.bench-title { color: var(--text); font-size: 13px; }    /* TÍTULO DO CIRCUITO PRONTO EM DESTAQUE SOBRE O RESUMO CINZA */
 details.sec > summary { list-style: none; cursor: pointer; }
 details.sec > summary::-webkit-details-marker { display: none; }
 details.sec > summary h3::after { content: '▸'; font-size: 10px; }

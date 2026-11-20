@@ -4,34 +4,20 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
 import path from 'node:path'
-import * as Fritzing from './tools/Fritzing/index.ts'
-import * as KiCad from './tools/KiCad/index.ts'
+import { DATA } from './tools/Fritzing/index.ts'
 
-const TYPES: Record<string, string> = { '.sp': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.fzp': 'application/xml', '.fzb': 'application/xml', '.fzz': 'application/zip', '.png': 'image/png', '.ttf': 'font/ttf', '.kicad_pro': 'application/json', '.step': 'model/step' }
+const TYPES: Record<string, string> = { '.sp': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.fzp': 'application/xml', '.fzb': 'application/xml', '.fzz': 'application/zip', '.png': 'image/png', '.ttf': 'font/ttf' }
 const KICAD_TEXT = /\.(kicad_(sch|pcb|sym|mod|wks)|.*-lib-table)$/    // S-EXPRESSION DO KICAD: TEXTO UTF-8
 
-// SERVE UM ACERVO COMO DADOS EM /<nome> (LISTAGENS JSON E ARQUIVOS), SEM SAIR DAS RAÍZES, NO dev E NO preview
-const dataServer = (mount: string, roots: Record<string, string>, getListings: () => Record<string, unknown>): Plugin => {
-    let listings: Record<string, unknown> | null = null
+// SERVE O ACERVO EMPACOTADO (data/<nome>, LISTAGENS JÁ GRAVADAS) EM /<nome>, SEM SAIR DA RAIZ, NO dev E NO preview; NUM SERVIDOR
+// ESTÁTICO BASTA PUBLICAR data/fritzing E data/kicad EM /fritzing E /kicad
+const dataServer = (mount: string): Plugin => {
+    const root = path.resolve(DATA, mount)    // NORMALIZADA: NO WINDOWS A RAIZ VEM COM / E O resolve DEVOLVE \
 
     const handle: Connect.NextHandleFunction = (request, response, next) => {
-        const url = decodeURIComponent((request.url ?? '').split('?')[0]).replace(/^\/+/, '')
+        const file = path.resolve(root, decodeURIComponent((request.url ?? '').split('?')[0]).replace(/^\/+/, ''))
 
-        if (url.endsWith('.json') && !url.includes('/')) {
-            listings = listings ?? getListings()
-
-            if (!(url in listings))
-                return next()
-
-            response.setHeader('Content-Type', TYPES['.json'])
-            return response.end(JSON.stringify(listings[url]))
-        }
-
-        const slash = url.indexOf('/')
-        const root  = roots[url.slice(0, slash)] && path.resolve(roots[url.slice(0, slash)])    // NORMALIZADA: NO WINDOWS A RAIZ VEM COM / E O resolve DEVOLVE \
-        const file  = root ? path.resolve(root, url.slice(slash + 1)) : ''
-
-        if (!root || !file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile())
+        if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile())
             return next()
 
         response.setHeader('Content-Type', KICAD_TEXT.test(file) ? 'text/plain; charset=utf-8' : TYPES[path.extname(file).toLowerCase()] ?? 'application/octet-stream')
@@ -52,8 +38,9 @@ const CHUNKS = [{ name: 'react', test: /node_modules[\\/](react|react-dom|schedu
 
 
 export default defineConfig({
-    plugins: [react(), tailwindcss(), dataServer('fritzing', Fritzing.ROOTS, Fritzing.getListings), dataServer('kicad', KiCad.ROOTS, KiCad.getListings)],
+    plugins: [react(), tailwindcss(), dataServer('fritzing'), dataServer('kicad')],
+    server: { watch: { ignored: ['**/data/**', '**/data.tmp/**'] } },    // O ACERVO TEM ~110 MIL ARQUIVOS: VIGIÁ-LO ESTOURA O LIMITE DO inotify (E ELE SÓ MUDA PELO npm run data)
     worker: { format: 'es' },
     build: { rolldownOptions: { output: { codeSplitting: { groups: CHUNKS } } } },
-    test: { environment: 'node', include: ['tests/**/*.test.ts'], setupFiles: ['src/core/Xml/xmldom.ts'], testTimeout: 600000 }
+    test: { environment: 'node', include: ['tests/**/*.test.ts'], setupFiles: ['src/core/Xml/xmldom.ts', 'tests/Fixtures/record.ts'], testTimeout: 600000 }
 })

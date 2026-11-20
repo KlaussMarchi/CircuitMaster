@@ -117,11 +117,11 @@ const Preferences = () => {
 }
 
 const CREDITS: [string, string][] = [
-    ['Peças e exemplos', 'fritzing-parts e sketches do Fritzing, lidos como dados (CC-BY-SA 3.0)'],
-    ['Símbolos e footprints', 'bibliotecas do KiCad, lidas como dados (CC-BY-SA 4.0 com a exceção para projetos)'],
+    ['Peças e exemplos', 'Fritzing GmbH e colaboradores do Fritzing: fritzing-parts e sketches, usados sem modificação (CC-BY-SA 3.0, creativecommons.org/licenses/by-sa/3.0)'],
+    ['Símbolos e footprints', 'KiCad Library Team: bibliotecas do KiCad 10, convertidas em peças de três vistas (CC-BY-SA 4.0 com a exceção para projetos, kicad.org/libraries/license)'],
     ['Simulação', 'ngspice compilado para WebAssembly (BSD modificada, ver COPYING)'],
     ['Polígonos', 'Clipper2 de Angus Johnson em WebAssembly (Boost 1.0)'],
-    ['Fontes', 'Public Sans e JetBrains Mono na interface; Droid Sans (Apache 2.0), Noto Sans e OCR-A nas peças (OFL e domínio público)'],
+    ['Fontes', 'Public Sans e JetBrains Mono na interface; Droid Sans (Apache 2.0), Noto Sans (OFL), OCR-A e Segment16 (domínio público) nas peças'],
     ['Código', 'GPL-3.0-or-later; código portado do Fritzing e do KiCad listado em THIRD_PARTY.md']
 ]
 

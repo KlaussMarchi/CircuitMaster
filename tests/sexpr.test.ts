@@ -3,10 +3,12 @@ import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { childOf, flatSexpr, headOf, prettify, quote, readSexpr, unquote, writeSexpr, type Sexpr } from '../src/core/Sexpr'
-import { ROOTS } from '../tools/KiCad'
+import { FULL } from '../tools/Fritzing'
+import { DEMOS, ROOTS } from '../tools/KiCad'
 import { writeReport } from './Fixtures'
 
-const HAS_KICAD = fs.existsSync(ROOTS.symbols)
+const HAS_KICAD = FULL                    // AS BIBLIOTECAS INTEIRAS SÓ NO PACOTE COMPLETO (npm run data)
+const HAS_DEMOS = fs.existsSync(DEMOS)    // OS DEMOS NÃO ENTRAM NO PACOTE: SÓ COM O REPOSITÓRIO DO KICAD
 const CLI       = process.env.KICAD_CLI ?? 'kicad-cli'
 const HAS_CLI   = spawnSync(CLI, ['version']).status === 0
 const OUT       = path.resolve('build/kicad/sexpr')    // O kicad-cli DO FLATPAK SÓ ENXERGA A PASTA PESSOAL
@@ -60,8 +62,9 @@ describe('S-expression do KiCad: leitura e gravação (spec 07 §2)', () => {
     })
 })
 
-describe.skipIf(!HAS_KICAD)('bibliotecas e demos do KiCad 10 lidos e regravados sem perda (spec 07 §2, fase 4)', () => {
-    it.each([['símbolos', ROOTS.symbols, '.kicad_sym'], ['footprints', ROOTS.footprints, '.kicad_mod'], ['demos (placas)', ROOTS.demos, '.kicad_pcb'], ['demos (esquemáticos)', ROOTS.demos, '.kicad_sch'], ['demos (símbolos)', ROOTS.demos, '.kicad_sym'], ['folhas de desenho', ROOTS.demos, '.kicad_wks']])('%s', (name, root, extension) => {
+describe('bibliotecas e demos do KiCad 10 lidos e regravados sem perda (spec 07 §2, fase 4)', () => {
+    it.for([['símbolos', ROOTS.symbols, '.kicad_sym', HAS_KICAD], ['footprints', ROOTS.footprints, '.kicad_mod', HAS_KICAD], ['demos (placas)', DEMOS, '.kicad_pcb', HAS_DEMOS], ['demos (esquemáticos)', DEMOS, '.kicad_sch', HAS_DEMOS], ['demos (símbolos)', DEMOS, '.kicad_sym', HAS_DEMOS], ['folhas de desenho', DEMOS, '.kicad_wks', HAS_DEMOS]] as const)('%s', ([name, root, extension, present], { skip }) => {
+        skip(!present)
         const results = roundTrip(walk(root, extension))
         writeReport(`sexpr-${extension.slice(1)}-${name.replace(/\W+/g, '-')}.txt`, report(name, results))
 
@@ -102,8 +105,8 @@ describe.skipIf(!HAS_KICAD || !HAS_CLI)('oráculo kicad-cli: o regravado desenha
         expect(svgOf(path.join(OUT, 'sym', 'ours', 'R_unit1.svg'))).toBe(svgOf(path.join(OUT, 'sym', 'orig', 'R_unit1.svg')))
     })
 
-    it('demo: o DRC da placa e o ERC do esquemático regravados acham as mesmas violações dos originais', () => {
-        const source = path.join(ROOTS.demos, 'royalblue54L_feather')
+    it.skipIf(!HAS_DEMOS)('demo: o DRC da placa e o ERC do esquemático regravados acham as mesmas violações dos originais', () => {
+        const source = path.join(DEMOS, 'royalblue54L_feather')
         const copy   = path.join(OUT, 'demo')
         fs.rmSync(copy, { recursive: true, force: true })
         fs.cpSync(source, copy, { recursive: true })

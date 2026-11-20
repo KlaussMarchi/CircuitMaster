@@ -167,6 +167,12 @@ const HIDDEN: Partial<Record<ViewName, Kind[]>> = {
 
 const VISIBLE_LOGO: Partial<Record<ViewName, string>> = { breadboardView: 'breadboard', schematicView: 'schematic' }
 
+// INSTRUMENTO DE BANCADA (FONTES E GERADORES DE LABORATÓRIO, MULTÍMETRO, OSCILOSCÓPIO): TEM CONECTORES, MAS NENHUM PAD DE COBRE DE VERDADE NA PCB, SÓ A IMAGEM EM partimage E PINOS hybrid
+const isBenchInstrument = (part: Part) => {
+    const pins = part.connectors.flatMap(connector => connector.views.pcbView ?? [])
+    return part.kind === 'part' && pins.length > 0 && pins.every(pin => pin.hybrid || PCB_NON_COPPER.has(pin.layer))
+}
+
 // VISIBILIDADE DE UMA PEÇA NUMA VISTA (SPEC 02 §1.1); A PEÇA EXISTE E CONDUZ MESMO QUANDO INVISÍVEL
 export const isVisibleIn = (part: Part, view: ViewName) => {
     const id     = part.moduleId
@@ -174,6 +180,6 @@ export const isVisibleIn = (part: Part, view: ViewName) => {
     const drawn  = (part.views[view]?.layers ?? []).some(layer => VIEW_LAYERS[view].includes(layer))
     const logo   = part.kind === 'logo' && keep !== undefined && id.toLowerCase().includes(keep)
     const hidden = HIDDEN[view]?.includes(part.kind) && !logo
-    const extra  = view === 'schematicView' ? id.endsWith('PadModuleID') : view === 'pcbView' ? id.endsWith('SchematicFrameModuleID') || id.endsWith('PowerModuleID') : false
+    const extra  = view === 'schematicView' ? id.endsWith('PadModuleID') : view === 'pcbView' ? id.endsWith('SchematicFrameModuleID') || id.endsWith('PowerModuleID') || isBenchInstrument(part) : false
     return drawn && !hidden && !extra
 }

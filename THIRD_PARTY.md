@@ -1,3 +1,18 @@
+# Dados redistribuídos
+
+O pacote `data/` (`npm run data`) e o subconjunto `tests/fixtures` redistribuem, sem modificação, arquivos de:
+
+- **fritzing-parts** e **fritzing-app** (sketches, peças e fontes): © Fritzing GmbH e colaboradores do Fritzing,
+  CC-BY-SA 3.0 (`fritzing/parts/LICENSE.txt`, `fritzing/LICENSE.CC-BY-SA`). As fontes mantêm as próprias licenças:
+  Droid Sans, Apache 2.0 (`NOTICE`); Noto Sans, OFL 1.1 (`OFL.txt`); Segment16, CC0 (`Segment16.txt`).
+- **kicad-symbols** e **kicad-footprints**: © KiCad Library Team, CC-BY-SA 4.0 com a exceção para projetos
+  (`kicad/*/LICENSE.md`).
+
+Esses arquivos continuam sob as licenças de origem, que vão junto deles. O commit de origem de cada um está em
+`data/VERSION.json`. Ao abrir um símbolo e um footprint do KiCad, o app monta uma peça de três vistas a partir deles
+(adaptação, spec 08). Essa peça segue a CC-BY-SA 4.0 quando é redistribuída como biblioteca. Usada num projeto, vale
+a exceção.
+
 # Código portado
 
 Código do Fritzing (`../Fritzing/fritzing-app`) e do KiCad (`../KiCad/kicad`), ambos GPL-3.0-or-later, traduzido ou
